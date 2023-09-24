@@ -108,10 +108,23 @@ document.addEventListener("alpine:init", () => {
     );
   };
 
-  // Components
-  const appComponents = {};
-  window.appComponents = appComponents;
+  // Data exposing
+  const appData = Alpine.reactive({});
+  window.appData = appData;
+  const appStateStructure = Alpine.reactive({});
+  window.appDataStructure = appStateStructure;
 
+  Alpine.effect(() => {
+    const stateEntries = Object.entries(appData).map(([key, { getData }]) => {
+      const data = getData();
+
+      return [key, data];
+    });
+
+    window.appState = Object.fromEntries(stateEntries);
+  });
+
+  // Directives
   Alpine.directive(
     "prop",
     (
@@ -121,6 +134,7 @@ document.addEventListener("alpine:init", () => {
     ) => {
       const props = stringPath.split(/\s*,\s*/);
       props.forEach((prop) => {
+        // TODO: Allow stringPath to contain a path like "foo.bar"
         const [stringPath, defaultValueExpression] = prop.split(/\s*:\s*/);
 
         if (!stringPath) {
@@ -135,6 +149,16 @@ document.addEventListener("alpine:init", () => {
           ? el.innerText
           : null;
 
+        // Form app state structure
+        const namespaceElement = el.closest("[data-namespace]");
+        const namespace =
+          namespaceElement && namespaceElement.dataset.namespace;
+        if (namespace) {
+          appStateStructure[namespace] = appStateStructure[namespace] || {};
+          appStateStructure[namespace][stringPath] = typeof defaultValue;
+        }
+
+        // Reactivilly create set value into innerText when needed
         const getData = evaluateLater("$data");
         Alpine.effect(() => {
           getData((data) => {
@@ -207,7 +231,7 @@ document.addEventListener("alpine:init", () => {
           try {
             const xForElementData = Alpine.evaluate(
               this,
-              "(()=>{try{return {...$item, $index}}catch{return null}})()",
+              "(()=>{try{return {...$item,$item,$index}}catch{return null}})()",
             );
             if (xForElementData) {
               Object.assign(finalDataObject, xForElementData);
@@ -221,9 +245,11 @@ document.addEventListener("alpine:init", () => {
           this.setAttribute("x-data", finalDataString);
 
           // Namespace
-          const namespace = ensureUniqueNamespace(expression, appComponents);
+          const namespace =
+            this.dataset.namespace ||
+            ensureUniqueNamespace(expression, appData);
           const el = this;
-          appComponents[namespace] = {
+          appData[namespace] = {
             el,
             getData: () => Alpine.evaluate(el, "$data"),
             namespace,
