@@ -11,7 +11,7 @@
       src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
     ></script>
   </head>
-  <body x-init>
+  <body x-data>
     <!-- Import component -->
     <x-import from="example-component"></x-import>
 
@@ -33,5 +33,15 @@
 
     <!-- Spawn imported component -->
     <example-component></example-component>
+
+    <!-- If not in a component works like alpine getting data -->
+    <div x-data="{ scopedValue: 'inside this scope wow' }">
+      <!-- from the current x-data scope because the key is defined -->
+      <div x-prop="scopedValue"></div>
+
+      <!-- This will set "bodyScope" to the upper most scope -->
+      <!-- declared in the body tag -->
+      <div x-prop="bodyScope='eiita'"></div>
+    </div>
   </body>
 </html>

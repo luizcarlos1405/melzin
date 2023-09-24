@@ -138,7 +138,7 @@ document.addEventListener("alpine:init", () => {
         const getData = evaluateLater("$data");
         Alpine.effect(() => {
           getData((data) => {
-            if (data[stringPath] == null) {
+            if (data && data[stringPath] == null) {
               data[stringPath] = defaultValue;
             }
 
