@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <script defer src="/js"></script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
+  </head>
+  <body x-init>
+    <template x-component="example">
+      <div>
+        <!-- Strings must be between '' -->
+        <div x-prop="name='Default Name'"></div>
+        <div x-prop="email">Another way of having a default value</div>
+        <div x-prop="age=14"></div>
+      </div>
+    </template>
+
+    <!-- Spawn component -->
+    <c-example></c-example>
+
+    <!-- Spawn component with props -->
+    <c-example x-data="{ name: 'My Name' }"></c-example>
+  </body>
+</html>
