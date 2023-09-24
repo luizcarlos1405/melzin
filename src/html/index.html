@@ -43,5 +43,16 @@
       <!-- declared in the body tag -->
       <div x-prop="bodyScope='eiita'"></div>
     </div>
+
+    <!-- Each to go over an Array and pass the current value as context -->
+    <template
+      x-each="[{name: 'Salada', email: 'Salad'}, {name: 'Feijão', email: 'Beans'}]"
+    >
+      <c-example></c-example>
+    </template>
+
+    <template x-each="[5, 1, 2]">
+      <div x-text="$item"></div>
+    </template>
   </body>
 </html>

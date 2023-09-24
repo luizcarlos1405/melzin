@@ -170,6 +170,13 @@ document.addEventListener("alpine:init", () => {
   );
 
   Alpine.directive(
+    "each",
+    (el, { expression, modifiers, value: scopeName }) => {
+      el.setAttribute("x-for", `($item, $index) in ${expression}`);
+    },
+  ).before("for");
+
+  Alpine.directive(
     "component",
     (el, { expression, modifiers, value: scopeName }) => {
       if (el.tagName !== "TEMPLATE") {
@@ -197,6 +204,18 @@ document.addEventListener("alpine:init", () => {
             const xPropElementData = propsStringToObject(xPropValue);
             Object.assign(finalDataObject, xPropElementData);
           });
+
+          // This means the component was called with x-for
+          // and we need to merge the data from the x-for element
+          try {
+            const xForElementData = Alpine.evaluate(
+              this,
+              "(()=>{try{return {...$item, $index}}catch{return null}})()",
+            );
+            if (xForElementData) {
+              Object.assign(finalDataObject, xForElementData);
+            }
+          } catch {}
 
           // This means some values were passed to the component
           Object.assign(finalDataObject, initialDataObject);
