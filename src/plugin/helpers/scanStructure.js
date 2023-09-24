@@ -51,6 +51,7 @@ export const scanStructure = (rootElement) => {
       );
       const newArray = [];
       newArray.sample = merge(...childStructures);
+      newArray.isEach = true;
       set(structure, joinPath(currentScope.path, xEach), newArray);
       return;
     }

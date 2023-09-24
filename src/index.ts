@@ -5,9 +5,7 @@ const app = new Elysia()
   .get("/example-component", () =>
     Bun.file("./src/html/example-component.html"),
   )
-  .get("/js/index.js", () => Bun.file("./src/js/index.js"))
-  .get("/js/framework.js", () => Bun.file("./build/framework.js"))
-  .get("/js/lodash.js", () => Bun.file("./src/js/lodash.js"))
+  .get("/js/index.js", () => Bun.file("./build/index.js"))
   .listen(3000);
 
 console.info(

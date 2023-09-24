@@ -13,8 +13,6 @@ export const plugin = (Alpine) => {
   window.appDataStructure = appStateStructure;
   window.scanStructure = scanStructure;
 
-  // Helpers
-
   Alpine.effect(() => {
     const stateEntries = Object.entries(appData).map(([key, { getData }]) => {
       const data = getData();
