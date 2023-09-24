@@ -22,14 +22,6 @@ document.addEventListener("alpine:init", () => {
   customElements.define("x-import", WebComponent);
 
   // Helpers
-  const jsonParseOrString = (string) => {
-    try {
-      return JSON.parse(string);
-    } catch (error) {
-      return string;
-    }
-  };
-
   const ensureUniqueNamespace = (namespace, namespacesObject) => {
     if (namespacesObject[namespace]) {
       let uniqueNamespace = namespace;

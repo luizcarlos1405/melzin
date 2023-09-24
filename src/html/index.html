@@ -12,6 +12,10 @@
     ></script>
   </head>
   <body x-init>
+    <!-- Import component -->
+    <x-import from="example-component"></x-import>
+
+    <!-- Create component -->
     <template x-component="example">
       <div>
         <!-- Strings must be between '' -->
@@ -21,10 +25,13 @@
       </div>
     </template>
 
-    <!-- Spawn component -->
+    <!-- Spawn created component -->
     <c-example></c-example>
 
-    <!-- Spawn component with props -->
+    <!-- Spawn created component with props -->
     <c-example x-data="{ name: 'My Name' }"></c-example>
+
+    <!-- Spawn imported component -->
+    <example-component></example-component>
   </body>
 </html>

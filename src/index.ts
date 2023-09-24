@@ -2,6 +2,9 @@ import { Elysia } from "elysia";
 
 const app = new Elysia()
   .get("/", () => Bun.file("./src/html/index.html"))
+  .get("/example-component", () =>
+    Bun.file("./src/html/example-component.html"),
+  )
   .get("/js", () => Bun.file("./src/js/index.js"))
   .listen(3000);
 
