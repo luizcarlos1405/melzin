@@ -19,9 +19,9 @@
     <template x-component="example">
       <div>
         <!-- Strings must be between '' -->
-        <div x-prop="name='Default Name'"></div>
+        <div x-prop="name:'Default Name'"></div>
         <div x-prop="email">Another way of having a default value</div>
-        <div x-prop="age=14"></div>
+        <div x-prop="age:14"></div>
       </div>
     </template>
 
@@ -41,7 +41,7 @@
 
       <!-- This will set "bodyScope" to the upper most scope -->
       <!-- declared in the body tag -->
-      <div x-prop="bodyScope='eiita'"></div>
+      <div x-prop="bodyScope:'eiita'"></div>
     </div>
 
     <!-- Each to go over an Array and pass the current value as context -->

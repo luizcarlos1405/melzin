@@ -71,7 +71,7 @@ document.addEventListener("alpine:init", () => {
     const props = propString.split(/\s*,\s*/);
     const data = {};
     props.forEach((prop) => {
-      const [stringPath, stringValue] = prop.split(/\s*=\s*/);
+      const [stringPath, stringValue] = prop.split(/\s*:\s*/);
 
       if (!stringPath) {
         return;
@@ -116,12 +116,12 @@ document.addEventListener("alpine:init", () => {
     "prop",
     (
       el,
-      { expression: stringPath, value: valueType, modifiers: bindProperties },
+      { expression: stringPath, modifiers: bindProperties },
       { evaluate, evaluateLater },
     ) => {
       const props = stringPath.split(/\s*,\s*/);
       props.forEach((prop) => {
-        const [stringPath, defaultValueExpression] = prop.split(/\s*=\s*/);
+        const [stringPath, defaultValueExpression] = prop.split(/\s*:\s*/);
 
         if (!stringPath) {
           return;
@@ -169,12 +169,9 @@ document.addEventListener("alpine:init", () => {
     },
   );
 
-  Alpine.directive(
-    "each",
-    (el, { expression, modifiers, value: scopeName }) => {
-      el.setAttribute("x-for", `($item, $index) in ${expression}`);
-    },
-  ).before("for");
+  Alpine.directive("each", (el, { expression }) => {
+    el.setAttribute("x-for", `($item, $index) in ${expression}`);
+  }).before("for");
 
   Alpine.directive(
     "component",
