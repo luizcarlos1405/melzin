@@ -56,11 +56,13 @@ export const scanStructure = (rootElement) => {
     }
 
     const xProp = el.getAttribute("x-prop");
-    const propObject = xProp ? propsStringToObject(xProp) : {};
 
-    forEach(propObject, (value, key) => {
-      set(structure, joinPath(currentScope.path, key), value);
-    });
+    if (xProp) {
+      const propObject = propsStringToObject(xProp) || {};
+      forEach(propObject, (value, key) => {
+        set(structure, joinPath(currentScope.path, key), value);
+      });
+    }
   });
 
   window.scannedStructure = structure;
