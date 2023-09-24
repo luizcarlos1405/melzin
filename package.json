@@ -3,10 +3,13 @@
   "version": "1.0.50",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun run --watch --hot src/index.ts",
+    "build:watch": "bun build src/framework --outfile build/framework.js --watch"
   },
   "dependencies": {
-    "elysia": "latest"
+    "alpinejs": "^3.13.0",
+    "elysia": "latest",
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
     "bun-types": "latest"

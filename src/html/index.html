@@ -5,13 +5,9 @@
     <meta name="color-scheme" content="dark" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <script src="/js"></script>
-    <script
-      defer
-      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
+    <script defer src="/js/framework.js"></script>
   </head>
-  <body x-data>
+  <body x-data="{examples:[{}]}">
     <!-- Import component -->
     <x-import from="example-component"></x-import>
 
@@ -41,18 +37,16 @@
 
       <!-- This will set "bodyScope" to the upper most scope -->
       <!-- declared in the body tag -->
-      <div x-prop="bodyScope:'eiita'"></div>
+      <div x-prop="bodyScope:'body value'"></div>
     </div>
 
     <!-- Each to go over an Array and pass the current value as context -->
-    <template
-      x-each="[{name: 'Salada', email: 'Salad'}, {name: 'Feijão', email: 'Beans'}]"
-    >
+    <template x-each="examples">
       <c-example></c-example>
     </template>
 
     <template x-each="[5, 1, 2]">
-      <div x-text="$item"></div>
+      <div x-prop="test:50"></div>
     </template>
   </body>
 </html>

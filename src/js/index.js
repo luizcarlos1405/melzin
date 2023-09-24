@@ -1,4 +1,13 @@
 document.addEventListener("alpine:init", () => {
+  // Internal
+  const components = {};
+
+  // Data exposing
+  const appData = Alpine.reactive({});
+  window.appData = appData;
+  const appStateStructure = Alpine.reactive({});
+  window.appDataStructure = appStateStructure;
+
   // Import html
   class WebComponent extends HTMLElement {
     connectedCallback() {
@@ -22,17 +31,17 @@ document.addEventListener("alpine:init", () => {
   customElements.define("x-import", WebComponent);
 
   // Helpers
-  const ensureUniqueNamespace = (namespace, namespacesObject) => {
-    if (namespacesObject[namespace]) {
-      let uniqueNamespace = namespace;
+  const ensureUniqueScope = (scope, scopesObject) => {
+    if (scopesObject[scope]) {
+      let uniqueScope = scope;
       let number = 1;
-      while (namespacesObject[uniqueNamespace]) {
-        uniqueNamespace = namespace + number;
+      while (scopesObject[uniqueScope]) {
+        uniqueScope = scope + number;
         number += 1;
       }
-      return uniqueNamespace;
+      return uniqueScope;
     }
-    return namespace;
+    return scope;
   };
 
   const ensurePropExists = (objOrArr, path = [], defaultValue = null) => {
@@ -67,7 +76,7 @@ document.addEventListener("alpine:init", () => {
     return ensurePropExists(objOrArr[key], pathRest, defaultValue);
   };
 
-  const propsStringToObject = (propString) => {
+  const propsStringToObject = (propString, defaultValue = null) => {
     const props = propString.split(/\s*,\s*/);
     const data = {};
     props.forEach((prop) => {
@@ -80,7 +89,7 @@ document.addEventListener("alpine:init", () => {
       const path = stringPath.split(".");
       const value = stringValue
         ? Alpine.evaluate(document.body, stringValue)
-        : null;
+        : defaultValue;
 
       ensurePropExists(data, path, value);
     });
@@ -108,11 +117,66 @@ document.addEventListener("alpine:init", () => {
     );
   };
 
-  // Data exposing
-  const appData = Alpine.reactive({});
-  window.appData = appData;
-  const appStateStructure = Alpine.reactive({});
-  window.appDataStructure = appStateStructure;
+  const joinPath = (path1, path2) => [path1, path2].filter(Boolean).join(".");
+
+  window.scanStructure = (rootElement) => {
+    const structure = {};
+    const scopeStack = [{ element: rootElement, path: "" }];
+
+    Alpine.walk(rootElement, (el, stop) => {
+      while (
+        scopeStack.length > 1 &&
+        !scopeStack[scopeStack.length - 1].element.contains(el)
+      ) {
+        scopeStack.pop();
+      }
+
+      const elementScope = el.dataset?.scope;
+
+      if (elementScope) {
+        const lastScope = scopeStack[scopeStack.length - 1];
+        const newScope = {
+          element: el,
+          path: joinPath(lastScope.path, elementScope),
+        };
+        scopeStack.push(newScope);
+      }
+
+      const currentScope = scopeStack[scopeStack.length - 1];
+
+      const isTemplate = el.tagName === "TEMPLATE";
+      const isEach = isTemplate && el.hasAttribute("x-each");
+
+      if (isEach) {
+        const xEach = el.getAttribute("x-each");
+        const newArray = [];
+        newArray.sample = Array.from(el.content.children).flatMap(
+          (childElement) => {
+            const component = components[childElement.tagName.toLowerCase()];
+            if (component) {
+              return Array.from(component.template.content.children).map(
+                window.scanStructure,
+              );
+            }
+
+            return window.scanStructure(childElement);
+          },
+        );
+        _.set(structure, joinPath(currentScope.path, xEach), newArray);
+        return;
+      }
+
+      const xProp = el.getAttribute("x-prop");
+      const propObject = xProp ? propsStringToObject(xProp) : {};
+
+      _.forEach(propObject, (value, key) => {
+        _.set(structure, joinPath(currentScope.path, key), value);
+      });
+    });
+
+    window.scannedStructure = structure;
+    return structure;
+  };
 
   Alpine.effect(() => {
     const stateEntries = Object.entries(appData).map(([key, { getData }]) => {
@@ -150,12 +214,11 @@ document.addEventListener("alpine:init", () => {
           : null;
 
         // Form app state structure
-        const namespaceElement = el.closest("[data-namespace]");
-        const namespace =
-          namespaceElement && namespaceElement.dataset.namespace;
-        if (namespace) {
-          appStateStructure[namespace] = appStateStructure[namespace] || {};
-          appStateStructure[namespace][stringPath] = typeof defaultValue;
+        const scopeElement = el.closest("[data-scope]");
+        const scope = scopeElement && scopeElement.dataset.scope;
+        if (scope) {
+          appStateStructure[scope] = appStateStructure[scope] || {};
+          appStateStructure[scope][stringPath] = typeof defaultValue;
         }
 
         // Reactivilly create set value into innerText when needed
@@ -244,17 +307,16 @@ document.addEventListener("alpine:init", () => {
           const finalDataString = objectToString(finalDataObject);
           this.setAttribute("x-data", finalDataString);
 
-          // Namespace
-          const namespace =
-            this.dataset.namespace ||
-            ensureUniqueNamespace(expression, appData);
+          // Scope
+          const scope =
+            this.dataset.scope || ensureUniqueScope(expression, appData);
           const el = this;
-          appData[namespace] = {
+          appData[scope] = {
             el,
             getData: () => Alpine.evaluate(el, "$data"),
-            namespace,
+            scope,
           };
-          this.setAttribute("data-namespace", namespace);
+          this.setAttribute("data-scope", scope);
 
           // Shadow DOM
           const isShadowDom = modifiers.includes("shadowdom");
@@ -273,6 +335,12 @@ document.addEventListener("alpine:init", () => {
         ? expression
         : `c-${expression}`;
       customElements.define(componentName, WebComponent);
+      components[componentName] = {
+        template,
+        scopeName,
+        componentName,
+        tagName: componentName,
+      };
     },
   ).before("data");
 });
