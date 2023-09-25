@@ -1,4 +1,5 @@
 import { evaluateWithDefault } from "../helpers/evaluateWithDefault";
+import { joinPath } from "../helpers/joinPath";
 import { objectToString } from "../helpers/objectToString";
 import { propsStringToObject } from "../helpers/propsStringToObject";
 
@@ -58,9 +59,9 @@ export const componentDirective = (
 
       // This means the component was called with x-for
       // and we need to merge the data from the x-for element
-      const xForElementData = evaluateWithDefault(this, "{...$item}");
-      if (xForElementData) {
-        Object.assign(finalDataObject, xForElementData);
+      const isCreatedByEachDirective = evaluateWithDefault(this, "{...$item}");
+      if (isCreatedByEachDirective) {
+        Object.assign(finalDataObject, isCreatedByEachDirective);
       }
 
       // This means some values were passed to the component
@@ -70,16 +71,13 @@ export const componentDirective = (
       this.setAttribute("x-data", finalDataString);
 
       // Scope
-      if (!xForElementData) {
-        const scope =
-          this.dataset.scope || ensureUniqueScope(expression, window.appData);
-        const el = this;
-        window.appData[scope] = {
-          el,
-          getData: () => Alpine.evaluate(el, "$data"),
-          scope,
-        };
-        this.setAttribute("data-scope", scope);
+      if (!isCreatedByEachDirective && this.dataset.scope) {
+        const parentScopePath =
+          el.closest("[data-scope]")?.dataset?.scope || "";
+        this.setAttribute(
+          "data-scope",
+          joinPath(parentScopePath, this.dataset.scope),
+        );
       }
 
       // Shadow DOM

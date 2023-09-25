@@ -3,8 +3,7 @@ import merge from "lodash/merge";
 import set from "lodash/set";
 import { propsStringToObject } from "./propsStringToObject";
 import { evaluateWithDefault } from "./evaluateWithDefault";
-
-const joinPath = (path1, path2) => [path1, path2].filter(Boolean).join(".");
+import { joinPath } from "./joinPath";
 
 const structuresFromComponentTemplate = (component) =>
   merge(...Array.from(component.template.content.children).map(scanStructure));

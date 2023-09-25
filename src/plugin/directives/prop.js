@@ -1,7 +1,11 @@
+import get from "lodash/get";
+import { joinPath } from "../helpers/joinPath";
+import set from "lodash/set";
+
 export const propDirective = (
   el,
   { expression: stringPath, modifiers: bindProperties },
-  { evaluate, evaluateLater },
+  { evaluate, effect },
 ) => {
   const props = stringPath.split(/\s*,\s*/);
   props.forEach((prop) => {
@@ -12,6 +16,13 @@ export const propDirective = (
       return;
     }
 
+    const scopePath =
+      el.dataset?.scope ||
+      el.closest("[data-scope]")?.dataset?.scope ||
+      el.closest("[x-each]")?.getAttribute("x-each") ||
+      "";
+    const valuePath = joinPath(scopePath, stringPath);
+
     const isLeafElement = el.children.length === 0;
 
     const defaultValue = defaultValueExpression
@@ -21,34 +32,26 @@ export const propDirective = (
       : null;
 
     // Reactivilly create set value into innerText when needed
-    const getData = evaluateLater("$data");
-    Alpine.effect(() => {
-      getData((data) => {
-        if (data && data[stringPath] == null) {
-          data[stringPath] = defaultValue;
-        }
+    effect(() => {
+      const currentValue = get(Alpine.app, valuePath);
+      const value = currentValue ?? defaultValue;
 
-        const value = data[stringPath];
+      if (currentValue == null) {
+        set(Alpine.app, valuePath, value);
+      }
 
-        if (value != null) {
-          if (
-            !bindProperties.length &&
-            isLeafElement &&
-            !el.hasAttribute("x-text") &&
-            el.tagName !== "INPUT" &&
-            el.tagName !== "TEXTAREA"
-          ) {
-            el.innerText = value;
-          }
+      if (
+        !bindProperties.length &&
+        isLeafElement &&
+        !el.hasAttribute("x-text") &&
+        el.tagName !== "INPUT" &&
+        el.tagName !== "TEXTAREA"
+      ) {
+        el.innerText = value;
+      }
 
-          bindProperties.forEach((propName) => {
-            el[propName] = value;
-          });
-
-          return;
-        }
-
-        data[stringPath] = defaultValue;
+      bindProperties.forEach((propName) => {
+        el[propName] = value;
       });
     });
   });

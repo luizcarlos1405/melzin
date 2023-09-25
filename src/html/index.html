@@ -7,12 +7,12 @@
 
     <script defer src="/js/index.js"></script>
   </head>
-  <body x-data="{examples:[{name:'AQUI'}]}">
+  <body x-init>
     <!-- Import component -->
     <x-import from="example-component"></x-import>
 
     <!-- Create component -->
-    <template data-scope="namedScope" x-component="example">
+    <template x-component="example">
       <div>
         <!-- Strings must be between '' -->
         <div x-prop="name:'Default Name'"></div>
@@ -22,18 +22,15 @@
     </template>
 
     <!-- Spawn created component -->
-    <c-example></c-example>
+    <c-example data-scope="nested.scope"></c-example>
 
     <!-- Spawn created component with props -->
-    <c-example
-      x-data="{ name: 'My Name', email: 'email@email.email' }"
-    ></c-example>
+    <c-example data-scope="different"></c-example>
 
     <!-- Spawn imported component -->
     <example-component></example-component>
 
-    <!-- If not in a component works like alpine getting data -->
-    <div x-data="{ scopedValue: 'inside this scope wow' }">
+    <div>
       <!-- from the current x-data scope because the key is defined -->
       <div x-prop="scopedValue"></div>
 
@@ -43,11 +40,11 @@
     </div>
 
     <!-- Each to go over an Array and pass the current value as context -->
-    <template x-each="examples">
-      <c-example></c-example>
+    <template x-each="each">
+      <div x-prop="insideEach">insideEach</div>
     </template>
 
-    <template x-each="[5, 1, 2]">
+    <template x-each="numbers">
       <div x-prop="test:50"></div>
     </template>
   </body>

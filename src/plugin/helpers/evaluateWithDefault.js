@@ -5,5 +5,15 @@ export const evaluateWithDefault = (
 ) =>
   Alpine.evaluate(
     el,
-    `(()=>{try{return ${expression}}catch{return ${defaultValueExpression}}})()`,
+    `(() => {
+      with (Alpine.app) {
+        try {
+          return ${expression}
+        } catch {
+          return ${defaultValueExpression}
+        }
+      }
+    })()`,
   );
+
+window.evaluateWithDefault = evaluateWithDefault;
