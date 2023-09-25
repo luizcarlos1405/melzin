@@ -27,6 +27,7 @@ export const plugin = (Alpine) => {
   Alpine.directive("prop", propDirective);
   Alpine.directive("each", (el, { expression }) => {
     el.setAttribute("x-for", `($item, $index) in ${expression}`);
+    el.setAttribute(":key", `$id(${expression})`);
   }).before("for");
   Alpine.directive("component", componentDirective);
 };

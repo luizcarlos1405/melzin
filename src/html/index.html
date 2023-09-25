@@ -7,12 +7,12 @@
 
     <script defer src="/js/index.js"></script>
   </head>
-  <body x-data="{examples:[{}]}">
+  <body x-data="{examples:[{name:'AQUI'}]}">
     <!-- Import component -->
     <x-import from="example-component"></x-import>
 
     <!-- Create component -->
-    <template x-component="example">
+    <template data-scope="namedScope" x-component="example">
       <div>
         <!-- Strings must be between '' -->
         <div x-prop="name:'Default Name'"></div>

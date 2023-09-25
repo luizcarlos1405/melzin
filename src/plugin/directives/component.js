@@ -1,3 +1,4 @@
+import { evaluateWithDefault } from "../helpers/evaluateWithDefault";
 import { objectToString } from "../helpers/objectToString";
 import { propsStringToObject } from "../helpers/propsStringToObject";
 
@@ -57,15 +58,10 @@ export const componentDirective = (
 
       // This means the component was called with x-for
       // and we need to merge the data from the x-for element
-      try {
-        const xForElementData = Alpine.evaluate(
-          this,
-          "(()=>{try{return {...$item,$item,$index}}catch{return null}})()",
-        );
-        if (xForElementData) {
-          Object.assign(finalDataObject, xForElementData);
-        }
-      } catch {}
+      const xForElementData = evaluateWithDefault(this, "{...$item}");
+      if (xForElementData) {
+        Object.assign(finalDataObject, xForElementData);
+      }
 
       // This means some values were passed to the component
       Object.assign(finalDataObject, initialDataObject);
@@ -74,15 +70,17 @@ export const componentDirective = (
       this.setAttribute("x-data", finalDataString);
 
       // Scope
-      const scope =
-        this.dataset.scope || ensureUniqueScope(expression, window.appData);
-      const el = this;
-      window.appData[scope] = {
-        el,
-        getData: () => Alpine.evaluate(el, "$data"),
-        scope,
-      };
-      this.setAttribute("data-scope", scope);
+      if (!xForElementData) {
+        const scope =
+          this.dataset.scope || ensureUniqueScope(expression, window.appData);
+        const el = this;
+        window.appData[scope] = {
+          el,
+          getData: () => Alpine.evaluate(el, "$data"),
+          scope,
+        };
+        this.setAttribute("data-scope", scope);
+      }
 
       // Shadow DOM
       const isShadowDom = modifiers.includes("shadowdom");
