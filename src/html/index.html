@@ -22,7 +22,14 @@
     </template>
 
     <!-- Spawn created component -->
-    <c-example data-scope="nested.scope"></c-example>
+    <c-example data-scope="deep.scope"></c-example>
+    <div x-scope="nested">
+      <div x-scope="scope">
+        <div
+          x-prop="nestedValue:'x-scope nests the scope with the outer scope accumulate'"
+        ></div>
+      </div>
+    </div>
 
     <!-- Spawn created component with props -->
     <c-example data-scope="different"></c-example>

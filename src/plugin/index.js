@@ -3,6 +3,7 @@ import { propDirective } from "./directives/prop";
 import { scanStructure } from "./helpers/scanStructure";
 import "./web-components/x-import";
 import { eachDirective } from "./directives/each";
+import { scopeDirective } from "./directives/scope";
 
 export const plugin = (Alpine) => {
   Alpine.components = {};
@@ -16,4 +17,5 @@ export const plugin = (Alpine) => {
   Alpine.directive("prop", propDirective);
   Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
+  Alpine.directive("scope", scopeDirective).before("prop");
 };
