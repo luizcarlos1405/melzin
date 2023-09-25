@@ -38,6 +38,13 @@ export const scanStructure = (rootElement) => {
   const scopeStack = [{ element: rootElement, path: "" }];
 
   Alpine.walk(rootElement, (el, stop) => {
+    const isCreatedByFor = evaluateWithDefault(el, "!!($item && $index)");
+    const isImported = !!el.closest("x-import");
+
+    if (isCreatedByFor || isImported) {
+      return;
+    }
+
     while (
       scopeStack.length > 1 &&
       !scopeStack[scopeStack.length - 1].element.contains(el)
@@ -60,12 +67,6 @@ export const scanStructure = (rootElement) => {
 
     const isTemplate = el.tagName === "TEMPLATE";
     const isEach = isTemplate && el.hasAttribute("x-each");
-    const isCreatedByFor = evaluateWithDefault(el, "!!($item && $index)");
-    const isImported = !!el.closest("x-import");
-
-    if (isCreatedByFor || isImported) {
-      return;
-    }
 
     if (isEach) {
       const xEach = el.getAttribute("x-each");
@@ -74,22 +75,12 @@ export const scanStructure = (rootElement) => {
       return;
     }
 
-    if (isTemplate) {
-      const childStructure = structureFromTemplate(el);
-      set(structure, currentScope.path || "unscoped", childStructure);
-      return;
-    }
-
     const xProp = el.getAttribute("x-prop");
     if (xProp) {
       const propObject = propsStringToObject(xProp) || {};
       forEach(propObject, (defaultValue, key) => {
-        const value =
-          Alpine.evaluate(
-            el,
-            `(()=>{try{return ${key}}catch{return null}})()`,
-          ) || defaultValue;
-        set(structure, joinPath(currentScope.path, key), typeof value);
+        const value = evaluateWithDefault(el, "key") || defaultValue;
+        set(structure, joinPath(currentScope.path, key), value);
       });
     }
   });
