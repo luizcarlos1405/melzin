@@ -33,11 +33,11 @@ export const propDirective = (
 
     // Reactivilly create set value into innerText when needed
     effect(() => {
-      const currentValue = get(Alpine.app, valuePath);
+      const currentValue = get(Alpine.app.state, valuePath);
       const value = currentValue ?? defaultValue;
 
       if (currentValue == null) {
-        set(Alpine.app, valuePath, value);
+        set(Alpine.app.state, valuePath, value);
       }
 
       if (

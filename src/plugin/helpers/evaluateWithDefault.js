@@ -6,7 +6,7 @@ export const evaluateWithDefault = (
   Alpine.evaluate(
     el,
     `(() => {
-      with (Alpine.app) {
+      with (Alpine.app.state) {
         try {
           return ${expression}
         } catch {

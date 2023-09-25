@@ -8,8 +8,8 @@ export const plugin = (Alpine) => {
   Alpine.components = {};
 
   // Data exposing
-  const app = Alpine.reactive({});
-  Alpine.app = app;
+  const state = Alpine.reactive({});
+  Alpine.app = { state };
   Alpine.scanStructure = scanStructure;
 
   // Directives
