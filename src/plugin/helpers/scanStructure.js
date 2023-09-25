@@ -60,7 +60,12 @@ export const scanStructure = (rootElement) => {
 
     if (xProp) {
       const propObject = propsStringToObject(xProp) || {};
-      forEach(propObject, (value, key) => {
+      forEach(propObject, (defaultValue, key) => {
+        const value =
+          Alpine.evaluate(
+            el,
+            `(()=>{try{return ${key}}catch{return null}})()`,
+          ) || defaultValue;
         set(structure, joinPath(currentScope.path, key), value);
       });
     }
