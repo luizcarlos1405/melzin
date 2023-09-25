@@ -1,4 +1,5 @@
 import { evaluateWithDefault } from "../helpers/evaluateWithDefault";
+import { getScopeForElement } from "../helpers/getScopeForElement";
 import { joinPath } from "../helpers/joinPath";
 import { objectToString } from "../helpers/objectToString";
 import { propsStringToObject } from "../helpers/propsStringToObject";
@@ -69,16 +70,6 @@ export const componentDirective = (
 
       const finalDataString = objectToString(finalDataObject);
       this.setAttribute("x-data", finalDataString);
-
-      // Scope
-      if (!isCreatedByEachDirective && this.dataset.scope) {
-        const parentScopePath =
-          el.closest("[data-scope]")?.dataset?.scope || "";
-        this.setAttribute(
-          "data-scope",
-          joinPath(parentScopePath, this.dataset.scope),
-        );
-      }
 
       // Shadow DOM
       const isShadowDom = modifiers.includes("shadowdom");

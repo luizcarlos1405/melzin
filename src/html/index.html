@@ -22,11 +22,11 @@
     </template>
 
     <!-- Spawn created component -->
-    <c-example data-scope="deep.scope"></c-example>
+    <c-example data-scope="scope.path"></c-example>
     <div x-scope="nested">
       <div x-scope="scope">
         <div
-          x-prop="nestedValue:'x-scope nests the scope with the outer scope accumulate'"
+          x-prop="variable.path:'x-scope nests the scope with the outer scope accumulate'"
         ></div>
       </div>
     </div>

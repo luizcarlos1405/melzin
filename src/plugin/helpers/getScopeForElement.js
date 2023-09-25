@@ -2,7 +2,7 @@ import { evaluateWithDefault } from "./evaluateWithDefault";
 
 export const getScopeForElement = (el) => {
   const isCreatedByEachDirective = evaluateWithDefault(
-    this,
+    el,
     "{$item,$index}",
     false,
   );

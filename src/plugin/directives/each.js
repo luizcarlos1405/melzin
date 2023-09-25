@@ -1,10 +1,10 @@
 import get from "lodash/get";
 import set from "lodash/set";
 import { joinPath } from "../helpers/joinPath";
+import { getScopeForElement } from "../helpers/getScopeForElement";
 
 export const eachDirective = (el, { expression: stringPath }) => {
-  const scopePath =
-    el.dataset?.scope || el.closest("[data-scope]")?.dataset?.scope || "";
+  const scopePath = getScopeForElement(el);
   const arrayPath = joinPath(scopePath, stringPath);
   const currentValue = get(Alpine.app.state, arrayPath);
   const value = currentValue ?? [];

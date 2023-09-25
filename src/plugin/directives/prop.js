@@ -1,6 +1,7 @@
 import get from "lodash/get";
 import { joinPath } from "../helpers/joinPath";
 import set from "lodash/set";
+import { getScopeForElement } from "../helpers/getScopeForElement";
 
 export const propDirective = (
   el,
@@ -16,11 +17,9 @@ export const propDirective = (
       return;
     }
 
-    const scopePath =
-      el.dataset?.scope ||
-      el.closest("[data-scope]")?.dataset?.scope ||
-      el.closest("[x-each]")?.getAttribute("x-each") ||
-      "";
+    // console.log(`stringPath`, stringPath);
+    const scopePath = getScopeForElement(el);
+    // console.log(`scopePath`, scopePath);
     const valuePath = joinPath(scopePath, stringPath);
 
     const isLeafElement = el.children.length === 0;
