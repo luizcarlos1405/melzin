@@ -8,21 +8,46 @@
     <script defer src="/js/index.js"></script>
   </head>
   <body x-init>
-    <!-- Import component -->
-    <x-import from="example-component"></x-import>
+    <script>
+      document.addEventListener("alpine:initialized", () => {
+        console.log(
+          "After Alpine initialized, you can access the app state at Alpine.app.state in javascript: \n\n",
+          JSON.stringify(Alpine.app.state, null, 2),
+        );
+        console.log(
+          "Try Alpine.app.state.valueKey = 'newValue' to change the valueKey value",
+        );
+      });
+    </script>
+
+    <!-- Declare a proprety and it will sync the innerText of the element -->
+    <div x-prop="valueKey"></div>
+    <div x-prop="valueKeyWithDefaultString:'defaultString'"></div>
+    <div x-prop="valueKeyWithDefaultNumber:42"></div>
+    <div x-prop="valueKeyWithDefaultInnerText">default inner text</div>
 
     <!-- Create component -->
-    <template x-component="example">
+    <template x-component="person">
       <div>
         <!-- Strings must be between '' -->
-        <div x-prop="name:'Default Name'"></div>
-        <div x-prop="email">Another way of having a default value</div>
+        <div x-prop="name:'Default Name Value'"></div>
+        <div x-prop="email">inlinedefault@email.com</div>
         <div x-prop="age:14"></div>
       </div>
     </template>
 
     <!-- Spawn created component -->
-    <c-example data-scope="scope.path"></c-example>
+    <c-person></c-person>
+
+    <!-- Any subsequent components will share the same data from the -->
+    <!-- root of the state unless you scope it like bellow -->
+    <c-person></c-person>
+
+    <!-- Spawn created component within a scope -->
+    <c-person data-scope="scopedPerson"></c-person>
+
+    <!-- using x-scope instead of data-scope and the scopes are -->
+    <!-- automatically nested -->
     <div x-scope="nested">
       <div x-scope="scope">
         <div
@@ -31,28 +56,16 @@
       </div>
     </div>
 
-    <!-- Spawn created component with props -->
-    <c-example data-scope="different"></c-example>
+    <!-- Import component. The server should respond with the html -->
+    <!-- at /example-component in this case -->
+    <x-import from="example-component"></x-import>
 
-    <!-- Spawn imported component -->
+    <!-- Because the html above creates a component we can spawn it -->
     <example-component></example-component>
 
-    <div>
-      <!-- from the current x-data scope because the key is defined -->
-      <div x-prop="scopedValue"></div>
-
-      <!-- This will set "bodyScope" to the upper most scope -->
-      <!-- declared in the body tag -->
-      <div x-prop="bodyScope:'body value'"></div>
-    </div>
-
     <!-- Each to go over an Array and pass the current value as context -->
-    <template x-each="each:[{insideEach: 42}]">
-      <div x-prop="insideEach">insideEachValue</div>
-    </template>
-
-    <template x-each="numbers">
-      <div x-prop="test:50"></div>
+    <template x-each="each:[{insideEach: 'defaultValue'}]">
+      <div x-prop="insideEach"></div>
     </template>
   </body>
 </html>
