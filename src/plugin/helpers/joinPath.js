@@ -1,2 +1,2 @@
-export const joinPath = (path1, path2) =>
-  [path1, path2].filter(Boolean).join(".");
+export const joinPath = (...paths) =>
+  paths.filter((value) => value !== "").join(".");

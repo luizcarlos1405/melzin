@@ -47,8 +47,8 @@
     </div>
 
     <!-- Each to go over an Array and pass the current value as context -->
-    <template x-each="each">
-      <div x-prop="insideEach">insideEach</div>
+    <template x-each="each:[{insideEach: 42}]">
+      <div x-prop="insideEach">insideEachValue</div>
     </template>
 
     <template x-each="numbers">

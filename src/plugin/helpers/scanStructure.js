@@ -4,6 +4,7 @@ import set from "lodash/set";
 import { propsStringToObject } from "./propsStringToObject";
 import { evaluateWithDefault } from "./evaluateWithDefault";
 import { joinPath } from "./joinPath";
+import { isCreatedByEachDirective } from "./isCreatedByEachDirective";
 
 const structuresFromComponentTemplate = (component) =>
   merge(...Array.from(component.template.content.children).map(scanStructure));
@@ -37,10 +38,9 @@ export const scanStructure = (rootElement) => {
   const scopeStack = [{ element: rootElement, path: "" }];
 
   Alpine.walk(rootElement, (el, stop) => {
-    const isCreatedByFor = evaluateWithDefault(el, "!!($item && $index)");
     const isImported = !!el.closest("x-import");
 
-    if (isCreatedByFor || isImported) {
+    if (isCreatedByEachDirective(el) || isImported) {
       return;
     }
 

@@ -1,15 +1,10 @@
-import { evaluateWithDefault } from "./evaluateWithDefault";
+import { isCreatedByEachDirective } from "./isCreatedByEachDirective";
 
 export const getScopeForElement = (el) => {
-  const isCreatedByEachDirective = evaluateWithDefault(
-    el,
-    "{$item,$index}",
-    false,
-  );
   const dataSetScope =
     el.dataset?.scope || el.closest("[data-scope]")?.dataset?.scope || "";
 
-  if (isCreatedByEachDirective) {
+  if (isCreatedByEachDirective(el)) {
     return dataSetScope;
   }
 

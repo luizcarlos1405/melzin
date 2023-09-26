@@ -2,6 +2,7 @@ import get from "lodash/get";
 import { joinPath } from "../helpers/joinPath";
 import set from "lodash/set";
 import { getScopeForElement } from "../helpers/getScopeForElement";
+import { isCreatedByEachDirective } from "../helpers/isCreatedByEachDirective";
 
 export const propDirective = (
   el,
@@ -17,10 +18,9 @@ export const propDirective = (
       return;
     }
 
-    // console.log(`stringPath`, stringPath);
     const scopePath = getScopeForElement(el);
-    // console.log(`scopePath`, scopePath);
-    const valuePath = joinPath(scopePath, stringPath);
+    const indexPath = isCreatedByEachDirective(el) ? evaluate("$index") : "";
+    const valuePath = joinPath(scopePath, indexPath, stringPath);
 
     const isLeafElement = el.children.length === 0;
 
@@ -33,10 +33,10 @@ export const propDirective = (
     // Reactivilly create set value into innerText when needed
     effect(() => {
       const currentValue = get(Alpine.app.state, valuePath);
-      const value = currentValue ?? defaultValue;
+      const newValue = currentValue ?? defaultValue;
 
       if (currentValue == null) {
-        set(Alpine.app.state, valuePath, value);
+        set(Alpine.app.state, valuePath, newValue);
       }
 
       if (
@@ -46,11 +46,11 @@ export const propDirective = (
         el.tagName !== "INPUT" &&
         el.tagName !== "TEXTAREA"
       ) {
-        el.innerText = value;
+        el.innerText = newValue;
       }
 
       bindProperties.forEach((propName) => {
-        el[propName] = value;
+        el[propName] = newValue;
       });
     });
   });

@@ -1,5 +1,6 @@
 import { evaluateWithDefault } from "../helpers/evaluateWithDefault";
 import { getScopeForElement } from "../helpers/getScopeForElement";
+import { isCreatedByEachDirective } from "../helpers/isCreatedByEachDirective";
 import { joinPath } from "../helpers/joinPath";
 import { objectToString } from "../helpers/objectToString";
 import { propsStringToObject } from "../helpers/propsStringToObject";
@@ -60,9 +61,8 @@ export const componentDirective = (
 
       // This means the component was called with x-for
       // and we need to merge the data from the x-for element
-      const isCreatedByEachDirective = evaluateWithDefault(this, "{...$item}");
-      if (isCreatedByEachDirective) {
-        Object.assign(finalDataObject, isCreatedByEachDirective);
+      if (isCreatedByEachDirective(this)) {
+        Object.assign(finalDataObject, isEachItem);
       }
 
       // This means some values were passed to the component
