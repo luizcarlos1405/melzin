@@ -64,7 +64,8 @@
     <example-component></example-component>
 
     <!-- Each to go over an Array and pass the current value as context -->
-    <template x-each="each:[{insideEach: 'defaultValue'}]">
+    <!-- the default value after : is optional too -->
+    <template x-each="path.to.array:[{insideEach: 'defaultValue'}]">
       <div x-prop="insideEach"></div>
     </template>
   </body>
