@@ -4,6 +4,7 @@ import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
 import { scopeDirective } from "./directives/scope";
 import { eventDirective } from "./directives/event";
+import { scopeMagic } from "./magics/scope";
 import "./web-components/x-import";
 import "./web-components/x-route";
 
@@ -44,4 +45,7 @@ export const plugin = (Alpine) => {
   Alpine.directive("component", componentDirective);
   Alpine.directive("scope", scopeDirective).before("prop");
   Alpine.directive("event", eventDirective);
+
+  // Magics
+  Alpine.magic("scope", scopeMagic);
 };

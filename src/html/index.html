@@ -13,12 +13,15 @@
   };
 </script>
 
-<h1>Person 1</h1>
+<h1>Props</h1>
 <!-- Declare a proprety and it will sync the innerText of the element -->
 <div x-prop="valueKey"></div>
 <div x-prop="valueKeyWithDefaultString:'defaultString'"></div>
 <div x-prop="valueKeyWithDefaultNumber:42"></div>
 <div x-prop="valueKeyWithDefaultInnerText">default inner text</div>
+
+<!-- input tags sync the value property insteaf of the innerText -->
+<input x-prop="inputValue" value="initialvalue" />
 <hr />
 
 <h1>Components</h1>
@@ -58,7 +61,7 @@
 <div x-scope="nested">
   <div x-scope="scope">
     <div
-      x-prop="variable.path:'x-scope nests the scope with the outer scope accumulate'"
+      x-prop="variable.path:'x-scope nests the scope with the outer scope'"
     ></div>
   </div>
 </div>
@@ -76,9 +79,11 @@
 <h1>x-each</h1>
 <!-- Use x-each to go over an Array and pass the current value as context -->
 <!-- the default value after : is optional too -->
-<template x-each="path.to.array:[{insideEach: 'defaultValue'}]">
-  <div x-prop="insideEach"></div>
-</template>
+<ul>
+  <template x-each="path.to.array:[{itemText: 'first'}, {itemText: 'second'}]">
+    <li x-prop="itemText"></li>
+  </template>
+</ul>
 
 <hr />
 <h1>x-event</h1>
