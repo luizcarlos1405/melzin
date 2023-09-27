@@ -1,14 +1,31 @@
-import { Elysia } from "elysia";
 import "./browserJsBuild";
 
-const app = new Elysia()
-  .get("/", () => Bun.file("./src/html/index.html"))
-  .get("/example-component", () =>
-    Bun.file("./src/html/example-component.html"),
-  )
-  .get("/js/index.js", () => Bun.file("./build/index.js"))
-  .listen(3000);
+Bun.serve({
+  port: 3000,
+  async fetch(req) {
+    const url = new URL(req.url);
 
-console.info(
-  `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`,
-);
+    const htmlFile = Bun.file("./src/html" + url.pathname + ".html");
+    if (await htmlFile.exists()) {
+      return new Response(htmlFile);
+    }
+
+    if (url.pathname.includes(".js")) {
+      const jsFile = Bun.file("./build" + url.pathname);
+      if (await jsFile.exists()) {
+        return new Response(jsFile);
+      }
+    }
+
+    const publicFile = Bun.file("./public" + url.pathname);
+    if (await publicFile.exists()) {
+      return new Response(publicFile);
+    }
+
+    if (!url.pathname.includes(".")) {
+      return new Response(Bun.file("./src/html/index.html"));
+    }
+
+    return new Response("Not found", { status: 404 });
+  },
+});

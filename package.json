@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "alpinejs": "^3.13.0",
-    "elysia": "latest",
     "lodash": "^4.17.21"
   },
   "devDependencies": {
