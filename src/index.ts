@@ -1,4 +1,5 @@
 import { Elysia } from "elysia";
+import "./browserJsBuild";
 
 const app = new Elysia()
   .get("/", () => Bun.file("./src/html/index.html"))

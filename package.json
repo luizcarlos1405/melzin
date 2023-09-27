@@ -3,8 +3,7 @@
   "version": "1.0.50",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch .",
-    "build:watch": "bun build src/js --target browser --outfile build/index.js --watch"
+    "dev": "bun run --watch ."
   },
   "dependencies": {
     "alpinejs": "^3.13.0",
