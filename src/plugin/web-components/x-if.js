@@ -7,4 +7,4 @@ class WebComponent extends HTMLElement {
     evaluateWithDefault(this, then);
   }
 }
-customElements.define("x-import", WebComponent);
+customElements.define("x-if", WebComponent);

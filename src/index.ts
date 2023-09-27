@@ -4,10 +4,16 @@ Bun.serve({
   port: 3000,
   async fetch(req) {
     const url = new URL(req.url);
+    const isHxRequest = req.headers.get("HX-Request") === "true";
 
-    const htmlFile = Bun.file("./src/html" + url.pathname + ".html");
-    if (await htmlFile.exists()) {
-      return new Response(htmlFile);
+    if (isHxRequest) {
+      const filePath = url.pathname === "/" ? "/index" : url.pathname;
+      const htmlFile = Bun.file("./src/html" + filePath + ".html");
+      if (await htmlFile.exists()) {
+        return new Response(htmlFile);
+      }
+
+      return new Response("Ooops, nothing here.", { status: 404 });
     }
 
     if (url.pathname.includes(".js")) {
@@ -22,10 +28,6 @@ Bun.serve({
       return new Response(publicFile);
     }
 
-    if (!url.pathname.includes(".")) {
-      return new Response(Bun.file("./src/html/index.html"));
-    }
-
-    return new Response("Not found", { status: 404 });
+    return new Response(Bun.file("./src/index.html"));
   },
 });
