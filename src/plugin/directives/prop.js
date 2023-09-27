@@ -6,8 +6,9 @@ import { getScopeForElement } from "../helpers/getScopeForElement";
 export const propDirective = (
   el,
   { expression: stringPaths, modifiers: bindProperties },
-  { evaluate, effect },
+  { evaluate, effect, cleanup },
 ) => {
+  const eventListeners = [];
   const propDeclarations = stringPaths.split(/\s*,\s*/);
   const scopePath = getScopeForElement(el);
   const domPropPaths = getDomPropPaths(el, bindProperties);
@@ -50,8 +51,14 @@ export const propDirective = (
 
       // DOM -> Alpine.app.state
       if (eventName && valueFromEvent) {
-        el.addEventListener(eventName, (event) => {
+        const handler = (event) => {
           Alpine.app.state[stateValuePath] = valueFromEvent(event);
+        };
+        el.addEventListener(eventName, handler);
+        eventListeners.push({
+          el,
+          name: eventName,
+          handler,
         });
       }
 
@@ -63,6 +70,12 @@ export const propDirective = (
         });
       }
     },
+  );
+
+  cleanup(() =>
+    eventListeners.forEach(({ el, name, handler }) => {
+      el.removeEventListener(name, handler);
+    }),
   );
 };
 
