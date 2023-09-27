@@ -1,6 +1,6 @@
 class WebComponent extends HTMLElement {
   connectedCallback() {
-    const path = this.getAttribute("path");
+    const path = this.getAttribute("path") || location.pathname;
 
     fetch(path, {
       headers: {
@@ -8,7 +8,14 @@ class WebComponent extends HTMLElement {
       },
     }).then(async (response) => {
       const responseHtml = await response.text();
-      this.innerHTML = responseHtml;
+      const [scriptTag, javascript] =
+        /^\s*<script>([^<]*)<\/script>[\s|\n]*/.exec(responseHtml) || [];
+      this.innerHTML = responseHtml.replaceAll(scriptTag, "");
+
+      const scriptElement = document.createElement("script");
+      scriptElement.innerHTML = javascript;
+
+      Alpine.nextTick(() => this.appendChild(scriptElement));
     });
   }
 }

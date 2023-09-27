@@ -1,21 +1,28 @@
 <script>
-  document.addEventListener("alpine:initialized", () => {
-    console.log(
-      "After Alpine initialized, you can access the app state at Alpine.app.state in javascript: \n\n",
-      JSON.stringify(Alpine.app.state, null, 2),
-    );
-    console.log(
-      "Try Alpine.app.state.valueKey = 'newValue' to change the valueKey value",
-    );
-  });
+  console.log(
+    "You can access the app state at Alpine.app.state in javascript: \n\n",
+    JSON.stringify(Alpine.app.state, null, 2),
+  );
+  console.log(
+    "Try Alpine.app.state.valueKey = 'newValue' to change the valueKey value",
+  );
+
+  console.log("html");
+  Alpine.app.event.buttonClicked = () => {
+    Alpine.app.state.clickNum++;
+    console.log("Button clicked");
+  };
 </script>
 
+<h1>Person 1</h1>
 <!-- Declare a proprety and it will sync the innerText of the element -->
 <div x-prop="valueKey"></div>
 <div x-prop="valueKeyWithDefaultString:'defaultString'"></div>
 <div x-prop="valueKeyWithDefaultNumber:42"></div>
 <div x-prop="valueKeyWithDefaultInnerText">default inner text</div>
+<hr />
 
+<h1>Components</h1>
 <!-- Create component -->
 <template x-component="person">
   <div>
@@ -27,15 +34,26 @@
 </template>
 
 <!-- Spawn created component -->
+<h2>Person 1</h2>
 <c-person></c-person>
 
+<hr />
 <!-- Any subsequent components will share the same data from the -->
 <!-- root of the state unless you scope it like bellow -->
+<h2>Person 2</h2>
 <c-person></c-person>
 
+<hr />
+<h2>Person 3: Scoped</h2>
 <!-- Spawn created component within a scope -->
-<c-person data-scope="scopedPerson"></c-person>
+<!-- You can declare more than one prop separating them by , -->
+<c-person
+  data-scope="scopedPerson"
+  x-prop="name:'Different Name',email:'person3@email.com'"
+></c-person>
 
+<hr />
+<h1>x-scope</h1>
 <!-- using x-scope instead of data-scope and the scopes are -->
 <!-- automatically nested -->
 <div x-scope="nested">
@@ -46,15 +64,24 @@
   </div>
 </div>
 
-<!-- Import component. The server should respond with the html -->
+<hr />
+<h1>x-import</h1>
+<!-- Import conent. The server should respond with the html -->
 <!-- at /example-component in this case -->
 <x-import from="example-component"></x-import>
 
-<!-- Because the html above creates a component we can spawn it -->
+<!-- Because the html imported above creates a component we can spawn it -->
 <example-component></example-component>
 
-<!-- Each to go over an Array and pass the current value as context -->
+<hr />
+<h1>x-each</h1>
+<!-- Use x-each to go over an Array and pass the current value as context -->
 <!-- the default value after : is optional too -->
 <template x-each="path.to.array:[{insideEach: 'defaultValue'}]">
   <div x-prop="insideEach"></div>
 </template>
+
+<hr />
+<h1>x-event</h1>
+<button x-event="click:buttonClicked">BUTTON</button>
+Clicked <span x-prop="clickNum:0"></span> times

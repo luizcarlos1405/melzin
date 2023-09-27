@@ -10,7 +10,10 @@ Bun.serve({
       const filePath = url.pathname === "/" ? "/index" : url.pathname;
       const htmlFile = Bun.file("./src/html" + filePath + ".html");
       if (await htmlFile.exists()) {
-        return new Response(htmlFile);
+        return new Response(htmlFile, {
+          headers: { "Content-Type": "text/html;charset=utf-8" },
+          status: 200,
+        });
       }
 
       return new Response("Ooops, nothing here.", { status: 404 });
@@ -19,7 +22,9 @@ Bun.serve({
     if (url.pathname.includes(".js")) {
       const jsFile = Bun.file("./build" + url.pathname);
       if (await jsFile.exists()) {
-        return new Response(jsFile);
+        return new Response(jsFile, {
+          headers: { "Content-Type": "text/javascript;charset=utf-8" },
+        });
       }
     }
 

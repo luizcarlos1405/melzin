@@ -3,6 +3,7 @@ import { propDirective } from "./directives/prop";
 import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
 import { scopeDirective } from "./directives/scope";
+import { eventDirective } from "./directives/event";
 import "./web-components/x-import";
 import "./web-components/x-route";
 
@@ -11,7 +12,7 @@ export const plugin = (Alpine) => {
 
   // Data exposing
   const state = Alpine.reactive({});
-  Alpine.app = { state };
+  Alpine.app = { state, event: {} };
   Alpine.scanStructure = scanStructure;
 
   // Directives
@@ -19,4 +20,5 @@ export const plugin = (Alpine) => {
   Alpine.directive("each", eachDirective);
   Alpine.directive("component", componentDirective);
   Alpine.directive("scope", scopeDirective).before("prop");
+  Alpine.directive("event", eventDirective);
 };

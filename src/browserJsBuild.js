@@ -1,5 +1,7 @@
 import { watch } from "fs";
 
+const watchFolder = `${import.meta.dir}/plugin`;
+
 const buildFrontend = () =>
   Bun.build({
     entrypoints: ["./src/js"],
@@ -21,9 +23,10 @@ const buildFrontend = () =>
     //       /** Only works when runtime=automatic */
     //       importSource?: string; // default: "react"
     //     };
+  }).catch((error) => {
+    console.error(error);
   });
 await buildFrontend();
-const watchFolder = `${import.meta.dir}/plugin`;
 watch(watchFolder, { recursive: true }, (event, filename) => {
   console.log(`Detected ${event} in ${filename}. Rebuilding browser js.`);
   buildFrontend();
