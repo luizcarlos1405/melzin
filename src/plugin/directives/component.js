@@ -1,7 +1,4 @@
-import { evaluateWithDefault } from "../helpers/evaluateWithDefault";
-import { getScopeForElement } from "../helpers/getScopeForElement";
 import { isCreatedByEachDirective } from "../helpers/isCreatedByEachDirective";
-import { joinPath } from "../helpers/joinPath";
 import { objectToString } from "../helpers/objectToString";
 import { propsStringToObject } from "../helpers/propsStringToObject";
 
@@ -14,29 +11,22 @@ export const componentDirective = (
     throw new Error("Component must be a template");
   }
 
-  const ensureUniqueScope = (scope, scopesObject) => {
-    if (scopesObject[scope]) {
-      let uniqueScope = scope;
-      let number = 1;
-      while (scopesObject[uniqueScope]) {
-        uniqueScope = scope + number;
-        number += 1;
-      }
-      return uniqueScope;
-    }
-    return scope;
-  };
-
   const template = el;
-  const componentName = /\b-\b/.test(expression)
-    ? expression
-    : `c-${expression}`;
+  const name = /\b-\b/.test(expression) ? expression : `c-${expression}`;
+  const tagName = name.toUpperCase();
+
+  const isRegisteredAlready = Alpine.components[tagName];
+  if (isRegisteredAlready) {
+    return;
+  }
+
   const componentInfo = {
     template,
     scopeName,
-    name: componentName,
-    tagName: componentName.toUpperCase(),
+    name: name,
+    tagName,
   };
+
   class WebComponent extends HTMLElement {
     constructor() {
       super();
@@ -84,6 +74,6 @@ export const componentDirective = (
     }
   }
 
-  customElements.define(componentName, WebComponent);
+  customElements.define(name, WebComponent);
   Alpine.components[componentInfo.tagName] = componentInfo;
 };

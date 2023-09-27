@@ -12,7 +12,30 @@ export const plugin = (Alpine) => {
 
   // Data exposing
   const state = Alpine.reactive({});
-  Alpine.app = { state, event: {} };
+  Alpine.app = {
+    state,
+    event: {},
+    route: {
+      path: location.pathname,
+      query: new URLSearchParams(location.search),
+      hash: location.hash,
+      goto: (path) => {
+        history.pushState({}, "", path);
+        Alpine.app.route.path = path;
+        Alpine.app.route.query = new URLSearchParams(location.search);
+        Alpine.app.route.hash = location.hash;
+
+        const event = new CustomEvent("routeChanged", {
+          detail: {
+            path,
+            query: Alpine.app.route.query,
+            hash: Alpine.app.route.hash,
+          },
+        });
+        document.dispatchEvent(event);
+      },
+    },
+  };
   Alpine.scanStructure = scanStructure;
 
   // Directives

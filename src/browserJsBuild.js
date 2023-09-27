@@ -28,7 +28,7 @@ const buildFrontend = () =>
   });
 await buildFrontend();
 watch(watchFolder, { recursive: true }, (event, filename) => {
-  console.log(`Detected ${event} in ${filename}. Rebuilding browser js.`);
+  console.info(`Detected ${event} in ${filename}. Rebuilding browser js.`);
   buildFrontend();
 });
-console.log("Watching for changes in plugin directory.");
+console.info("Watching for changes in plugin directory.");
