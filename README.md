@@ -7,12 +7,10 @@ Na chupeta.
 To start the development server run:
 
 ```bash
-# In one terminal
-bun run build:watch
-
-# In another
 bun run dev
 ```
+
+It also builds the frontend javascript code inside the `build` folder.
 
 Open http://localhost:3000/ with your browser to see the result.
 
@@ -20,9 +18,9 @@ Open http://localhost:3000/ with your browser to see the result.
 
 This is the current `src/html/index.js` file which serves as an introduction too. Expect things to break for no reason.
 
-If you want to serve any new files you create you'll have to add it mannually to `src/index.ts` because I didn't setup any routing system or anything like that.
+If you want to serve any new files you create, you'll have to add the route mannually to `src/index.ts` because I didn't setup any routing system or anything like that.
 
-Play with changing the values indie `Alpine.app.state` and see things changing or breaking. Let me know if the second.
+Play with changing the values inside the `Alpine.app.state` object, and see things changing, or breaking. Let me know if it's the second.
 
 ```html
 <script>
