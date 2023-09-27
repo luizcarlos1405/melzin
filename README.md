@@ -18,7 +18,7 @@ Open http://localhost:3000/ with your browser to see the result.
 
 This is the current `src/html/index.js` file which serves as an introduction too. Expect things to break for no reason.
 
-If you want to serve any new files you create, you'll have to add the route mannually to `src/index.ts` because I didn't setup any routing system or anything like that.
+Every html file inside the `src/html` folder is statically served. The route is it's path minus the `.html` extension. Ex: `file/path.html` is served at `/file/path`.
 
 Play with changing the values inside the `Alpine.app.state` object, and see things changing, or breaking. Let me know if it's the second.
 
