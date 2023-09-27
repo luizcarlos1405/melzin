@@ -2,9 +2,9 @@
 
 Na chupeta.
 
-Design is implementation. The same process that defines how things look and where data appears should also be the UI/UX implementation.
+**Design is implementation**: the same process that defines how things look and where data appears should also be the UI/UX implementation.
 
-This is an attempt to build this concept on top of Alpine. It use custom directives, web-components and having a single, reactive and global state object.
+This is an attempt to build this concept on top of Alpine. It uses custom directives, web-components that reads from a single, reactive and global state object.
 
 ## Directives
 
