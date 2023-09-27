@@ -2,6 +2,12 @@ class WebComponent extends HTMLElement {
   connectedCallback() {
     const path = this.getAttribute("path");
 
+    window._registeredRoutes = window._registeredRoutes || {};
+    if (window._registeredRoutes[path]) {
+      return;
+    }
+    window._registeredRoutes[path] = { el: this };
+
     const load = async () => {
       fetch(path, {
         headers: {
@@ -11,21 +17,23 @@ class WebComponent extends HTMLElement {
         const responseHtml = await response.text();
         const [scriptTag, javascript] =
           /^\s*<script>([^<]*)<\/script>[\s|\n]*/.exec(responseHtml) || [];
-        this.innerHTML = responseHtml.replaceAll(scriptTag, "");
 
-        const scriptElement = document.createElement("script");
-        scriptElement.innerHTML = javascript;
+        if (javascript) {
+          this.innerHTML = responseHtml.replaceAll(scriptTag, "");
 
-        Alpine.nextTick(() => this.appendChild(scriptElement));
+          const scriptElement = document.createElement("script");
+          scriptElement.innerHTML = javascript;
+          Alpine.nextTick(() => this.appendChild(scriptElement));
+        }
       });
     };
 
-    if (location.pathname === path) {
+    if (path.startsWith(location.pathname)) {
       load();
     }
 
     document.addEventListener("routeChanged", (event) => {
-      if (event.detail.path === path) {
+      if (path.startsWith(location.pathname)) {
         load();
         return;
       }

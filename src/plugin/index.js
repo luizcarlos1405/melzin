@@ -16,6 +16,7 @@ export const plugin = (Alpine) => {
   Alpine.app = {
     state,
     event: {},
+    registeredRoutes: {},
     route: {
       path: location.pathname,
       query: new URLSearchParams(location.search),
