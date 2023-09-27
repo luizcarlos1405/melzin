@@ -8,99 +8,101 @@ export const propDirective = (
   { expression: stringPaths, modifiers: bindProperties },
   { evaluate, effect },
 ) => {
-  const props = stringPaths.split(/\s*,\s*/);
-  props.forEach((prop) => {
-    // TODO: Allow stringPath to contain a path like "foo.bar"
-    const [propPath, defaultValueExpression] = prop.split(/\s*:\s*/);
+  const propDeclarations = stringPaths.split(/\s*,\s*/);
+  const scopePath = getScopeForElement(el);
+  const domPropPaths = getDomPropPaths(el, bindProperties);
+  const eventsWithValueGetters = getEventsWithValueGetters(el);
 
-    if (!propPath) return;
-
-    // Set the initial state
-    const scopePath = getScopeForElement(el);
-    const valuePath = joinPath(scopePath, propPath);
-
-    const initialPropertyValue = getInitialPropertyValue(el, bindProperties);
+  // Pure transformations, no side effects or mutations
+  const syncInputForPropDeclarations = propDeclarations.map((prop, index) => {
+    const [valuePath, defaultValueExpression] = prop.split(/\s*:\s*/);
     const defaultValue = defaultValueExpression
       ? evaluate(defaultValueExpression)
       : null;
 
-    set(Alpine.app.state, valuePath, defaultValue ?? initialPropertyValue);
+    const domPropPath = domPropPaths[index];
+    const initialPropertyValue = el[domPropPath] ?? null;
+    const { eventName, valueFromEvent } = eventsWithValueGetters[index] || {};
 
-    // Sync the state with the DOM
-    const isLeafElement = el.children.length === 0;
+    return {
+      stateValuePath: joinPath(scopePath, valuePath),
+      defaultValue: defaultValue ?? initialPropertyValue,
+      domPropPath,
+      eventName,
+      valueFromEvent,
+    };
+  });
 
-    if (!bindProperties.length && !isLeafElement) return;
-
-    // DOM events -> Alpine.app.state
-    reactToEvents(el, propPath);
-
-    // Alpine.app.state -> DOM
-    effect(() => {
-      const currentValue = get(Alpine.app.state, valuePath);
-
-      if (
-        !bindProperties.length &&
-        isLeafElement &&
-        !el.hasAttribute("x-text") &&
-        el.tagName !== "INPUT" &&
-        el.tagName !== "TEXTAREA"
-      ) {
-        el.innerText = currentValue;
+  // Sync DOM with state (side effects and mutations)
+  syncInputForPropDeclarations.forEach(
+    ({
+      stateValuePath,
+      defaultValue,
+      domPropPath,
+      eventName,
+      valueFromEvent,
+    }) => {
+      // Initialize state value if it doesn't exist
+      const currentStateValue = get(Alpine.app.state, stateValuePath);
+      if (currentStateValue === undefined) {
+        set(Alpine.app.state, stateValuePath, defaultValue);
       }
 
-      bindProperties.forEach((propName) => {
-        el[propName] = currentValue;
-      });
-    });
-  });
+      // DOM -> Alpine.app.state
+      if (eventName && valueFromEvent) {
+        el.addEventListener(eventName, (event) => {
+          Alpine.app.state[stateValuePath] = valueFromEvent(event);
+        });
+      }
+
+      // Alpine.app.state -> DOM
+      if (domPropPath) {
+        effect(() => {
+          const newStateValue = get(Alpine.app.state, stateValuePath);
+          set(el, domPropPath, newStateValue);
+        });
+      }
+    },
+  );
 };
 
-const reactToEvents = (el, stringPath) => {
+const getEventsWithValueGetters = (el) => {
+  const isCheckbox = el.tagName === "INPUT" && el.type === "checkbox";
+
+  if (isCheckbox) {
+    return [
+      {
+        eventName: "change",
+        valueFromEvent: (event) => event.target.checked,
+      },
+    ];
+  }
+
   if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
-    el.addEventListener("input", () => {
-      const scopePath = getScopeForElement(el);
-      const valuePath = joinPath(scopePath, stringPath);
-      set(Alpine.app.state, valuePath, el.value);
-    });
+    return [
+      { eventName: "input", valueFromEvent: (event) => event.target.value },
+    ];
   }
+
+  return [];
 };
 
-const getInitialPropertyValue = (el, bindProperties) => {
-  const [propKey] = bindProperties;
-
-  if (propKey) {
-    return el[propKey];
-  }
-
-  if (
-    el.tagName === "SELECT" ||
-    el.tagName === "INPUT" ||
-    el.tagName === "TEXTAREA"
-  ) {
-    return el.value;
-  }
-
-  if (el.tagName === "SELECT") {
-    return el.value || el.options[0]?.value;
-  }
-
+const getDomPropPaths = (el, bindProperties) => {
   const isLeafElement = el.children.length === 0;
 
-  if (isLeafElement) {
-    return el.innerText;
+  if (
+    !bindProperties.length &&
+    isLeafElement &&
+    !el.hasAttribute("x-text") &&
+    el.tagName !== "INPUT" &&
+    el.tagName !== "TEXTAREA"
+  ) {
+    return ["innerText"];
   }
-};
 
-const observeAtributes = (el, attributeNames, callback) =>
-  new MutationObserver(function (mutations) {
-    mutations.forEach(function (mutation) {
-      if (
-        mutation.type === "attributes" &&
-        attributeNames.includes(mutation.attributeName)
-      ) {
-        callback(mutation);
-      }
-    });
-  }).observe(el, {
-    attributes: true, //configure it to listen to attribute changes
-  });
+  if (el.tagName === "INPUT") {
+    return bindProperties.length ? bindProperties : ["value"];
+  }
+
+  return bindProperties;
+};
