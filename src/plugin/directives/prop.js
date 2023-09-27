@@ -2,7 +2,6 @@ import get from "lodash/get";
 import { joinPath } from "../helpers/joinPath";
 import set from "lodash/set";
 import { getScopeForElement } from "../helpers/getScopeForElement";
-import { isCreatedByEachDirective } from "../helpers/isCreatedByEachDirective";
 
 export const propDirective = (
   el,
@@ -14,30 +13,30 @@ export const propDirective = (
     // TODO: Allow stringPath to contain a path like "foo.bar"
     const [propPath, defaultValueExpression] = prop.split(/\s*:\s*/);
 
-    if (!propPath) {
-      return;
-    }
+    if (!propPath) return;
 
+    // Set the initial state
     const scopePath = getScopeForElement(el);
     const valuePath = joinPath(scopePath, propPath);
-
-    const isLeafElement = el.children.length === 0;
 
     const initialPropertyValue = getInitialPropertyValue(el, bindProperties);
     const defaultValue = defaultValueExpression
       ? evaluate(defaultValueExpression)
       : null;
 
+    set(Alpine.app.state, valuePath, defaultValue ?? initialPropertyValue);
+
+    // Sync the state with the DOM
+    const isLeafElement = el.children.length === 0;
+
+    if (!bindProperties.length && !isLeafElement) return;
+
+    // DOM events -> Alpine.app.state
     reactToEvents(el, propPath);
 
-    // Reactivilly create set value into innerText when needed
+    // Alpine.app.state -> DOM
     effect(() => {
       const currentValue = get(Alpine.app.state, valuePath);
-      const newValue = currentValue ?? defaultValue ?? initialPropertyValue;
-
-      if (currentValue == null) {
-        set(Alpine.app.state, valuePath, newValue);
-      }
 
       if (
         !bindProperties.length &&
@@ -46,11 +45,11 @@ export const propDirective = (
         el.tagName !== "INPUT" &&
         el.tagName !== "TEXTAREA"
       ) {
-        el.innerText = newValue;
+        el.innerText = currentValue;
       }
 
       bindProperties.forEach((propName) => {
-        el[propName] = newValue;
+        el[propName] = currentValue;
       });
     });
   });
@@ -65,20 +64,6 @@ const reactToEvents = (el, stringPath) => {
     });
   }
 };
-
-const observeAtributes = (el, attributeNames, callback) =>
-  new MutationObserver(function (mutations) {
-    mutations.forEach(function (mutation) {
-      if (
-        mutation.type === "attributes" &&
-        attributeNames.includes(mutation.attributeName)
-      ) {
-        callback(mutation);
-      }
-    });
-  }).observe(el, {
-    attributes: true, //configure it to listen to attribute changes
-  });
 
 const getInitialPropertyValue = (el, bindProperties) => {
   const [propKey] = bindProperties;
@@ -105,3 +90,17 @@ const getInitialPropertyValue = (el, bindProperties) => {
     return el.innerText;
   }
 };
+
+const observeAtributes = (el, attributeNames, callback) =>
+  new MutationObserver(function (mutations) {
+    mutations.forEach(function (mutation) {
+      if (
+        mutation.type === "attributes" &&
+        attributeNames.includes(mutation.attributeName)
+      ) {
+        callback(mutation);
+      }
+    });
+  }).observe(el, {
+    attributes: true, //configure it to listen to attribute changes
+  });
