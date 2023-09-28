@@ -7,6 +7,7 @@ import { eventDirective } from "./directives/event";
 import { scopeMagic } from "./magics/scope";
 import { xImport } from "./web-components/x-import";
 import { xRoute } from "./web-components/x-route";
+import { exposeDevHelpers } from "./debug/exposeDevHelpers";
 import get from "lodash/get";
 
 export const plugin = (Alpine) => {
@@ -50,9 +51,13 @@ export const plugin = (Alpine) => {
 
   // Magics
   Alpine.magic("scope", scopeMagic);
-  Alpine.magic("get", () => path => get(Alpine.app.state, path));
+  Alpine.magic("get", () => (path) => get(Alpine.app.state, path));
+  Alpine.magic("state", () => Alpine.app.state);
 
   // Web components
   xRoute();
   xImport();
+
+  // Debugging
+  exposeDevHelpers(Alpine);
 };
