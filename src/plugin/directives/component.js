@@ -33,6 +33,8 @@ export const componentDirective = (
       this._x_component = componentInfo;
     }
     connectedCallback() {
+      // TODO this ignores any <teplate> tags inside the component
+      // maybe we should deal with that?
       const templateContent = template.content;
 
       const finalDataObject = {};
