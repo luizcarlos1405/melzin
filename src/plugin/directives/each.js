@@ -26,10 +26,11 @@ export const eachDirective = (el, { expression }, { evaluate }) => {
   firstChild.setAttribute("data-is-each-item", "true");
 
   el.setAttribute(":key", `$id('${arrayPath}')`);
+
   Alpine.nextTick(() => {
     el.setAttribute(
       "x-for",
-      `($item, $index) in get(Alpine.app.state, '${arrayPath}')`,
+      `($item, $index) in $get('${arrayPath}')`,
     );
   });
 };
