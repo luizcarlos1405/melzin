@@ -42,7 +42,7 @@ export const plugin = (Alpine) => {
 
   // Directives
   Alpine.directive("prop", propDirective);
-  Alpine.directive("each", eachDirective);
+  Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
   Alpine.directive("scope", scopeDirective).before("prop");
   Alpine.directive("event", eventDirective);
