@@ -6,23 +6,61 @@ Na chupeta.
 
 This is an attempt to build this concept on top of Alpine. It uses custom directives, web-components that reads from a single, reactive and global state object.
 
-## Directives
+## Interface
 
-### x-prop
+The html only expects a value and sometimes a path to the value.
 
-### x-scope and data-scope
+A path is a dot separated string that points to a value in the state object.
+If it has two dots at the beginning, it starts from the root of the state object.
 
-### x-each
+Ex: state = { person { name: "Newton" } }
 
-### x-event
+Suppose the current path is "person".
+".name" -> "Newton" and "..person.name" -> "Newton"
 
-### x-component
+### Directives
 
-## Web Components
+Everything between `[]` is optional.
 
-### x-import
+#### `x-sync[:domProperty][.path.to.value][='defaultValue']`
 
-### x-route
+A directive that syncronizes the dom property with the value at the path. If there's a path, this implies the current path points to an object. If the initial state has no value at the path, it will be set to the evaluation of the expression.
+
+#### `x-path.new[.prefix.path]`
+
+A directive that sets a path to an element and all its children.
+
+#### x-each
+
+A directive that expects the current path to have be an array-like object. It should be used only on <template> tags. It will create a new element with the path pointing to each item in the array.
+
+#### x-on="functionName"
+
+#### x-component
+
+#### Examples:
+
+state: { name: "Newton" }
+
+```html
+<div x-path.name x-sync>Newton</div>
+
+<div x-sync.name>Newton</div>
+```
+
+### Magics
+
+$index > the index of the current item in an x-each directive
+
+#### x-event
+
+#### x-component
+
+### Web Components
+
+#### x-import
+
+#### x-route
 
 ## Development
 
@@ -35,74 +73,3 @@ bun run dev
 It also builds the frontend javascript code inside the `build` folder.
 
 Open http://localhost:3000/ with your browser to see the result.
-
-# How it works
-
-This is the current `src/html/index.js` file which serves as an introduction too. Expect things to break for no reason.
-
-Every html file inside the `src/html` folder is statically served. The route is it's path minus the `.html` extension. Ex: `file/path.html` is served at `/file/path`.
-
-Play with changing the values inside the `Alpine.app.state` object, and see things changing, or breaking. Let me know if it's the second.
-
-```html
-<script>
-  document.addEventListener("alpine:initialized", () => {
-    console.log(
-      "After Alpine initialized, you can access the app state at Alpine.app.state in javascript: \n\n",
-      JSON.stringify(Alpine.app.state, null, 2),
-    );
-    console.log(
-      "Try Alpine.app.state.valueKey = 'newValue' to change the valueKey value",
-    );
-  });
-</script>
-
-<!-- Declare a proprety and it will sync the innerText of the element -->
-<div x-prop="valueKey"></div>
-<div x-prop="valueKeyWithDefaultString:'defaultString'"></div>
-<div x-prop="valueKeyWithDefaultNumber:42"></div>
-<div x-prop="valueKeyWithDefaultInnerText">default inner text</div>
-
-<!-- Create component -->
-<template x-component="person">
-  <div>
-    <!-- Strings must be between '' -->
-    <div x-prop="name:'Default Name Value'"></div>
-    <div x-prop="email">inlinedefault@email.com</div>
-    <div x-prop="age:14"></div>
-  </div>
-</template>
-
-<!-- Spawn created component -->
-<c-person></c-person>
-
-<!-- Any subsequent components will share the same data from the -->
-<!-- root of the state unless you scope it like bellow -->
-<c-person></c-person>
-
-<!-- Spawn created component within a scope -->
-<c-person data-scope="scopedPerson"></c-person>
-
-<!-- using x-scope instead of data-scope and the scopes are -->
-<!-- automatically nested -->
-<div x-scope="nested">
-  <div x-scope="scope">
-    <div
-      x-prop="variable.path:'x-scope nests the scope with the outer scope accumulate'"
-    ></div>
-  </div>
-</div>
-
-<!-- Import component. The server should respond with the html -->
-<!-- at /example-component in this case -->
-<x-import from="example-component"></x-import>
-
-<!-- Because the html above creates a component we can spawn it -->
-<example-component></example-component>
-
-<!-- Each to go over an Array and pass the current value as context -->
-<!-- the default value after : is optional too -->
-<template x-each="path.to.array:[{insideEach: 'defaultValue'}]">
-  <div x-prop="insideEach"></div>
-</template>
-```
