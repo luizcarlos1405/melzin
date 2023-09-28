@@ -17,10 +17,9 @@ class WebComponent extends HTMLElement {
         const responseHtml = await response.text();
         const [scriptTag, javascript] =
           /^\s*<script>([^<]*)<\/script>[\s|\n]*/.exec(responseHtml) || [];
+        this.innerHTML = responseHtml.replaceAll(scriptTag, "");
 
         if (javascript) {
-          this.innerHTML = responseHtml.replaceAll(scriptTag, "");
-
           const scriptElement = document.createElement("script");
           scriptElement.innerHTML = javascript;
           Alpine.nextTick(() => this.appendChild(scriptElement));
@@ -28,12 +27,12 @@ class WebComponent extends HTMLElement {
       });
     };
 
-    if (path.startsWith(location.pathname)) {
+    if (path == location.pathname + ".html") {
       load();
     }
 
     document.addEventListener("routeChanged", (event) => {
-      if (path.startsWith(location.pathname)) {
+      if (path == location.pathname + ".html") {
         load();
         return;
       }

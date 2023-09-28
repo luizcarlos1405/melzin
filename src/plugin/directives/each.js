@@ -25,6 +25,9 @@ export const eachDirective = (el, { expression }, { evaluate }) => {
   firstChild.setAttribute("data-scope", `${arrayPath}`);
   firstChild.setAttribute("data-is-each-item", "true");
 
-  el.setAttribute("x-for", `($item, $index) in Alpine.app.state.${arrayPath}`);
+  el.setAttribute(
+    "x-for",
+    `($item, $index) in get(Alpine.app.state, ${arrayPath})`,
+  );
   el.setAttribute(":key", `$id('${arrayPath}')`);
 };
