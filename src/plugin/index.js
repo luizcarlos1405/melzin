@@ -5,8 +5,8 @@ import { eachDirective } from "./directives/each";
 import { scopeDirective } from "./directives/scope";
 import { eventDirective } from "./directives/event";
 import { scopeMagic } from "./magics/scope";
-import "./web-components/x-import";
-import "./web-components/x-route";
+import { xImport } from "./web-components/x-import";
+import { xRoute } from "./web-components/x-route";
 
 export const plugin = (Alpine) => {
   Alpine.components = {};
@@ -49,4 +49,8 @@ export const plugin = (Alpine) => {
 
   // Magics
   Alpine.magic("scope", scopeMagic);
+
+  // Web components
+  xRoute();
+  xImport();
 };
