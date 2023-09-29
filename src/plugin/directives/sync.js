@@ -27,7 +27,7 @@ export const syncDirective = (
     const { eventName, valueFromEvent } = eventsWithValueGetters[index] || {};
 
     return {
-      stateValuePath: joinPath(elementDataPath, valuePath),
+      valuePathFromRoot: joinPath(elementDataPath, valuePath),
       defaultValue: defaultValue ?? initialPropertyValue,
       domSyncPath,
       eventName,
@@ -38,16 +38,28 @@ export const syncDirective = (
   // Sync DOM with state (side effects and mutations)
   syncInputForSyncDeclarations.forEach(
     ({
-      stateValuePath,
+      valuePathFromRoot,
       defaultValue,
       domSyncPath,
       eventName,
       valueFromEvent,
     }) => {
+      // Store all elements using this path
+      Alpine.app.syncedPaths[valuePathFromRoot] = [
+        ...(Alpine.app.syncedPaths[valuePathFromRoot] ?? []),
+        {
+          valuePathFromRoot,
+          el,
+          domSyncPath,
+          defaultValue,
+          eventName,
+        },
+      ];
+
       // Initialize state value if it doesn't exist
-      const currentStateValue = getAt(stateValuePath);
+      const currentStateValue = getAt(valuePathFromRoot);
       if (currentStateValue == null) {
-        setAt(stateValuePath, defaultValue);
+        setAt(valuePathFromRoot, defaultValue);
       }
 
       if (currentStateValue != null && defaultValue) {
@@ -55,7 +67,7 @@ export const syncDirective = (
           `While running "x-sync" for the element:`,
           el,
           "\n\n",
-          `The value at "${stateValuePath}" is already initialized to "${currentStateValue}". This means:`,
+          `The value at "${valuePathFromRoot}" is already initialized to "${currentStateValue}". This means:`,
           "\n\n",
           `1. The default value "${defaultValue}" will be ignored.`,
           "\n",
@@ -66,7 +78,7 @@ export const syncDirective = (
       // DOM -> app state
       if (eventName && valueFromEvent) {
         const handler = (event) => {
-          setAt(stateValuePath, valueFromEvent(event));
+          setAt(valuePathFromRoot, valueFromEvent(event));
         };
         el.addEventListener(eventName, handler);
         eventListeners.push({
@@ -79,7 +91,7 @@ export const syncDirective = (
       // app state -> DOM
       if (domSyncPath) {
         effect(() => {
-          const newStateValue = getAt(stateValuePath);
+          const newStateValue = getAt(valuePathFromRoot);
           set(el, domSyncPath, newStateValue);
         });
       }

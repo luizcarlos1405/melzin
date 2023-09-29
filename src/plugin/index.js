@@ -25,6 +25,7 @@ export const plugin = (Alpine) => {
     state,
     handlers: {},
     registeredRoutes: {},
+    syncedPaths: {},
     route: {
       path: location.pathname,
       query: new URLSearchParams(location.search),
