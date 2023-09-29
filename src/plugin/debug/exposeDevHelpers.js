@@ -2,7 +2,8 @@ import get from "lodash/get";
 
 export const exposeDevHelpers = (Alpine) => {
   window.$state = Alpine.app.state;
-  window.$logState = () => console.log(JSON.stringify(Alpine.app.state, null, 2));
+  window.$logState = () =>
+    console.log(JSON.stringify(Alpine.app.state, null, 2));
   window.$get = (path) => get(Alpine.app.state, path);
   window.$localStorageStateKey = `melzin@${location.pathname}`;
   window.$storeState = () =>
@@ -10,7 +11,8 @@ export const exposeDevHelpers = (Alpine) => {
       window.$localStorageStateKey,
       JSON.stringify(Alpine.app.state),
     );
-  window.$getStoredState = () => localStorage.getItem(window.$localStorageStateKey);
+  window.$getStoredState = () =>
+    localStorage.getItem(window.$localStorageStateKey);
   window.$loadStoredState = () => {
     const savedState = JSON.parse(
       localStorage.getItem(window.$localStorageStateKey),
@@ -21,6 +23,4 @@ export const exposeDevHelpers = (Alpine) => {
       });
     }
   };
-
-  window.$loadStoredState();
 };

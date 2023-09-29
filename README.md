@@ -2,6 +2,8 @@
 
 Na chupeta.
 
+It's a plugin for the Alpine framework.
+
 **Design is implementation**: the same process that defines how things look and where data appears should also be the UI/UX implementation.
 
 This is an attempt to build this concept on top of Alpine. It uses custom directives, web-components that reads from a single, reactive and global state object.
@@ -34,7 +36,7 @@ A directive that sets a path to an element and all its children.
 
 A directive that expects the current path to have be an array-like object. It should be used only on <template> tags. It will create a new element with the path pointing to each item in the array.
 
-#### x-on="functionName"
+#### x-on:eventname="functionName"
 
 #### x-component
 
@@ -50,17 +52,15 @@ state: { name: "Newton" }
 
 ### Magics
 
-$index > the index of the current item in an x-each directive
+#### `$index`
 
-#### x-event
-
-#### x-component
+The index of the current item in an x-each directive
 
 ### Web Components
 
-#### x-import
+#### `x-import`
 
-#### x-route
+#### `x-route`
 
 ## Development
 
