@@ -71,6 +71,17 @@ export const componentDirective = (
         return this;
       }
 
+      // <slot> without shadow dom
+      const slotNodes = templateContent.querySelectorAll("slot");
+      slotNodes.forEach((slotNode) => {
+        const slotName = slotNode.getAttribute("name");
+        for (const child of this.children) {
+          if (child.getAttribute("slot") === slotName) {
+            slotNode.replaceWith(child);
+          }
+        }
+      });
+
       this.appendChild(templateContent.cloneNode(true));
     }
   }
