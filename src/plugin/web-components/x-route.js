@@ -5,6 +5,10 @@ export const xRoute = () => {
       const url = this.getAttribute("url") || path;
       const method = this.getAttribute("method") || "GET";
 
+      this.style.display = "none";
+      this.style.width = "100vw";
+      this.style.height = "100vh";
+
       window._registeredRoutes = window._registeredRoutes || {};
       if (window._registeredRoutes[path]) {
         return;
@@ -28,6 +32,8 @@ export const xRoute = () => {
             scriptElement.innerHTML = javascript;
             Alpine.nextTick(() => this.appendChild(scriptElement));
           }
+
+          this.style.display = "block";
         });
       };
 
@@ -36,6 +42,8 @@ export const xRoute = () => {
       }
 
       document.addEventListener("routeChanged", () => {
+        this.style.display = "none";
+
         if (path == location.pathname) {
           load();
           return;

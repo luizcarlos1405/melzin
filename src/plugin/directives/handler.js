@@ -15,6 +15,8 @@ export const handlerDirective = (
       handler(event);
       return;
     }
+
+    console.info(`Event "${eventName}" called handler "${handlerName}".`);
   };
 
   el.addEventListener(eventName, handlerWrapper);
