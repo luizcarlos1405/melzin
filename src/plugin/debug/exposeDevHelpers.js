@@ -4,9 +4,11 @@ import { getElementDataPath } from "../helpers/getElementDataPath";
 import { scanStructure } from "../helpers/scanStructure";
 
 export const exposeDevHelpers = () => {
-  window.$getRoot = () => getAt();
   window.$getAt = getAt;
   window.$setAt = setAt;
+  window.$getRoot = () => getAt();
+  window.$setRoot = (value) => setAt("", value);
+  window.$state = Alpine.app.state;
   window.$logState = () => console.log(JSON.stringify(getAt(), null, 2));
   window.$localStorageStateKey = `melzin@${location.pathname}`;
   window.$storeState = () =>

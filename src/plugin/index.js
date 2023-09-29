@@ -20,7 +20,7 @@ export const plugin = (Alpine) => {
   xOnly();
 
   // State
-  const state = Alpine.reactive({ root: undefined });
+  const state = Object.seal(Alpine.reactive({ root: undefined }));
   Alpine.app = {
     state,
     handlers: {},
