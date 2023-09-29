@@ -4,18 +4,12 @@ import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
 import { pathDirective } from "./directives/path";
 import { eventDirective } from "./directives/event";
-import { scopeMagic } from "./magics/scope";
 import { xImport } from "./web-components/x-import";
 import { xRoute } from "./web-components/x-route";
 import { xOnly } from "./web-components/x-only";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
 import get from "lodash/get";
 import { getElementDataPath } from "./helpers/getElementDataPath";
-
-// DOM method
-Element.prototype.getDataPath = function () {
-  return getElementDataPath(this);
-};
 
 export const plugin = (Alpine) => {
   // Web components
@@ -25,7 +19,7 @@ export const plugin = (Alpine) => {
   xImport();
   xOnly();
 
-  // Data exposing
+  // State
   const state = Alpine.reactive({});
   Alpine.app = {
     state,
@@ -62,9 +56,11 @@ export const plugin = (Alpine) => {
   Alpine.directive("event", eventDirective);
 
   // Magics
-  Alpine.magic("scope", scopeMagic);
   Alpine.magic("get", () => (path) => get(Alpine.app.state, path));
   Alpine.magic("state", () => Alpine.app.state);
+
+  // Globals
+  window.getElementDataPath = getElementDataPath;
 
   // Debugging
   exposeDevHelpers(Alpine);
