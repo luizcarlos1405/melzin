@@ -17,7 +17,8 @@ export const syncDirective = (
 
   // Pure transformations, no side effects or mutations
   const syncInputForSyncDeclarations = syncDeclarations.map((sync, index) => {
-    const [valuePath, defaultValueExpression] = sync.split(/\s*:\s*/);
+    const [valuePath, ...syncExressionRest] = sync.split(/\s*:\s*/);
+    const defaultValueExpression = syncExressionRest.join(":");
     const defaultValue = defaultValueExpression
       ? evaluate(defaultValueExpression)
       : null;
