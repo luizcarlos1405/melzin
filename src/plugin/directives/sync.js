@@ -50,6 +50,19 @@ export const syncDirective = (
         setAt(stateValuePath, defaultValue);
       }
 
+      if (currentStateValue != null && defaultValue) {
+        console.warn(
+          `While running "x-sync" for the element:`,
+          el,
+          "\n\n",
+          `The value at "${stateValuePath}" is already initialized to "${currentStateValue}". This means:`,
+          "\n\n",
+          `1. The default value "${defaultValue}" will be ignored.`,
+          "\n",
+          `2. The property "${domSyncPath}" will be initialized to "${currentStateValue}".`,
+        );
+      }
+
       // DOM -> app state
       if (eventName && valueFromEvent) {
         const handler = (event) => {
