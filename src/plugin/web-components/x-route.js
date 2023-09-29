@@ -2,6 +2,8 @@ export const xRoute = () => {
   class WebComponent extends HTMLElement {
     connectedCallback() {
       const path = this.getAttribute("path");
+      const url = this.getAttribute("url") || path;
+      const method = this.getAttribute("method") || "GET";
 
       window._registeredRoutes = window._registeredRoutes || {};
       if (window._registeredRoutes[path]) {
@@ -10,7 +12,8 @@ export const xRoute = () => {
       window._registeredRoutes[path] = { el: this };
 
       const load = async () => {
-        fetch(path, {
+        fetch(url, {
+          method,
           headers: {
             "HX-Request": true,
           },
@@ -32,7 +35,7 @@ export const xRoute = () => {
         load();
       }
 
-      document.addEventListener("routeChanged", (event) => {
+      document.addEventListener("routeChanged", () => {
         if (path == location.pathname) {
           load();
           return;
