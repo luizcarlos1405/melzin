@@ -47,21 +47,21 @@
 
 <hr />
 <h2>Person 3: Scoped</h2>
-<!-- Spawn created component within a scope -->
+<!-- Spawn created component within a path -->
 <!-- You can declare more than one prop separating them by , -->
 <c-person
-  data-scope="scopedPerson"
+  data-path="scopedPerson"
   x-sync="name:'Different Name',email:'person3@email.com'"
 ></c-person>
 
 <hr />
-<h1>x-scope</h1>
-<!-- using x-scope instead of data-scope and the scopes are -->
+<h1>x-path</h1>
+<!-- using x-path instead of data-path and the paths are -->
 <!-- automatically nested -->
-<div x-scope="nested">
-  <div x-scope="scope">
+<div x-path="nested">
+  <div x-path="path">
     <div
-      x-sync="variable.path:'x-scope nests the scope with the outer scope'"
+      x-sync="variable.path:'x-path nests the path with the outer path'"
     ></div>
   </div>
 </div>

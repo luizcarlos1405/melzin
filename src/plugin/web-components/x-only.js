@@ -1,4 +1,4 @@
-import { evaluateWithDefault } from "../helpers/evaluateWithDefault";
+import { evaluateWithState } from "../helpers/evaluateWithDefault";
 
 export const xOnly = () => {
   class WebComponent extends HTMLElement {
@@ -10,7 +10,7 @@ export const xOnly = () => {
       this.innerHTML = "";
 
       Alpine.effect(() => {
-        if (evaluateWithDefault(this, _if, false)) {
+        if (evaluateWithState(this, _if, false)) {
           this.append(...children.map((child) => child.cloneNode(true)));
           return;
         }

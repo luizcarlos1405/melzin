@@ -1,4 +1,4 @@
-const wrapExpressionInSatateScope = function (expression) {
+const wrapExpressionWithState = function (expression) {
   return `(() => {
       let { ${Object.keys(Alpine.app.state).join(", ")} } = Alpine.app.state;
       return (${expression});
@@ -6,7 +6,7 @@ const wrapExpressionInSatateScope = function (expression) {
   `;
 };
 
-export const evaluateWithDefault = (
+export const evaluateWithState = (
   el,
   expression,
   defaultValueExpression = "null",
@@ -15,11 +15,11 @@ export const evaluateWithDefault = (
     el,
     `(() => {
       try {
-        return ${wrapExpressionInSatateScope(expression)}
+        return ${wrapExpressionWithState(expression)}
       } catch {
-        return ${wrapExpressionInSatateScope(defaultValueExpression)}
+        return ${wrapExpressionWithState(defaultValueExpression)}
       }
     })()`,
   );
 
-window.evaluateWithDefault = evaluateWithDefault;
+window.evaluateWithState = evaluateWithState;

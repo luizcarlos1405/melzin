@@ -2,7 +2,7 @@ import { componentDirective } from "./directives/component";
 import { syncDirective } from "./directives/sync";
 import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
-import { scopeDirective } from "./directives/scope";
+import { pathDirective } from "./directives/path";
 import { eventDirective } from "./directives/event";
 import { scopeMagic } from "./magics/scope";
 import { xImport } from "./web-components/x-import";
@@ -10,6 +10,12 @@ import { xRoute } from "./web-components/x-route";
 import { xOnly } from "./web-components/x-only";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
 import get from "lodash/get";
+import { getElementDataPath } from "./helpers/getElementDataPath";
+
+// DOM method
+Element.prototype.getDataPath = function () {
+  return getElementDataPath(this);
+};
 
 export const plugin = (Alpine) => {
   // Web components
@@ -52,7 +58,7 @@ export const plugin = (Alpine) => {
   Alpine.directive("sync", syncDirective);
   Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
-  Alpine.directive("scope", scopeDirective).before("sync");
+  Alpine.directive("path", pathDirective).before("sync");
   Alpine.directive("event", eventDirective);
 
   // Magics

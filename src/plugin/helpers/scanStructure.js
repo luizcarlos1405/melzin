@@ -2,7 +2,7 @@ import forEach from "lodash/forEach";
 import merge from "lodash/merge";
 import set from "lodash/set";
 import { propsStringToObject } from "./propsStringToObject";
-import { evaluateWithDefault } from "./evaluateWithDefault";
+import { evaluateWithState } from "./evaluateWithDefault";
 import { joinPath } from "./joinPath";
 import { isCreatedByEachDirective } from "./isCreatedByEachDirective";
 
@@ -78,7 +78,7 @@ export const scanStructure = (rootElement) => {
     if (xProp) {
       const propObject = propsStringToObject(xProp) || {};
       forEach(propObject, (defaultValue, key) => {
-        const value = evaluateWithDefault(el, "key") || defaultValue;
+        const value = evaluateWithState(el, "key") || defaultValue;
         set(structure, joinPath(currentScope.path, key), value);
       });
     }

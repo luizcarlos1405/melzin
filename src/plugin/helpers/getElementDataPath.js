@@ -3,7 +3,7 @@ import { joinPath } from "./joinPath";
 
 export const getElementDataPath = (el) => {
   const elementDataPath =
-    el.dataset?.scope || el.closest("[data-scope]")?.dataset?.scope || "";
+    el.dataset?.path || el.closest("[data-path]")?.dataset?.path || "";
 
   if (isCreatedByEachDirective(el)) {
     const indexPath = Alpine.evaluate(el, "$index");

@@ -4,7 +4,7 @@ import { propsStringToObject } from "../helpers/propsStringToObject";
 
 export const componentDirective = (
   el,
-  { expression, modifiers, value: scopeName },
+  { expression, modifiers },
   { Alpine },
 ) => {
   if (el.tagName !== "TEMPLATE") {
@@ -22,7 +22,6 @@ export const componentDirective = (
 
   const componentInfo = {
     template,
-    scopeName,
     name: name,
     tagName,
   };

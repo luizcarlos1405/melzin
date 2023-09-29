@@ -1,7 +1,7 @@
 import get from "lodash/get";
 import { joinPath } from "../helpers/joinPath";
 import set from "lodash/set";
-import { getElementDataPath } from "../helpers/getScopeForElement";
+import { getElementDataPath } from "../helpers/getElementDataPath";
 
 export const syncDirective = (
   el,
