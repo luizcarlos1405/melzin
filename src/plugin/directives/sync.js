@@ -1,7 +1,8 @@
-import get from "lodash/get";
 import { joinPath } from "../helpers/joinPath";
 import set from "lodash/set";
 import { getElementDataPath } from "../helpers/getElementDataPath";
+import { setAt } from "../helpers/setAt";
+import { getAt } from "../helpers/getAt";
 
 export const syncDirective = (
   el,
@@ -44,15 +45,15 @@ export const syncDirective = (
       valueFromEvent,
     }) => {
       // Initialize state value if it doesn't exist
-      const currentStateValue = get(Alpine.app.state, stateValuePath);
-      if (currentStateValue === undefined) {
-        set(Alpine.app.state, stateValuePath, defaultValue);
+      const currentStateValue = getAt(stateValuePath);
+      if (currentStateValue == null) {
+        setAt(stateValuePath, defaultValue);
       }
 
-      // DOM -> Alpine.app.state
+      // DOM -> app state
       if (eventName && valueFromEvent) {
         const handler = (event) => {
-          Alpine.app.state[stateValuePath] = valueFromEvent(event);
+          setAt(stateValuePath, valueFromEvent(event));
         };
         el.addEventListener(eventName, handler);
         eventListeners.push({
@@ -62,10 +63,10 @@ export const syncDirective = (
         });
       }
 
-      // Alpine.app.state -> DOM
+      // app state -> DOM
       if (domSyncPath) {
         effect(() => {
-          const newStateValue = get(Alpine.app.state, stateValuePath);
+          const newStateValue = getAt(stateValuePath);
           set(el, domSyncPath, newStateValue);
         });
       }

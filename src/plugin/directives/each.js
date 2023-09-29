@@ -1,7 +1,7 @@
-import get from "lodash/get";
-import set from "lodash/set";
 import { joinPath } from "../helpers/joinPath";
 import { getElementDataPath } from "../helpers/getElementDataPath";
+import { getAt } from "../helpers/getAt";
+import { setAt } from "../helpers/setAt";
 
 export const eachDirective = (el, { expression }, { evaluate }) => {
   const [valuePath, ...defaultValueExpressionParts] =
@@ -11,14 +11,14 @@ export const eachDirective = (el, { expression }, { evaluate }) => {
   const elementDataPath = getElementDataPath(el);
   const arrayPath = joinPath(elementDataPath, valuePath);
 
-  const currentValue = get(Alpine.app.state, arrayPath);
+  const currentValue = getAt(arrayPath);
   const defaultValue = defaultValueExpression
     ? evaluate(defaultValueExpression, [])
     : [];
   const value = currentValue ?? defaultValue;
 
   if (currentValue == null) {
-    set(Alpine.app.state, arrayPath, value);
+    setAt(arrayPath, value);
   }
 
   const firstChild = el.content.children[0];

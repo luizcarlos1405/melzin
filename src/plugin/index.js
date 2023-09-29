@@ -1,6 +1,5 @@
 import { componentDirective } from "./directives/component";
 import { syncDirective } from "./directives/sync";
-import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
 import { pathDirective } from "./directives/path";
 import { handlerDirective } from "./directives/handler";
@@ -8,10 +7,11 @@ import { xImport } from "./web-components/x-import";
 import { xRoute } from "./web-components/x-route";
 import { xOnly } from "./web-components/x-only";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
-import { getElementDataPath } from "./helpers/getElementDataPath";
 import get from "lodash/get";
 
 export const plugin = (Alpine) => {
+  window.Alpine = Alpine;
+
   // Web components
   Alpine.components = {};
 
@@ -20,7 +20,7 @@ export const plugin = (Alpine) => {
   xOnly();
 
   // State
-  const state = Alpine.reactive({});
+  const state = Alpine.reactive(Object.seal({ root: null }));
   Alpine.app = {
     state,
     handlers: {},
@@ -46,7 +46,6 @@ export const plugin = (Alpine) => {
       },
     },
   };
-  Alpine.scanStructure = scanStructure;
 
   // Directives
   Alpine.directive("sync", syncDirective);
@@ -58,9 +57,6 @@ export const plugin = (Alpine) => {
   // Magics
   Alpine.magic("get", () => (path) => get(Alpine.app.state, path));
   Alpine.magic("state", () => Alpine.app.state);
-
-  // Globals
-  window.getElementDataPath = getElementDataPath;
 
   // Debugging
   exposeDevHelpers(Alpine);
