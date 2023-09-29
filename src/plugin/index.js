@@ -3,13 +3,13 @@ import { syncDirective } from "./directives/sync";
 import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
 import { pathDirective } from "./directives/path";
-import { eventDirective } from "./directives/event";
+import { handlerDirective } from "./directives/handler";
 import { xImport } from "./web-components/x-import";
 import { xRoute } from "./web-components/x-route";
 import { xOnly } from "./web-components/x-only";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
-import get from "lodash/get";
 import { getElementDataPath } from "./helpers/getElementDataPath";
+import get from "lodash/get";
 
 export const plugin = (Alpine) => {
   // Web components
@@ -23,7 +23,7 @@ export const plugin = (Alpine) => {
   const state = Alpine.reactive({});
   Alpine.app = {
     state,
-    event: {},
+    handlers: {},
     registeredRoutes: {},
     route: {
       path: location.pathname,
@@ -53,7 +53,7 @@ export const plugin = (Alpine) => {
   Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
   Alpine.directive("path", pathDirective).before("sync");
-  Alpine.directive("event", eventDirective);
+  Alpine.directive("handler", handlerDirective);
 
   // Magics
   Alpine.magic("get", () => (path) => get(Alpine.app.state, path));

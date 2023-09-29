@@ -7,7 +7,7 @@
     "Try Alpine.app.state.valueKey = 'newValue' to change the valueKey value",
   );
 
-  Alpine.app.event.buttonClicked = () => {
+  Alpine.app.handlers.buttonClicked = () => {
     Alpine.app.state.clickNum++;
     console.log("Button clicked");
   };
@@ -86,8 +86,8 @@
 </ul>
 
 <hr />
-<h1>x-event</h1>
-<button x-event="click:buttonClicked">BUTTON</button>
+<h1>x-handler</h1>
+<button x-handler="click:buttonClicked">BUTTON</button>
 Clicked <span x-sync="clickNum:0"></span> times
 
 <hr />

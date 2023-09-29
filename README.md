@@ -36,7 +36,7 @@ A directive that sets a path to an element and all its children.
 
 A directive that expects the current path to have be an array-like object. It should be used only on <template> tags. It will create a new element with the path pointing to each item in the array.
 
-#### x-on:eventname="functionName"
+#### x-handler:eventname="handlerName[.preventDefault][.stopPropagation]"
 
 #### x-component
 
