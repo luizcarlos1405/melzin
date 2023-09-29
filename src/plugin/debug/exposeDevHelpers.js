@@ -5,8 +5,9 @@ import { scanStructure } from "../helpers/scanStructure";
 
 export const exposeDevHelpers = () => {
   window.$getRoot = () => getAt();
-  window.$logState = () => console.log(JSON.stringify(getAt(), null, 2));
   window.$getAt = getAt;
+  window.$setAt = setAt;
+  window.$logState = () => console.log(JSON.stringify(getAt(), null, 2));
   window.$localStorageStateKey = `melzin@${location.pathname}`;
   window.$storeState = () =>
     localStorage.setItem(window.$localStorageStateKey, JSON.stringify(getAt()));
