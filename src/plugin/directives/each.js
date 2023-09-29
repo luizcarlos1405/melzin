@@ -28,6 +28,6 @@ export const eachDirective = (el, { expression }, { evaluate }) => {
   el.setAttribute(":key", `$id('${arrayPath}')`);
 
   Alpine.nextTick(() => {
-    el.setAttribute("x-for", `($item, $index) in $get('${arrayPath}')`);
+    el.setAttribute("x-for", `($item, $index) in $getAt('${arrayPath}')`);
   });
 };
