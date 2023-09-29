@@ -1,5 +1,5 @@
 import { componentDirective } from "./directives/component";
-import { propDirective } from "./directives/prop";
+import { syncDirective } from "./directives/sync";
 import { scanStructure } from "./helpers/scanStructure";
 import { eachDirective } from "./directives/each";
 import { scopeDirective } from "./directives/scope";
@@ -49,10 +49,10 @@ export const plugin = (Alpine) => {
   Alpine.scanStructure = scanStructure;
 
   // Directives
-  Alpine.directive("prop", propDirective);
+  Alpine.directive("sync", syncDirective);
   Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
-  Alpine.directive("scope", scopeDirective).before("prop");
+  Alpine.directive("scope", scopeDirective).before("sync");
   Alpine.directive("event", eventDirective);
 
   // Magics

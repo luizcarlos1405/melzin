@@ -1,13 +1,13 @@
 export const eventDirective = (
   el,
-  { expression: eventName, modifiers },
+  { expression: handlerDeclaration, value: eventName },
   { cleanup },
 ) => {
-  const [originEvent, handlerKey] = eventName.split(/\s*:\s*/);
+  const [handlerKey, ...eventMethods] = handlerDeclaration.split(/\s*\.\s*/);
 
   const handler = (event) => {
-    modifiers.forEach((modifier) => {
-      event[modifier]?.();
+    eventMethods.forEach((eventMethod) => {
+      event[eventMethod]?.();
     });
 
     const eventFunction = Alpine.app.event[handlerKey];
@@ -17,13 +17,13 @@ export const eventDirective = (
     }
 
     console.info("eventDirective", {
-      originEvent,
-      eventName: handlerKey,
+      originEvent: handlerKey,
+      eventName,
       event,
     });
   };
 
-  el.addEventListener(originEvent, handler);
+  el.addEventListener(eventName, handler);
 
   cleanup(() => {
     window.removeEventListener(eventName, handler);

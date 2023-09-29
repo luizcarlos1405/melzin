@@ -28,12 +28,12 @@ export const xRoute = () => {
         });
       };
 
-      if (path == location.pathname + ".html") {
+      if (path == location.pathname) {
         load();
       }
 
       document.addEventListener("routeChanged", (event) => {
-        if (path == location.pathname + ".html") {
+        if (path == location.pathname) {
           load();
           return;
         }

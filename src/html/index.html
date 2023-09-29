@@ -15,13 +15,13 @@
 
 <h1>Props</h1>
 <!-- Declare a proprety and it will sync the innerText of the element -->
-<div x-prop="valueKey"></div>
-<div x-prop="valueKeyWithDefaultString:'defaultString'"></div>
-<div x-prop="valueKeyWithDefaultNumber:42"></div>
-<div x-prop="valueKeyWithDefaultInnerText">default inner text</div>
+<div x-sync="valueKey"></div>
+<div x-sync="valueKeyWithDefaultString:'defaultString'"></div>
+<div x-sync="valueKeyWithDefaultNumber:42"></div>
+<div x-sync="valueKeyWithDefaultInnerText">default inner text</div>
 
 <!-- input tags sync the value property insteaf of the innerText -->
-<input x-prop="inputValue" value="initialvalue" />
+<input x-sync="inputValue" value="initialvalue" />
 <hr />
 
 <h1>Components</h1>
@@ -29,9 +29,9 @@
 <template x-component="person">
   <div>
     <!-- Strings must be between '' -->
-    <div x-prop="name:'Default Name Value'"></div>
-    <div x-prop="email">inlinedefault@email.com</div>
-    <div x-prop="age:14"></div>
+    <div x-sync="name:'Default Name Value'"></div>
+    <div x-sync="email">inlinedefault@email.com</div>
+    <div x-sync="age:14"></div>
   </div>
 </template>
 
@@ -51,7 +51,7 @@
 <!-- You can declare more than one prop separating them by , -->
 <c-person
   data-scope="scopedPerson"
-  x-prop="name:'Different Name',email:'person3@email.com'"
+  x-sync="name:'Different Name',email:'person3@email.com'"
 ></c-person>
 
 <hr />
@@ -61,7 +61,7 @@
 <div x-scope="nested">
   <div x-scope="scope">
     <div
-      x-prop="variable.path:'x-scope nests the scope with the outer scope'"
+      x-sync="variable.path:'x-scope nests the scope with the outer scope'"
     ></div>
   </div>
 </div>
@@ -81,14 +81,14 @@
 <!-- the default value after : is optional too -->
 <ul>
   <template x-each="path.to.array:[{itemText: 'first'}, {itemText: 'second'}]">
-    <li x-prop="itemText"></li>
+    <li x-sync="itemText"></li>
   </template>
 </ul>
 
 <hr />
 <h1>x-event</h1>
 <button x-event="click:buttonClicked">BUTTON</button>
-Clicked <span x-prop="clickNum:0"></span> times
+Clicked <span x-sync="clickNum:0"></span> times
 
 <hr />
 <h1>routing</h1>

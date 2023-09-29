@@ -1,5 +1,5 @@
-import { getScopeForElement } from "../helpers/getScopeForElement";
+import { getElementDataPath } from "../helpers/getScopeForElement";
 
 export const scopeMagic = (el) => {
-  return getScopeForElement(el);
+  return getElementDataPath(el);
 };

@@ -1,45 +1,45 @@
 import get from "lodash/get";
 import { joinPath } from "../helpers/joinPath";
 import set from "lodash/set";
-import { getScopeForElement } from "../helpers/getScopeForElement";
+import { getElementDataPath } from "../helpers/getScopeForElement";
 
-export const propDirective = (
+export const syncDirective = (
   el,
-  { expression: stringPaths, modifiers: bindProperties },
+  { expression: stringPaths, modifiers: elementProperties },
   { evaluate, effect, cleanup },
 ) => {
   const eventListeners = [];
-  const propDeclarations = stringPaths.split(/\s*,\s*/);
-  const scopePath = getScopeForElement(el);
-  const domPropPaths = getDomPropPaths(el, bindProperties);
+  const syncDeclarations = stringPaths.split(/\s*,\s*/);
+  const elementDataPath = getElementDataPath(el);
+  const elementSyncProperties = getElementSyncProperties(el, elementProperties);
   const eventsWithValueGetters = getEventsWithValueGetters(el);
 
   // Pure transformations, no side effects or mutations
-  const syncInputForPropDeclarations = propDeclarations.map((prop, index) => {
-    const [valuePath, defaultValueExpression] = prop.split(/\s*:\s*/);
+  const syncInputForSyncDeclarations = syncDeclarations.map((sync, index) => {
+    const [valuePath, defaultValueExpression] = sync.split(/\s*:\s*/);
     const defaultValue = defaultValueExpression
       ? evaluate(defaultValueExpression)
       : null;
 
-    const domPropPath = domPropPaths[index];
-    const initialPropertyValue = el[domPropPath] ?? null;
+    const domSyncPath = elementSyncProperties[index];
+    const initialPropertyValue = el[domSyncPath] ?? null;
     const { eventName, valueFromEvent } = eventsWithValueGetters[index] || {};
 
     return {
-      stateValuePath: joinPath(scopePath, valuePath),
+      stateValuePath: joinPath(elementDataPath, valuePath),
       defaultValue: defaultValue ?? initialPropertyValue,
-      domPropPath,
+      domSyncPath,
       eventName,
       valueFromEvent,
     };
   });
 
   // Sync DOM with state (side effects and mutations)
-  syncInputForPropDeclarations.forEach(
+  syncInputForSyncDeclarations.forEach(
     ({
       stateValuePath,
       defaultValue,
-      domPropPath,
+      domSyncPath,
       eventName,
       valueFromEvent,
     }) => {
@@ -63,10 +63,10 @@ export const propDirective = (
       }
 
       // Alpine.app.state -> DOM
-      if (domPropPath) {
+      if (domSyncPath) {
         effect(() => {
           const newStateValue = get(Alpine.app.state, stateValuePath);
-          set(el, domPropPath, newStateValue);
+          set(el, domSyncPath, newStateValue);
         });
       }
     },
@@ -100,7 +100,7 @@ const getEventsWithValueGetters = (el) => {
   return [];
 };
 
-const getDomPropPaths = (el, bindProperties) => {
+const getElementSyncProperties = (el, bindProperties) => {
   const isLeafElement = el.children.length === 0;
 
   if (
