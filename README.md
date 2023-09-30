@@ -24,7 +24,7 @@ Suppose the current path is "person".
 
 Everything between `[]` is optional.
 
-#### `x-sync[:domProperty][.path.to.value][='defaultValue']`
+#### `x-value[:domProperty][.path.to.value][='defaultValue']`
 
 A directive that syncronizes the dom property with the value at the path. If there's a path, this implies the current path points to an object. If the initial state has no value at the path, it will be set to the evaluation of the expression.
 
@@ -45,9 +45,9 @@ A directive that expects the current path to have be an array-like object. It sh
 state: { name: "Newton" }
 
 ```html
-<div x-path.name x-sync>Newton</div>
+<div x-path.name x-value>Newton</div>
 
-<div x-sync.name>Newton</div>
+<div x-value.name>Newton</div>
 ```
 
 ### Magics

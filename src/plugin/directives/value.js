@@ -4,40 +4,43 @@ import { getElementDataPath } from "../helpers/getElementDataPath";
 import { setAt } from "../helpers/setAt";
 import { getAt } from "../helpers/getAt";
 
-export const syncDirective = (
+export const valueDirective = (
   el,
   { expression: stringPaths, modifiers: elementProperties },
   { evaluate, effect, cleanup },
 ) => {
   const eventListeners = [];
-  const syncDeclarations = stringPaths.split(/\s*,\s*/);
+  const valueDeclarations = stringPaths.split(/\s*,\s*/);
   const elementDataPath = getElementDataPath(el);
   const elementSyncProperties = getElementSyncProperties(el, elementProperties);
   const eventsWithValueGetters = getEventsWithValueGetters(el);
 
   // Pure transformations, no side effects or mutations
-  const syncInputForSyncDeclarations = syncDeclarations.map((sync, index) => {
-    const [valuePath, ...syncExressionRest] = sync.split(/\s*:\s*/);
-    const defaultValueExpression = syncExressionRest.join(":");
-    const defaultValue = defaultValueExpression
-      ? evaluate(defaultValueExpression)
-      : null;
+  const syncInputForValueDeclarations = valueDeclarations.map(
+    (valueDeclaration, index) => {
+      const [valuePath, ...valueExressionRest] =
+        valueDeclaration.split(/\s*:\s*/);
+      const defaultValueExpression = valueExressionRest.join(":");
+      const defaultValue = defaultValueExpression
+        ? evaluate(defaultValueExpression)
+        : null;
 
-    const domSyncPath = elementSyncProperties[index];
-    const initialPropertyValue = el[domSyncPath] ?? null;
-    const { eventName, valueFromEvent } = eventsWithValueGetters[index] || {};
+      const domSyncPath = elementSyncProperties[index];
+      const initialPropertyValue = el[domSyncPath] ?? null;
+      const { eventName, valueFromEvent } = eventsWithValueGetters[index] || {};
 
-    return {
-      valuePathFromRoot: joinPath(elementDataPath, valuePath),
-      defaultValue: defaultValue ?? initialPropertyValue,
-      domSyncPath,
-      eventName,
-      valueFromEvent,
-    };
-  });
+      return {
+        valuePathFromRoot: joinPath(elementDataPath, valuePath),
+        defaultValue: defaultValue ?? initialPropertyValue,
+        domSyncPath,
+        eventName,
+        valueFromEvent,
+      };
+    },
+  );
 
   // Sync DOM with state (side effects and mutations)
-  syncInputForSyncDeclarations.forEach(
+  syncInputForValueDeclarations.forEach(
     ({
       valuePathFromRoot,
       defaultValue,
@@ -65,7 +68,7 @@ export const syncDirective = (
 
       if (currentStateValue != null && defaultValue) {
         console.warn(
-          `While running "x-sync" for the element:`,
+          `While running "x-value" for the element:`,
           el,
           "\n\n",
           `The value at "${valuePathFromRoot}" is already initialized to "${currentStateValue}". This means:`,

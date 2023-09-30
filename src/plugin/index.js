@@ -1,5 +1,5 @@
 import { componentDirective } from "./directives/component";
-import { syncDirective } from "./directives/sync";
+import { valueDirective } from "./directives/value";
 import { eachDirective } from "./directives/each";
 import { pathDirective } from "./directives/path";
 import { handlerDirective } from "./directives/handler";
@@ -49,10 +49,10 @@ export const plugin = (Alpine) => {
   };
 
   // Directives
-  Alpine.directive("sync", syncDirective);
+  Alpine.directive("value", valueDirective);
   Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
-  Alpine.directive("path", pathDirective).before("sync");
+  Alpine.directive("path", pathDirective).before("value");
   Alpine.directive("handler", handlerDirective);
 
   // Magics
