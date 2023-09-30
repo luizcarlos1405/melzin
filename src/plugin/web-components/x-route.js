@@ -6,8 +6,8 @@ export const xRoute = () => {
       const method = this.getAttribute("method") || "GET";
 
       this.style.display = "none";
-      this.style.width = "100vw";
-      this.style.height = "100vh";
+      this.style.width = "100%";
+      this.style.height = "100%";
 
       window._registeredRoutes = window._registeredRoutes || {};
       if (window._registeredRoutes[path]) {
