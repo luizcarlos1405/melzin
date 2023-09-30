@@ -2,7 +2,7 @@ import forEach from "lodash/forEach";
 import merge from "lodash/merge";
 import set from "lodash/set";
 import { propsStringToObject } from "./propsStringToObject";
-import { evaluateWithState } from "./evaluateWithDefault";
+import { evaluateWithState } from "./evaluateWithState";
 import { joinPath } from "./joinPath";
 import { isCreatedByEachDirective } from "./isCreatedByEachDirective";
 
