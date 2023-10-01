@@ -1,89 +1,71 @@
-import forEach from "lodash/forEach";
-import merge from "lodash/merge";
 import set from "lodash/set";
-import { propsStringToObject } from "./propsStringToObject";
+import get from "lodash/get";
 import { evaluateWithState } from "./evaluateWithState";
 import { joinPath } from "./joinPath";
 import { isCreatedByEachDirective } from "./isCreatedByEachDirective";
 
-const structuresFromComponentTemplate = (component) =>
-  merge(...Array.from(component.template.content.children).map(scanStructure));
-
-const structureFromTemplate = (template) => {
-  const childStructures = Array.from(template.content.children).flatMap(
-    (childElement) => {
-      const component = Alpine.components[childElement.tagName];
-      if (component) {
-        return structuresFromComponentTemplate(component);
-      }
-
-      return scanStructure(childElement);
-    },
-  );
-  return merge({}, ...childStructures);
+const declareValueAt = (
+  structure,
+  valuePathFromRoot = "",
+  defaultValue = null,
+) => {
+  const currentValue = get(structure, valuePathFromRoot);
+  if (currentValue === undefined) {
+    set(structure, joinPath("root", valuePathFromRoot), defaultValue);
+  }
 };
 
-const structuresFromEachDirectiveTemplate = (eachDirective) => {
-  const childStructure = structureFromTemplate(eachDirective);
-  const newArray = [childStructure];
-  newArray.isEach = true;
+// Specific for scanning, hardcode index to 0
+const getElementDataPath = (el) => {
+  const elementDataPath =
+    el.dataset?.path || el.closest("[data-path]")?.dataset?.path || "";
 
-  return newArray;
+  if (isCreatedByEachDirective(el)) {
+    return joinPath(elementDataPath, "0");
+  }
+
+  return elementDataPath;
 };
 
-export const scanStructure = (rootElement) => {
+export const scanStructure = (rootElement, structure = {}) => {
   rootElement ||= document.body;
 
-  const structure = {};
-  const scopeStack = [{ element: rootElement, path: "" }];
+  Alpine.walk(rootElement, (el, skip) => {
+    const elementDataPath = getElementDataPath(el);
 
-  Alpine.walk(rootElement, (el, stop) => {
-    const isImported = !!el.closest("x-import");
+    const xValue = el.getAttribute("x-value");
+    if (xValue) {
+      const [valuePath, ...defaultValueExpressionParts] = xValue
+        ? xValue.split(":")
+        : [];
+      const defaultValueExpression = defaultValueExpressionParts.join(":");
+      const defaultValue = evaluateWithState(el, defaultValueExpression);
 
-    if (isCreatedByEachDirective(el) || isImported) {
+      const valuePathFromRoot = joinPath(elementDataPath, valuePath);
+      declareValueAt(structure, valuePathFromRoot, defaultValue);
       return;
     }
 
-    while (
-      scopeStack.length > 1 &&
-      !scopeStack[scopeStack.length - 1].element.contains(el)
-    ) {
-      scopeStack.pop();
-    }
-
-    const elementScope = el.dataset?.scope;
-
-    if (elementScope) {
-      const lastScope = scopeStack[scopeStack.length - 1];
-      const newScope = {
-        element: el,
-        path: joinPath(lastScope.path, elementScope),
-      };
-      scopeStack.push(newScope);
-    }
-
-    const currentScope = scopeStack[scopeStack.length - 1];
-
-    const isTemplate = el.tagName === "TEMPLATE";
-    const isEach = isTemplate && el.hasAttribute("x-each");
-
-    if (isEach) {
+    const hasXEach = el.hasAttribute("x-each");
+    if (hasXEach) {
       const xEach = el.getAttribute("x-each");
-      const childStructure = structuresFromEachDirectiveTemplate(el);
-      set(structure, joinPath(currentScope.path, xEach), childStructure);
-      return;
-    }
+      const [arrayPath = "", ...defaultEachExpressionParts] = xEach
+        ? xEach.split(":")
+        : [];
+      const defaultValueExpression = defaultEachExpressionParts.join(":");
+      const defaultValue = evaluateWithState(el, defaultValueExpression, [
+        null,
+      ]);
 
-    const xProp = el.getAttribute("x-prop");
-    if (xProp) {
-      const propObject = propsStringToObject(xProp) || {};
-      forEach(propObject, (defaultValue, key) => {
-        const value = evaluateWithState(el, "key") || defaultValue;
-        set(structure, joinPath(currentScope.path, key), value);
+      const valuePathFromRoot = joinPath(elementDataPath, arrayPath);
+
+      declareValueAt(structure, valuePathFromRoot, defaultValue);
+
+      Array.from(el.content.children).forEach((childElement) => {
+        scanStructure(childElement, structure);
       });
     }
   });
 
-  window.scannedStructure = structure;
-  return structure;
+  return structure.root;
 };

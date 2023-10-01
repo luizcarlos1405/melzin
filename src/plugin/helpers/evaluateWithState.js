@@ -6,25 +6,19 @@ const wrapExpressionWithState = function (expression) {
     typeof stateRoot === "object" && stateRoot !== null ? stateRoot : {};
   return `(() => {
       let { ${Object.keys(obj).join(", ")} } = Alpine.app.state;
-      return (${expression});
+      return ${expression};
     })()
   `;
 };
 
-export const evaluateWithState = (
-  el,
-  expression,
-  defaultValueExpression = "null",
-) =>
+export const evaluateWithState = (el, expression, defaultValue = null) =>
   Alpine.evaluate(
     el,
-    `(() => {
+    wrapExpressionWithState(`(() => {
       try {
-        return ${wrapExpressionWithState(expression)}
-      } catch {
-        return ${wrapExpressionWithState(defaultValueExpression)}
-      }
-    })()`,
-  );
+        return ${expression === "" ? "undefined" : expression};
+      } catch {}
+    })()`),
+  ) || defaultValue;
 
 window.evaluateWithState = evaluateWithState;

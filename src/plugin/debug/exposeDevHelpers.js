@@ -27,4 +27,6 @@ export const exposeDevHelpers = () => {
   };
   window.$getElementDataPath = getElementDataPath;
   window.$scanStructure = scanStructure;
+  window.$logStructure = () =>
+    console.log(JSON.stringify(scanStructure(), null, 2));
 };
