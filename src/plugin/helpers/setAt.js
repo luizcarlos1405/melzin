@@ -1,4 +1,5 @@
 import set from "lodash/set";
+import { isNumeric } from "./isNumeric";
 
 export const setAt = (path = "", value = null) => {
   if (path === "") {
@@ -9,7 +10,8 @@ export const setAt = (path = "", value = null) => {
   const stateRoot = Alpine.app.state.root;
 
   if (typeof stateRoot !== "object" || stateRoot === null) {
-    const isNumericValue = !isNaN(Number(value));
+    const isNumericValue = isNumeric(value);
+
     Alpine.app.state.root = isNumericValue ? [] : {};
   }
 

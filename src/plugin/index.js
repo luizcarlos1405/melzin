@@ -2,12 +2,15 @@ import { componentDirective } from "./directives/component";
 import { valueDirective } from "./directives/value";
 import { eachDirective } from "./directives/each";
 import { pathDirective } from "./directives/path";
-import { handlerDirective } from "./directives/handler";
+import { handleDirective } from "./directives/handle";
 import { xImport } from "./web-components/x-import";
 import { xRoute } from "./web-components/x-route";
 import { xOnly } from "./web-components/x-only";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
 import get from "lodash/get";
+import { getElementDataPath } from "./helpers/getElementDataPath";
+import { getAt } from "./helpers/getAt";
+import { elementGet } from "./helpers/elementGet";
 
 export const plugin = (Alpine) => {
   window.Alpine = Alpine;
@@ -49,15 +52,17 @@ export const plugin = (Alpine) => {
   };
 
   // Directives
-  Alpine.directive("value", valueDirective);
+  Alpine.directive("value", valueDirective).before("show");
   Alpine.directive("each", eachDirective).before("for");
   Alpine.directive("component", componentDirective);
   Alpine.directive("path", pathDirective).before("value");
-  Alpine.directive("handler", handlerDirective);
+  Alpine.directive("handle", handleDirective);
 
   // Magics
-  Alpine.magic("get", () => (path) => get(Alpine.app.state, path));
+  Alpine.magic("get", (el) => (path) => elementGet(el, path));
   Alpine.magic("state", () => Alpine.app.state);
+  Alpine.magic("route", () => Alpine.app.route);
+  Alpine.magic("value", (el) => elementGet(el));
 
   // Debugging
   exposeDevHelpers(Alpine);

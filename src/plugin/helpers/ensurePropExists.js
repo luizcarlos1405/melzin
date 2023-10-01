@@ -4,7 +4,7 @@ export const ensurePropExists = (objOrArr, path = [], defaultValue = null) => {
     return;
   }
 
-  const [key, ...pathRest] = path;
+  const [key = null, ...pathRest] = path;
 
   if (key === undefined) {
     return objOrArr;
@@ -16,7 +16,7 @@ export const ensurePropExists = (objOrArr, path = [], defaultValue = null) => {
   }
 
   if (objOrArr[key] == null) {
-    const isNextKeyNumeric = !Number.isNaN(Number(key));
+    const isNextKeyNumeric = isNumeric(key);
 
     if (isNextKeyNumeric) {
       objOrArr[key] = [];

@@ -3,10 +3,15 @@ import { getElementDataPath } from "../helpers/getElementDataPath";
 import { setAt } from "../helpers/setAt";
 import { getAt } from "../helpers/getAt";
 import { usefullErrorMessages } from "../helpers/usefullErrorMessages";
+import get from "lodash/get";
 
 export const valueDirective = (
   el,
-  { expression: stringPaths, modifiers: elementProperties },
+  {
+    expression: stringPaths,
+    value: syncDirective,
+    modifiers: elementProperties,
+  },
   { evaluate, effect, cleanup },
 ) => {
   const eventListeners = [];
@@ -16,7 +21,7 @@ export const valueDirective = (
     elementProperty: defaultElementProperty,
     eventName,
     getSelector,
-    getValueFromEvent, // There's no way to specify a custom getter yet
+    getValueFromEvent,
   } = getHowToSyncPropertyWithState(el);
 
   // Pure transformations, no side effects or mutations
@@ -37,6 +42,7 @@ export const valueDirective = (
       return {
         valuePathFromRoot: joinPath(elementDataPath, valuePath),
         defaultValue: defaultValue ?? initialPropertyValue,
+        valuePath,
         elementProperty,
       };
     },
@@ -44,13 +50,14 @@ export const valueDirective = (
 
   // Sync DOM with state (side effects and mutations)
   syncInputForValueDeclarations.forEach(
-    ({ valuePathFromRoot, defaultValue, elementProperty }) => {
+    ({ valuePathFromRoot, defaultValue, elementProperty, valuePath }) => {
       // Store all elements using the value at this path
       Alpine.app.syncedPaths[valuePathFromRoot] = [
         ...(Alpine.app.syncedPaths[valuePathFromRoot] ?? []),
         {
           el,
           valuePathFromRoot,
+          valuePath,
           getSelector,
           elementProperty,
           defaultValue,
@@ -66,6 +73,7 @@ export const valueDirective = (
 
       if (currentStateValue != null && defaultValue) {
         usefullErrorMessages.ignoredDefault({
+          el,
           valuePathFromRoot,
           currentStateValue,
           defaultValue,
@@ -97,6 +105,11 @@ export const valueDirective = (
           });
         });
       }
+
+      // Sync other directives with the value at this path
+      if (syncDirective) {
+        el.setAttribute("x-" + syncDirective, `$get('${valuePath}')`);
+      }
     },
   );
 
@@ -112,7 +125,7 @@ const getHowToSyncPropertyWithState = (
   rules = syncElementPropertyToStateRules,
 ) => {
   if (rules.by) {
-    const value = el[rules.by];
+    const value = get(el, rules.by);
     const newRules = rules[value] ?? rules.default;
     return getHowToSyncPropertyWithState(el, newRules);
   }
@@ -147,8 +160,12 @@ const syncElementPropertyToStateRules = {
     getValueFromEvent: (event) => event.target.value,
   },
   default: {
-    eventName: "input",
-    elementProperty: "innerText",
-    getValueFromEvent: (event) => event.target.innerText,
+    by: "children.length",
+    0: {
+      eventName: "input",
+      elementProperty: "innerText",
+      getValueFromEvent: (event) => event.target.innerText,
+    },
+    default: {},
   },
 };

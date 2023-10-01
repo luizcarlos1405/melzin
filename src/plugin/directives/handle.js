@@ -1,9 +1,9 @@
-export const handlerDirective = (
+export const handleDirective = (
   el,
-  { expression: handlerDeclaration, value: eventName },
+  { expression: handleDeclaration, value: eventName },
   { cleanup },
 ) => {
-  const [handlerName, ...eventMethods] = handlerDeclaration.split(/\s*\.\s*/);
+  const [handlerName, ...eventMethods] = handleDeclaration.split(/\s*\.\s*/);
 
   const handlerWrapper = (event) => {
     eventMethods.forEach((eventMethod) => {
