@@ -2,6 +2,7 @@ import { getAt } from "../helpers/getAt";
 import { setAt } from "../helpers/setAt";
 import { getElementDataPath } from "../helpers/getElementDataPath";
 import { scanStructure } from "../helpers/scanStructure";
+import { queryWholeHtml } from "../helpers/queryWholeHtml";
 
 export const exposeDevHelpers = () => {
   window.$getAt = getAt;
@@ -29,4 +30,6 @@ export const exposeDevHelpers = () => {
   window.$scanStructure = scanStructure;
   window.$logStructure = () =>
     console.log(JSON.stringify(scanStructure(), null, 2));
+
+  window.$queryWholeHtml = queryWholeHtml;
 };

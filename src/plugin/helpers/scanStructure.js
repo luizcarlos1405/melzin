@@ -3,6 +3,7 @@ import get from "lodash/get";
 import { evaluateWithState } from "./evaluateWithState";
 import { joinPath } from "./joinPath";
 import { isCreatedByEachDirective } from "./isCreatedByEachDirective";
+import { getElementDataPath } from "./getElementDataPath";
 
 const declareValueAt = (
   structure,
@@ -15,23 +16,13 @@ const declareValueAt = (
   }
 };
 
-// Specific for scanning, hardcode index to 0
-const getElementDataPath = (el) => {
-  const elementDataPath =
-    el.dataset?.path || el.closest("[data-path]")?.dataset?.path || "";
-
-  if (isCreatedByEachDirective(el)) {
-    return joinPath(elementDataPath, "0");
-  }
-
-  return elementDataPath;
-};
-
 export const scanStructure = (rootElement, structure = {}) => {
   rootElement ||= document.body;
 
   Alpine.walk(rootElement, (el, skip) => {
-    const elementDataPath = getElementDataPath(el);
+    const elementDataPath = isCreatedByEachDirective(el)
+      ? joinPath(getElementDataPath(el), "0")
+      : getElementDataPath(el);
 
     const xValue = el.getAttribute("x-value");
     if (xValue) {
@@ -43,7 +34,6 @@ export const scanStructure = (rootElement, structure = {}) => {
 
       const valuePathFromRoot = joinPath(elementDataPath, valuePath);
       declareValueAt(structure, valuePathFromRoot, defaultValue);
-      return;
     }
 
     const hasXEach = el.hasAttribute("x-each");
