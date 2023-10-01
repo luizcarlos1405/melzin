@@ -14,6 +14,8 @@ export const usefullErrorMessages = {
       "\n\n",
       `1. The default value "${defaultValue}" will be ignored.`,
       "\n",
-      `2. The property "${elementProperty}" will be initialized to "${currentStateValue}".`,
+      elementProperty
+        ? `2. The property "${elementProperty}" will be initialized to "${currentStateValue}".`
+        : "",
     ),
 };

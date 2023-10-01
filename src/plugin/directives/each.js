@@ -1,7 +1,6 @@
 import { joinPath } from "../helpers/joinPath";
 import { getElementDataPath } from "../helpers/getElementDataPath";
-import { getAt } from "../helpers/getAt";
-import { setAt } from "../helpers/setAt";
+import { declareValueAt } from "../helpers/declareValueAt";
 
 export const eachDirective = (el, { expression }, { evaluate }) => {
   const [valuePath, ...defaultValueExpressionParts] =
@@ -9,25 +8,23 @@ export const eachDirective = (el, { expression }, { evaluate }) => {
   const defaultValueExpression = defaultValueExpressionParts.join(":");
 
   const elementDataPath = getElementDataPath(el);
-  const arrayPath = joinPath(elementDataPath, valuePath);
-
-  const currentValue = getAt(arrayPath);
+  const arrayPathFromRoot = joinPath(elementDataPath, valuePath);
   const defaultValue = defaultValueExpression
     ? evaluate(defaultValueExpression, [])
     : [];
-  const value = currentValue ?? defaultValue;
 
-  if (currentValue == null) {
-    setAt(arrayPath, value);
-  }
+  declareValueAt(arrayPathFromRoot, defaultValue, { el });
 
   const firstChild = el.content.children[0];
-  firstChild.setAttribute("data-path", `${arrayPath}`);
+  firstChild.setAttribute("data-path", `${arrayPathFromRoot}`);
   firstChild.setAttribute("data-is-each-item", "true");
 
-  el.setAttribute(":key", `$id('${arrayPath}')`);
+  el.setAttribute(":key", `$id('${arrayPathFromRoot}')`);
 
   Alpine.nextTick(() => {
-    el.setAttribute("x-for", `($item, $index) in $getAt('${arrayPath}')`);
+    el.setAttribute(
+      "x-for",
+      `($item, $index) in $getAt('${arrayPathFromRoot}')`,
+    );
   });
 };

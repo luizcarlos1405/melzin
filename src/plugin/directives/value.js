@@ -2,8 +2,8 @@ import { joinPath } from "../helpers/joinPath";
 import { getElementDataPath } from "../helpers/getElementDataPath";
 import { setAt } from "../helpers/setAt";
 import { getAt } from "../helpers/getAt";
-import { usefullErrorMessages } from "../helpers/usefullErrorMessages";
 import get from "lodash/get";
+import { declareValueAt } from "../helpers/declareValueAt";
 
 export const valueDirective = (
   el,
@@ -51,35 +51,12 @@ export const valueDirective = (
   // Sync DOM with state (side effects and mutations)
   syncInputForValueDeclarations.forEach(
     ({ valuePathFromRoot, defaultValue, elementProperty, valuePath }) => {
-      // Store all elements using the value at this path
-      Alpine.app.syncedPaths[valuePathFromRoot] = [
-        ...(Alpine.app.syncedPaths[valuePathFromRoot] ?? []),
-        {
-          el,
-          valuePathFromRoot,
-          valuePath,
-          getSelector,
-          elementProperty,
-          defaultValue,
-          eventName,
-        },
-      ];
-
-      // Initialize state value if it doesn't exist
-      const currentStateValue = getAt(valuePathFromRoot);
-      if (currentStateValue == null) {
-        setAt(valuePathFromRoot, defaultValue);
-      }
-
-      if (currentStateValue != null && defaultValue) {
-        usefullErrorMessages.ignoredDefault({
-          el,
-          valuePathFromRoot,
-          currentStateValue,
-          defaultValue,
-          elementProperty,
-        });
-      }
+      declareValueAt(valuePathFromRoot, defaultValue, {
+        el,
+        elementProperty,
+        getSelector,
+        eventName,
+      });
 
       // app state -> DOM
       if (elementProperty) {
