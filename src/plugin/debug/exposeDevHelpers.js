@@ -21,6 +21,7 @@ export const exposeDevHelpers = () => {
       localStorage.getItem(window.$localStorageStateKey),
     );
     if (savedState) {
+      // Alpine.app.state.root = savedState;
       Object.entries(savedState).forEach(([key, value]) => {
         setAt(key, value);
       });

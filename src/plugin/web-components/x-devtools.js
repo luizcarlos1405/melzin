@@ -49,117 +49,130 @@ export const xDevtools = () => {
   class WebComponent extends HTMLElement {
     paths = [];
     setFromDevTools = false;
+    saveState = () => {
+      window.$storeState();
+    };
+    loadState = () => {
+      window.$loadStoredState();
+    };
 
     constructor() {
       super();
       this.attachShadow({ mode: "open" });
     }
     connectedCallback() {
-      Alpine.effect(() => {
-        // React to all changes by stringifying the state
-        const state = JSON.parse(JSON.stringify(Alpine.app.state, null, 2));
+      setTimeout(() => {
+        this.loadState();
 
-        const structure = scanStructure();
-        const newPaths = Array.from(
-          new Set([
-            ...Object.keys(deepFlattenObject(structure)),
-            ...Object.keys(deepFlattenObject(state)),
-          ]),
-        );
+        Alpine.effect(() => {
+          // React to all changes by stringifying the state
+          const state = JSON.parse(JSON.stringify(Alpine.app.state, null, 2));
+          this.saveState();
 
-        if (this.setFromDevTools) {
-          this.setFromDevTools = false;
-          return;
-        }
+          const structure = scanStructure();
+          const newPaths = Array.from(
+            new Set(
+              [
+                ...Object.keys(deepFlattenObject(structure)),
+                ...Object.keys(deepFlattenObject(state)),
+              ].sort(),
+            ),
+          );
 
-        this.shadowRoot.innerHTML = "";
-        this.paths = newPaths;
+          if (this.setFromDevTools) {
+            this.setFromDevTools = false;
+            return;
+          }
 
-        const children = [
-          e(
-            "style",
-            css`
-              form {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 1rem;
-              }
+          this.shadowRoot.innerHTML = "";
+          this.paths = newPaths;
 
-              .text-input-label {
-                display: flex;
-                flex-direction: column;
-              }
-
-              .checkbox-input-label {
-                display: flex;
-                align-items: center;
-              }
-            `,
-          ),
-          e(
-            "form",
-            [
-              ...this.paths.flatMap((path, index) => {
-                const pathFromRoot = path.replace(/^root\./, "");
-                const value = getAt(pathFromRoot);
-
-                const { type, property, getValue, labelClass } =
-                  inputInfo(value);
-                const input = e("input", [], {
-                  type,
-                  [property]: value,
-                  oninput: (event) => {
-                    const newValue = getValue(event);
-
-                    if (newValue !== undefined) {
-                      this.setFromDevTools = true;
-                      setAt(pathFromRoot, newValue);
-                    }
-                  },
-                });
-
-                const element = e("label", [e("span", pathFromRoot), input], {
-                  class: labelClass,
-                });
-
-                const parentPath = pathFromRoot
-                  .split(".")
-                  .slice(0, -1)
-                  .join(".");
-                const parentValue = get(structure.root, parentPath);
-
-                if (parentValue?.length != null) {
-                  return [
-                    element,
-                    e(
-                      "button",
-                      "Add",
-                      {
-                        type: "button",
-                        onclick: () => {
-                          const parentStateValue = getAt(parentPath);
-                          setAt(parentPath, [...parentStateValue, null]);
-                        },
-                      },
-                      { class: "button" },
-                    ),
-                  ];
+          const children = [
+            e(
+              "style",
+              css`
+                form {
+                  display: flex;
+                  flex-wrap: wrap;
+                  gap: 1rem;
                 }
 
-                return element;
-              }),
-            ],
-            {
-              onsubmit: (event) => {
-                event.preventDefault();
-                console.log(`event`, event);
-              },
-            },
-          ),
-        ];
+                .text-input-label {
+                  display: flex;
+                  flex-direction: column;
+                }
 
-        this.shadowRoot.appendChild(e("div", children));
-      });
+                .checkbox-input-label {
+                  display: flex;
+                  align-items: center;
+                }
+              `,
+            ),
+            e(
+              "form",
+              [
+                ...this.paths.flatMap((path, index) => {
+                  const pathFromRoot = path.replace(/^root\./, "");
+                  const value = getAt(pathFromRoot);
+
+                  const { type, property, getValue, labelClass } =
+                    inputInfo(value);
+                  const input = e("input", [], {
+                    type,
+                    [property]: value,
+                    oninput: (event) => {
+                      const newValue = getValue(event);
+
+                      if (newValue !== undefined) {
+                        this.setFromDevTools = true;
+                        setAt(pathFromRoot, newValue);
+                      }
+                    },
+                  });
+
+                  const element = e("label", [e("span", pathFromRoot), input], {
+                    class: labelClass,
+                  });
+
+                  const parentPath = pathFromRoot
+                    .split(".")
+                    .slice(0, -1)
+                    .join(".");
+                  const parentValue = get(structure.root, parentPath);
+
+                  if (parentValue?.length != null) {
+                    return [
+                      element,
+                      e(
+                        "button",
+                        "Add",
+                        {
+                          type: "button",
+                          onclick: () => {
+                            const parentStateValue = getAt(parentPath);
+                            setAt(parentPath, [...parentStateValue, null]);
+                          },
+                        },
+                        { class: "button" },
+                      ),
+                    ];
+                  }
+
+                  return element;
+                }),
+              ],
+              {
+                onsubmit: (event) => {
+                  event.preventDefault();
+                  console.log(`event`, event);
+                },
+              },
+            ),
+          ];
+
+          this.shadowRoot.appendChild(e("div", children));
+        });
+      }, 200);
     }
   }
   customElements.define("x-devtools", WebComponent);
