@@ -1,12 +1,14 @@
-export const evaluateWithFallback = (el, expression, fallback) => {
+export const evaluateWithFallback = (el, expression, fallback = null) => {
+  const validExpression = expression === "" ? "undefined" : expression;
+
   return (
     Alpine.evaluate(
       el,
       `(() => {
         try {
-          return ${expression === "" ? "undefined" : expression};
+          return ${validExpression};
         } catch {}
       })()`,
-    ) || fallback
+    ) ?? fallback
   );
 };

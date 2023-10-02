@@ -57,5 +57,5 @@ export const scanStructure = (rootElement, structure = {}) => {
     }
   });
 
-  return structure.root;
+  return structure;
 };

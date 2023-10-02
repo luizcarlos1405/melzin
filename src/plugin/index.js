@@ -6,10 +6,8 @@ import { handleDirective } from "./directives/handle";
 import { xImport } from "./web-components/x-import";
 import { xRoute } from "./web-components/x-route";
 import { xOnly } from "./web-components/x-only";
+import { xDevtools } from "./web-components/x-devtools";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
-import get from "lodash/get";
-import { getElementDataPath } from "./helpers/getElementDataPath";
-import { getAt } from "./helpers/getAt";
 import { elementGet } from "./helpers/elementGet";
 
 export const plugin = (Alpine) => {
@@ -66,4 +64,5 @@ export const plugin = (Alpine) => {
 
   // Debugging
   exposeDevHelpers(Alpine);
+  xDevtools();
 };

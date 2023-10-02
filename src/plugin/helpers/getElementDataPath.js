@@ -6,10 +6,11 @@ export const getElementDataPath = (el) => {
   const elementDataPath =
     el.dataset?.path || el.closest("[data-path]")?.dataset?.path || "";
 
-  const indexPath = evaluateWithFallback(el, "$index");
-  if (isCreatedByEachDirective(el) && indexPath) {
-    const indexPath = Alpine.evaluate(el, "$index");
-    return joinPath(elementDataPath, indexPath);
+  if (isCreatedByEachDirective(el)) {
+    const indexPath = evaluateWithFallback(el, "$index");
+    return indexPath != null
+      ? joinPath(elementDataPath, indexPath)
+      : elementDataPath;
   }
 
   return elementDataPath;

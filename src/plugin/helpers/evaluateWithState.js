@@ -19,6 +19,6 @@ export const evaluateWithState = (el, expression, defaultValue = null) =>
         return ${expression === "" ? "undefined" : expression};
       } catch {}
     })()`),
-  ) || defaultValue;
+  ) ?? defaultValue;
 
 window.evaluateWithState = evaluateWithState;
