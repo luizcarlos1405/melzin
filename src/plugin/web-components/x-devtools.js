@@ -164,7 +164,7 @@ export const xDevtools = () => {
               {
                 onsubmit: (event) => {
                   event.preventDefault();
-                  console.log(`event`, event);
+                  console.info(`event`, event);
                 },
               },
             ),

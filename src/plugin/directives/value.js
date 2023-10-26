@@ -20,6 +20,7 @@ export const valueDirective = (
   const {
     elementProperty: defaultElementProperty,
     eventName,
+    shouldSyncDom,
     getSelector,
     getValueFromEvent,
   } = getHowToSyncPropertyWithState(el);
@@ -40,6 +41,7 @@ export const valueDirective = (
       const initialPropertyValue = el[elementProperty] ?? null;
 
       return {
+        shouldSyncDom,
         valuePathFromRoot: joinPath(elementDataPath, valuePath),
         defaultValue: defaultValue ?? initialPropertyValue,
         valuePath,
@@ -50,13 +52,28 @@ export const valueDirective = (
 
   // Sync DOM with state (side effects and mutations)
   syncInputForValueDeclarations.forEach(
-    ({ valuePathFromRoot, defaultValue, elementProperty, valuePath }) => {
+    ({
+      shouldSyncDom,
+      valuePathFromRoot,
+      defaultValue,
+      elementProperty,
+      valuePath,
+    }) => {
       declareValueAt(valuePathFromRoot, defaultValue, {
         el,
         elementProperty,
         getSelector,
         eventName,
       });
+
+      // Sync other directives with the value at this path
+      if (syncDirective) {
+        el.setAttribute("x-" + syncDirective, `$get('${valuePath}')`);
+      }
+
+      if (shouldSyncDom && !shouldSyncDom(el)) {
+        return;
+      }
 
       // app state -> DOM
       if (elementProperty) {
@@ -81,11 +98,6 @@ export const valueDirective = (
             handler,
           });
         });
-      }
-
-      // Sync other directives with the value at this path
-      if (syncDirective) {
-        el.setAttribute("x-" + syncDirective, `$get('${valuePath}')`);
       }
     },
   );
@@ -137,12 +149,9 @@ const syncElementPropertyToStateRules = {
     getValueFromEvent: (event) => event.target.value,
   },
   default: {
-    by: "children.length",
-    0: {
-      eventName: "input",
-      elementProperty: "innerText",
-      getValueFromEvent: (event) => event.target.innerText,
-    },
-    default: {},
+    shouldSyncDom: (el) => el.children.length > 0,
+    eventName: "input",
+    elementProperty: "innerText",
+    getValueFromEvent: (event) => event.target.innerText,
   },
 };

@@ -26,7 +26,11 @@ export const declareValueAt = (
     setAt(valuePathFromRoot, defaultValue);
   }
 
-  if (currentStateValue != null && defaultValue) {
+  if (
+    currentStateValue != null &&
+    defaultValue &&
+    !Alpine.app.syncedPaths[valuePathFromRoot]
+  ) {
     usefullErrorMessages.ignoredDefault({
       el: meta.el || "Declared without an element",
       elementProperty: meta.elementProperty,

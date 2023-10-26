@@ -52,9 +52,9 @@ export const componentDirective = (
 
       // This means the component was called with x-for
       // and we need to merge the data from the x-for element
-      if (isCreatedByEachDirective(this)) {
-        Object.assign(finalDataObject, isEachItem);
-      }
+      // if (isCreatedByEachDirective(this)) {
+      //   Object.assign(finalDataObject, isEachItem);
+      // }
 
       // This means some values were passed to the component
       Object.assign(finalDataObject, initialDataObject);
@@ -82,7 +82,7 @@ export const componentDirective = (
         }
       });
 
-      this.appendChild(templateContent.cloneNode(true));
+      this.replaceChildren(templateContent.cloneNode(true));
     }
   }
 
