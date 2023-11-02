@@ -27,6 +27,11 @@ export const exposeDevHelpers = () => {
       });
     }
   };
+  window.$togglePersistState = () => {
+    const newPersistState =
+      localStorage.getItem("melzin@persistState") === "true" ? "false" : "true";
+    localStorage.setItem("melzin@persistState", newPersistState);
+  };
   window.$getElementDataPath = getElementDataPath;
   window.$scanStructure = scanStructure;
   window.$logStructure = () =>

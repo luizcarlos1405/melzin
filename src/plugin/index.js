@@ -65,4 +65,14 @@ export const plugin = (Alpine) => {
   // Debugging
   exposeDevHelpers(Alpine);
   xDevtools();
+
+  if (localStorage.getItem("melzin@persistState") === "true") {
+    window.$loadStoredState();
+  }
+
+  Alpine.effect(() => {
+    if (localStorage.getItem("melzin@persistState") === "true") {
+      window.$storeState();
+    }
+  });
 };
