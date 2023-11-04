@@ -22,12 +22,12 @@ export const declareValueAt = (
   ];
 
   const currentStateValue = getAt(valuePathFromRoot);
-  if (currentStateValue == null) {
+  if (currentStateValue === undefined) {
     setAt(valuePathFromRoot, defaultValue);
   }
 
   if (
-    currentStateValue != null &&
+    currentStateValue !== undefined &&
     defaultValue &&
     !Alpine.app.syncedPaths[valuePathFromRoot]
   ) {
