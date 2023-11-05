@@ -71,6 +71,10 @@ export const valueDirective = (
         el.setAttribute("x-" + syncDirective, `$get('${valuePath}')`);
       }
 
+      if (valuePath === "interestMonthly") {
+        console.log(`elementProperty`, valuePath);
+        console.log(`shouldSyncDom`, shouldSyncDom(el));
+      }
       if (shouldSyncDom && !shouldSyncDom(el)) {
         return;
       }
@@ -149,7 +153,7 @@ const syncElementPropertyToStateRules = {
     getValueFromEvent: (event) => event.target.value,
   },
   default: {
-    shouldSyncDom: (el) => el.children.length > 0,
+    shouldSyncDom: (el) => el.children.length === 0,
     eventName: "input",
     elementProperty: "innerText",
     getValueFromEvent: (event) => event.target.innerText,
