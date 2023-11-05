@@ -21,6 +21,16 @@ export const handleDirective = (
       return;
     }
 
+    if (eventName === "submit") {
+      const formData = new FormData(el);
+      const data = Object.fromEntries(formData.entries());
+      console.info(
+        `Event "submit" called handler "${handlerName}". Data:`,
+        data,
+      );
+      return;
+    }
+
     console.info(`Event "${eventName}" called handler "${handlerName}".`);
   };
 
