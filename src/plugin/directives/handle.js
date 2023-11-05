@@ -1,3 +1,6 @@
+import { elementGet } from "../helpers/elementGet";
+import { evaluateWithFallback } from "../helpers/evaluateWithFallback";
+
 export const handleDirective = (
   el,
   { expression: handleDeclaration, value: eventName },
@@ -12,7 +15,9 @@ export const handleDirective = (
 
     const handler = Alpine.app.handlers[handlerName];
     if (handler) {
-      handler(event);
+      handler(event, elementGet(el), {
+        $index: evaluateWithFallback(el, "$index", null),
+      });
       return;
     }
 
