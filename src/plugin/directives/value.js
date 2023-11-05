@@ -71,10 +71,6 @@ export const valueDirective = (
         el.setAttribute("x-" + syncDirective, `$get('${valuePath}')`);
       }
 
-      if (valuePath === "interestMonthly") {
-        console.log(`elementProperty`, valuePath);
-        console.log(`shouldSyncDom`, shouldSyncDom(el));
-      }
       if (shouldSyncDom && !shouldSyncDom(el)) {
         return;
       }
