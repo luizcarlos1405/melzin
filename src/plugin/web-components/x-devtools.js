@@ -1,21 +1,24 @@
 import get from "lodash/get";
+import mapKeys from "lodash/mapKeys";
 import { deepFlattenObject } from "../helpers/deepFlattenObject";
 import { ensureArray } from "../helpers/ensureArray";
 import { getAt } from "../helpers/getAt";
 import { scanStructure } from "../helpers/scanStructure";
 import { setAt } from "../helpers/setAt";
+import YAML from "yaml";
+import hljs from "highlight.js";
+import "highlight.js/styles/a11y-light.min.css";
+import yamlHighlightLanguage from "highlight.js/lib/languages/yaml";
 
-const e = (
-  tag,
-  children = [],
-  { ["class"]: className, ...properties } = {},
-) => {
+hljs.registerLanguage("yaml", yamlHighlightLanguage);
+
+const e = (tag, attributes = {}, children = []) => {
+  const kebabCaseAttributes = mapKeys(attributes, (value, key) =>
+    kebabCase(key),
+  );
   const element = document.createElement(tag);
-  if (className) {
-    element.setAttribute("class", className);
-  }
-  Object.entries(properties).forEach(([key, value]) => {
-    element[key] = value;
+  Object.entries(kebabCaseAttributes).forEach(([key, value]) => {
+    element.setAttribute(key, value);
   });
   ensureArray(children).forEach((child) =>
     typeof child === "string"
@@ -25,29 +28,12 @@ const e = (
   return element;
 };
 
-const inputInfo = (value) => {
-  if (typeof value === "boolean") {
-    return {
-      type: "checkbox",
-      property: "checked",
-      getValue: (event) => event.target.checked,
-      labelClass: "checkbox-input-label",
-    };
-  }
-
-  return {
-    type: "text",
-    property: "value",
-    getValue: (event) => event.target.value,
-    labelClass: "text-input-label",
-  };
-};
-
-const css = (strings) => strings.join("");
-
 export const xDevtools = () => {
   class WebComponent extends HTMLElement {
     paths = [];
+    open = false;
+    openText = "▶️";
+    closedText = "◀️";
     setFromDevTools = false;
     saveState = () => {
       window.$storeState();
@@ -58,120 +44,84 @@ export const xDevtools = () => {
 
     constructor() {
       super();
-      this.attachShadow({ mode: "open" });
     }
     connectedCallback() {
       setTimeout(() => {
         this.loadState();
 
+        this.style.display = "flex";
+        this.style["flex-direction"] = "column";
+        this.style["z-index"] = "999";
+        this.style.position = "fixed";
+        this.style.top = "0";
+        this.style.right = "0";
+        this.style.width = "25vw";
+        this.style.height = "100vh";
+        this.style.padding = "0.5rem";
+
+        const toggleButton = e("button", {});
+        toggleButton.style["margin-bottom"] = "1rem";
+        toggleButton.style["align-self"] = "flex-end";
+        toggleButton.innerText = this.open ? this.openText : this.closedText;
+
+        const codeElement = e("code");
+        codeElement.style.display = "none";
+        codeElement.style["flex-grow"] = "1";
+        codeElement.style["overflow"] = "scroll";
+        codeElement.style["white-space"] = "pre-wrap";
+        codeElement.style["font-size"] = "0.8rem";
+        codeElement.style.padding = "1rem";
+        codeElement.style.width = "100%";
+        codeElement.style.height = "100%";
+        codeElement.style.background = "#fff";
+        codeElement.style.border = "1px solid #ddd";
+
+        codeElement.contentEditable = true;
+        codeElement.spellcheck = false;
+
+        this.appendChild(toggleButton);
+        this.appendChild(codeElement);
+
+        toggleButton.onclick = () => {
+          this.open = !this.open;
+          codeElement.style.display = this.open ? "block" : "none";
+          toggleButton.innerText = this.open ? this.openText : this.closedText;
+        };
+
         Alpine.effect(() => {
           // React to all changes by stringifying the state
-          const state = JSON.parse(JSON.stringify(Alpine.app.state, null, 2));
+          const state = JSON.parse(JSON.stringify(getAt(), null, 2));
           this.saveState();
-
-          const structure = scanStructure();
-          const newPaths = Array.from(
-            new Set(
-              [
-                ...Object.keys(deepFlattenObject(structure)),
-                ...Object.keys(deepFlattenObject(state)),
-              ].sort(),
-            ),
-          );
 
           if (this.setFromDevTools) {
             this.setFromDevTools = false;
             return;
           }
 
-          this.shadowRoot.innerHTML = "";
-          this.paths = newPaths;
-
-          const children = [
-            e(
-              "style",
-              css`
-                form {
-                  display: flex;
-                  flex-wrap: wrap;
-                  gap: 1rem;
-                }
-
-                .text-input-label {
-                  display: flex;
-                  flex-direction: column;
-                }
-
-                .checkbox-input-label {
-                  display: flex;
-                  align-items: center;
-                }
-              `,
-            ),
-            e(
-              "form",
-              [
-                ...this.paths.flatMap((path, index) => {
-                  const pathFromRoot = path.replace(/^root\./, "");
-                  const value = getAt(pathFromRoot);
-
-                  const { type, property, getValue, labelClass } =
-                    inputInfo(value);
-                  const input = e("input", [], {
-                    type,
-                    [property]: value,
-                    oninput: (event) => {
-                      const newValue = getValue(event);
-
-                      if (newValue !== undefined) {
-                        this.setFromDevTools = true;
-                        setAt(pathFromRoot, newValue);
-                      }
-                    },
-                  });
-
-                  const element = e("label", [e("span", pathFromRoot), input], {
-                    class: labelClass,
-                  });
-
-                  const parentPath = pathFromRoot
-                    .split(".")
-                    .slice(0, -1)
-                    .join(".");
-                  const parentValue = get(structure.root, parentPath);
-
-                  if (parentValue?.length != null) {
-                    return [
-                      element,
-                      e(
-                        "button",
-                        "Add",
-                        {
-                          type: "button",
-                          onclick: () => {
-                            const parentStateValue = getAt(parentPath);
-                            setAt(parentPath, [...parentStateValue, null]);
-                          },
-                        },
-                        { class: "button" },
-                      ),
-                    ];
-                  }
-
-                  return element;
-                }),
-              ],
-              {
-                onsubmit: (event) => {
-                  event.preventDefault();
-                  console.info(`event`, event);
-                },
-              },
-            ),
-          ];
-
-          this.shadowRoot.appendChild(e("div", children));
+          const yaml = YAML.stringify(state);
+          const highlightedYaml = hljs.highlight(yaml, {
+            language: "yaml",
+          }).value;
+          codeElement.innerHTML = highlightedYaml;
         });
+
+        codeElement.oninput = (event) => {
+          try {
+            const state = YAML.parse(event.target.innerText);
+            this.setFromDevTools = true;
+            setAt("", state);
+          } catch (error) {
+            console.error(error);
+          }
+        };
+
+        codeElement.onblur = () => {
+          const yaml = codeElement.innerText;
+          const highlightedYaml = hljs.highlight(yaml, {
+            language: "yaml",
+          }).value;
+          codeElement.innerHTML = highlightedYaml;
+        };
       }, 200);
     }
   }

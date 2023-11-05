@@ -11,8 +11,6 @@ import { exposeDevHelpers } from "./debug/exposeDevHelpers";
 import { elementGet } from "./helpers/elementGet";
 
 export const plugin = (Alpine) => {
-  window.Alpine = Alpine;
-
   // Web components
   Alpine.components = {};
 
@@ -61,18 +59,10 @@ export const plugin = (Alpine) => {
   Alpine.magic("state", () => Alpine.app.state);
   Alpine.magic("route", () => Alpine.app.route);
   Alpine.magic("value", (el) => elementGet(el));
+};
 
+export const devtools = (Alpine) => {
   // Debugging
   exposeDevHelpers(Alpine);
   xDevtools();
-
-  if (localStorage.getItem("melzin@persistState") === "true") {
-    window.$loadStoredState();
-  }
-
-  Alpine.effect(() => {
-    if (localStorage.getItem("melzin@persistState") === "true") {
-      window.$storeState();
-    }
-  });
 };
