@@ -25,7 +25,6 @@ export const componentDirective = (
     name: name,
     tagName,
   };
-  console.log(`componentInfo`, componentInfo);
 
   class WebComponent extends HTMLElement {
     constructor() {
