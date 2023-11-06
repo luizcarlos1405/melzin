@@ -25,6 +25,7 @@ export const componentDirective = (
     name: name,
     tagName,
   };
+  console.log(`componentInfo`, componentInfo);
 
   class WebComponent extends HTMLElement {
     constructor() {
@@ -32,9 +33,10 @@ export const componentDirective = (
       this._x_component = componentInfo;
     }
     connectedCallback() {
-      // TODO this ignores any <teplate> tags inside the component
+      // TODO this ignores any <template> tags inside the component
       // maybe we should deal with that?
       const templateContent = template.content;
+      const templateClone = templateContent.cloneNode(true);
 
       const finalDataObject = {};
 
@@ -67,12 +69,12 @@ export const componentDirective = (
 
       if (isShadowDom) {
         const shadowRoot = this.attachShadow({ mode: "open" });
-        shadowRoot.appendChild(templateContent.cloneNode(true));
-        return this;
+        shadowRoot.appendChild(templateClone);
+        return;
       }
 
       // <slot> without shadow dom
-      const slotNodes = templateContent.querySelectorAll("slot");
+      const slotNodes = templateClone.querySelectorAll("slot");
       slotNodes.forEach((slotNode) => {
         const slotName = slotNode.getAttribute("name");
         for (const child of this.children) {
@@ -82,7 +84,7 @@ export const componentDirective = (
         }
       });
 
-      this.replaceChildren(templateContent.cloneNode(true));
+      this.replaceChildren(templateClone);
     }
   }
 

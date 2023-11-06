@@ -1,23 +1,37 @@
 export const xRoute = () => {
   class WebComponent extends HTMLElement {
-    connectedCallback() {
-      const path = this.getAttribute("path");
-      const url = this.getAttribute("url") || path;
-      const method = this.getAttribute("method") || "GET";
+    path = "";
+    url = "";
+    method = "GET";
+    content = null;
+    preload = false;
+    javascript = "";
 
-      this.style.display = "none";
-      this.style.width = "100%";
-      this.style.height = "100%";
-
-      window._registeredRoutes = window._registeredRoutes || {};
-      if (window._registeredRoutes[path]) {
-        return;
+    async render() {
+      if (!this.content) {
+        await this.fetchContent();
       }
-      window._registeredRoutes[path] = { el: this };
 
-      const load = async () => {
-        fetch(url, {
-          method,
+      this.style.display = "block";
+      this.innerHTML = this.content;
+
+      if (this.javascript) {
+        const scriptElement = document.createElement("script");
+        scriptElement.innerHTML = this.javascript;
+        Alpine.nextTick(() => this.appendChild(scriptElement));
+      }
+    }
+
+    destroy() {
+      this.style.display = "none";
+      this.innerHTML = "";
+    }
+
+    async fetchContent() {
+      return (
+        this.content ||
+        fetch(this.url, {
+          method: this.method,
           headers: {
             "HX-Request": true,
           },
@@ -25,31 +39,43 @@ export const xRoute = () => {
           const responseHtml = await response.text();
           const [scriptTag, javascript] =
             /^\s*<script>([^<]*)<\/script>[\s|\n]*/.exec(responseHtml) || [];
-          this.innerHTML = responseHtml.replaceAll(scriptTag, "");
+          this.content = responseHtml.replaceAll(scriptTag, "");
+          this.javascript = javascript;
+        })
+      );
+    }
 
-          if (javascript) {
-            const scriptElement = document.createElement("script");
-            scriptElement.innerHTML = javascript;
-            Alpine.nextTick(() => this.appendChild(scriptElement));
-          }
+    async connectedCallback() {
+      this.path = this.getAttribute("path");
+      this.url = this.getAttribute("url") || this.path;
+      this.method = this.getAttribute("method") || "GET";
+      this.preload = this.hasAttribute("preload");
 
-          this.style.display = "block";
-        });
-      };
+      this.style.display = "none";
+      this.style.width = "100%";
+      this.style.height = "100%";
 
-      if (path == location.pathname) {
-        load();
+      window._registeredRoutes = window._registeredRoutes || {};
+      if (window._registeredRoutes[this.path]) {
+        return;
+      }
+      window._registeredRoutes[this.path] = { el: this };
+
+      if (this.preload) {
+        await this.fetchContent();
       }
 
-      document.addEventListener("routeChanged", () => {
-        this.style.display = "none";
+      if (this.path == location.pathname) {
+        await this.render();
+      }
 
-        if (path == location.pathname) {
-          load();
+      document.addEventListener("routeChanged", async () => {
+        if (this.path == location.pathname) {
+          await this.render();
           return;
         }
 
-        this.innerHTML = "";
+        this.destroy();
       });
     }
   }
