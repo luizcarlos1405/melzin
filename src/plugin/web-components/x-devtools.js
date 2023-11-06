@@ -7,8 +7,9 @@ import { scanStructure } from "../helpers/scanStructure";
 import { setAt } from "../helpers/setAt";
 import YAML from "yaml";
 import hljs from "highlight.js";
-import "highlight.js/styles/a11y-light.min.css";
+import "highlight.js/styles/tokyo-night-dark.min.css";
 import yamlHighlightLanguage from "highlight.js/lib/languages/yaml";
+import kebabCase from "lodash/kebabCase";
 
 hljs.registerLanguage("yaml", yamlHighlightLanguage);
 
@@ -35,6 +36,9 @@ export const xDevtools = () => {
     openText = "▶️";
     closedText = "◀️";
     setFromDevTools = false;
+    rootElement = null;
+    toggleButton = null;
+    codeElement = null;
     saveState = () => {
       window.$storeState();
     };
@@ -45,47 +49,57 @@ export const xDevtools = () => {
     constructor() {
       super();
     }
+
+    toggle() {
+      this.open = !this.open;
+
+      this.rootElement.style.right = this.open ? "0" : "-25vw";
+      this.toggleButton.innerText = this.open ? this.openText : this.closedText;
+    }
     connectedCallback() {
       setTimeout(() => {
         this.loadState();
 
-        this.style.display = "flex";
-        this.style["flex-direction"] = "column";
-        this.style["z-index"] = "999";
-        this.style.position = "fixed";
-        this.style.top = "0";
-        this.style.right = "0";
-        this.style.width = "25vw";
-        this.style.height = "100vh";
-        this.style.padding = "0.5rem";
+        this.toggleButton = e("button", {});
+        this.toggleButton.style["margin-bottom"] = "1rem";
+        this.toggleButton.style["align-self"] = "flex-end";
+        this.toggleButton.style.position = "fixed";
+        this.toggleButton.style.top = "1em";
+        this.toggleButton.style.right = "1em";
+        this.toggleButton.style["z-index"] = "999";
+        this.toggleButton.innerText = this.open
+          ? this.openText
+          : this.closedText;
 
-        const toggleButton = e("button", {});
-        toggleButton.style["margin-bottom"] = "1rem";
-        toggleButton.style["align-self"] = "flex-end";
-        toggleButton.innerText = this.open ? this.openText : this.closedText;
+        this.codeElement = e("code", { class: "hljs" });
+        this.codeElement.style.display = "block";
+        this.codeElement.style["flex-grow"] = "1";
+        this.codeElement.style["overflow"] = "scroll";
+        this.codeElement.style["white-space"] = "pre-wrap";
+        this.codeElement.style["font-size"] = "12px";
+        this.codeElement.style.padding = "1rem";
+        this.codeElement.style.width = "100%";
+        this.codeElement.style.height = "100%";
+        this.codeElement.style.border = "1px solid #ddd";
+        this.codeElement.style.position = "relative";
+        this.codeElement.contentEditable = true;
+        this.codeElement.spellcheck = false;
 
-        const codeElement = e("code");
-        codeElement.style.display = "none";
-        codeElement.style["flex-grow"] = "1";
-        codeElement.style["overflow"] = "scroll";
-        codeElement.style["white-space"] = "pre-wrap";
-        codeElement.style["font-size"] = "0.8rem";
-        codeElement.style.padding = "1rem";
-        codeElement.style.width = "100%";
-        codeElement.style.height = "100%";
-        codeElement.style.background = "#fff";
-        codeElement.style.border = "1px solid #ddd";
+        this.rootElement = e("div", {}, [this.toggleButton, this.codeElement]);
+        this.rootElement.style.display = "flex";
+        this.rootElement.style["flex-direction"] = "column";
+        this.rootElement.style["z-index"] = "999";
+        this.rootElement.style.position = "fixed";
+        this.rootElement.style.top = "0";
+        this.rootElement.style.right = this.open ? "0" : "-25vw";
+        this.rootElement.style.width = "25vw";
+        this.rootElement.style.height = "100vh";
+        this.rootElement.style.padding = "0.5rem";
 
-        codeElement.contentEditable = true;
-        codeElement.spellcheck = false;
+        this.appendChild(this.rootElement);
 
-        this.appendChild(toggleButton);
-        this.appendChild(codeElement);
-
-        toggleButton.onclick = () => {
-          this.open = !this.open;
-          codeElement.style.display = this.open ? "block" : "none";
-          toggleButton.innerText = this.open ? this.openText : this.closedText;
+        this.toggleButton.onclick = () => {
+          this.toggle();
         };
 
         Alpine.effect(() => {
@@ -102,26 +116,34 @@ export const xDevtools = () => {
           const highlightedYaml = hljs.highlight(yaml, {
             language: "yaml",
           }).value;
-          codeElement.innerHTML = highlightedYaml;
+          this.codeElement.innerHTML = highlightedYaml;
         });
 
-        codeElement.oninput = (event) => {
+        this.codeElement.oninput = (event) => {
           try {
             const state = YAML.parse(event.target.innerText);
             this.setFromDevTools = true;
             setAt("", state);
+            this.codeElement.style.border = "1px solid #ddd";
           } catch (error) {
-            console.error(error);
+            this.codeElement.style.border = "1px solid red";
           }
         };
 
-        codeElement.onblur = () => {
-          const yaml = codeElement.innerText;
+        this.codeElement.onblur = () => {
+          const yaml = this.codeElement.innerText;
           const highlightedYaml = hljs.highlight(yaml, {
             language: "yaml",
           }).value;
-          codeElement.innerHTML = highlightedYaml;
+          this.codeElement.innerHTML = highlightedYaml;
         };
+
+        document.addEventListener("keydown", (event) => {
+          console.log(`event`, event);
+          if (event.ctrlKey && event.altKey && event.key === "k") {
+            this.toggle();
+          }
+        });
       }, 200);
     }
   }
