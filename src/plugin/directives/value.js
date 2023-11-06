@@ -37,8 +37,12 @@ export const valueDirective = (
 
       const elementProperty =
         elementProperties[index] || defaultElementProperty;
+      const propertyValue = el[elementProperty];
 
-      const initialPropertyValue = el[elementProperty] ?? null;
+      const initialPropertyValue =
+        typeof propertyValue === "string"
+          ? propertyValue.trim()
+          : propertyValue;
 
       return {
         shouldSyncDom,
@@ -152,6 +156,6 @@ const syncElementPropertyToStateRules = {
     shouldSyncDom: (el) => el.children.length === 0,
     eventName: "input",
     elementProperty: "innerText",
-    getValueFromEvent: (event) => event.target.innerText,
+    getValueFromEvent: (event) => event.target.innerText.trim(),
   },
 };
