@@ -9,6 +9,8 @@ export const handleDirective = (
   const [handlerName, ...eventMethods] = handleDeclaration.split(/\s*\.\s*/);
 
   const handlerWrapper = (event) => {
+    event.preventDefault();
+
     eventMethods.forEach((eventMethod) => {
       event[eventMethod]?.();
     });

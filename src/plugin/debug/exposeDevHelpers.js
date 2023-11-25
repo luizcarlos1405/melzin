@@ -12,14 +12,17 @@ export const exposeDevHelpers = () => {
   window.$setRoot = (value) => setAt("", value);
   window.$state = Alpine.app.state;
   window.$logState = () => console.log(JSON.stringify(getAt(), null, 2));
-  window.$localStorageStateKey = `melzin@${location.pathname}`;
+  window.$getLocalStorageStateKey = () => `melzin@${location.pathname}`;
   window.$storeState = () =>
-    localStorage.setItem(window.$localStorageStateKey, JSON.stringify(getAt()));
+    localStorage.setItem(
+      window.$getLocalStorageStateKey(),
+      JSON.stringify(getAt()),
+    );
   window.$getStoredState = () =>
-    localStorage.getItem(window.$localStorageStateKey);
+    localStorage.getItem(window.$getLocalStorageStateKey());
   window.$loadStoredState = () => {
     const savedState = parseJsonWithFallback(
-      localStorage.getItem(window.$localStorageStateKey),
+      localStorage.getItem(window.$getLocalStorageStateKey()),
       {},
     );
     if (savedState) {
