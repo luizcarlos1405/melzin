@@ -1,9 +1,6 @@
-import get from "lodash/get";
 import mapKeys from "lodash/mapKeys";
-import { deepFlattenObject } from "../helpers/deepFlattenObject";
 import { ensureArray } from "../helpers/ensureArray";
 import { getAt } from "../helpers/getAt";
-import { scanStructure } from "../helpers/scanStructure";
 import { setAt } from "../helpers/setAt";
 import YAML from "yaml";
 import hljs from "highlight.js";
@@ -104,7 +101,7 @@ export const xDevtools = () => {
 
         Alpine.effect(() => {
           // React to all changes by stringifying the state
-          const state = JSON.parse(JSON.stringify(getAt(), null, 2));
+          const state = JSON.parse(JSON.stringify(getAt() || {}, null, 2));
           this.saveState();
 
           if (this.setFromDevTools) {
@@ -139,7 +136,6 @@ export const xDevtools = () => {
         };
 
         document.addEventListener("keydown", (event) => {
-          console.log(`event`, event);
           if (event.ctrlKey && event.altKey && event.key === "k") {
             this.toggle();
           }

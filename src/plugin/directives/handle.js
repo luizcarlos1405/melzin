@@ -8,7 +8,7 @@ export const handleDirective = (
 ) => {
   const [handlerName, ...eventMethods] = handleDeclaration.split(/\s*\.\s*/);
 
-  const handlerWrapper = (event) => {
+  const handlerWrapper = async (event) => {
     event.preventDefault();
 
     eventMethods.forEach((eventMethod) => {
@@ -17,7 +17,7 @@ export const handleDirective = (
 
     const handler = Alpine.app.handlers[handlerName];
     if (handler) {
-      handler(event, elementGet(el), {
+      await handler(event, elementGet(el), {
         $index: evaluateWithFallback(el, "$index", null),
       });
       return;
