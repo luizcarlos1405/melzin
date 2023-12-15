@@ -6,11 +6,6 @@ import { queryWholeHtml } from "../helpers/queryWholeHtml";
 import { parseJsonWithFallback } from "../helpers/parseJsonWithFallback";
 
 export const exposeDevHelpers = () => {
-  window.$getAt = getAt;
-  window.$setAt = setAt;
-  window.$getRoot = () => getAt();
-  window.$setRoot = (value) => setAt("", value);
-  window.$state = Alpine.app.state;
   window.$logState = () => console.log(JSON.stringify(getAt(), null, 2));
   window.$getLocalStorageStateKey = () => `melzin@${location.pathname}`;
   window.$storeState = () =>

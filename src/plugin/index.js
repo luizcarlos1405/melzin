@@ -9,6 +9,8 @@ import { xOnly } from "./web-components/x-only";
 import { xDevtools } from "./web-components/x-devtools";
 import { exposeDevHelpers } from "./debug/exposeDevHelpers";
 import { elementGet } from "./helpers/elementGet";
+import { setAt } from "./helpers/setAt";
+import { getAt } from "./helpers/getAt";
 
 export const plugin = (Alpine) => {
   // Web components
@@ -46,6 +48,13 @@ export const plugin = (Alpine) => {
       },
     },
   };
+
+  // Globals
+  window.$state = Alpine.app.state;
+  window.$getAt = getAt;
+  window.$setAt = setAt;
+  window.$getRoot = () => getAt();
+  window.$setRoot = (value) => setAt("", value);
 
   // Directives
   Alpine.directive("value", valueDirective).before("show");
