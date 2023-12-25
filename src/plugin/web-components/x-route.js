@@ -38,7 +38,7 @@ export const xRoute = () => {
         }).then(async (response) => {
           const responseHtml = await response.text();
           const [scriptTag, javascript] =
-            /^\s*<script>([^<]*)<\/script>[\s|\n]*/.exec(responseHtml) || [];
+            responseHtml.match(/^\s*<script>([\s\S]*)<\/script>\s*/) || [];
           this.content = responseHtml.replaceAll(scriptTag, "");
           this.javascript = javascript;
         })
