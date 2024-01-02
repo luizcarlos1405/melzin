@@ -32,6 +32,7 @@ export const xDevtools = () => {
     open = false;
     openText = "▶️";
     closedText = "◀️";
+    autoSaveState = false;
     setFromDevTools = false;
     rootElement = null;
     toggleButton = null;
@@ -54,8 +55,12 @@ export const xDevtools = () => {
       this.toggleButton.innerText = this.open ? this.openText : this.closedText;
     }
     connectedCallback() {
+      this.autoSaveState = this.hasAttribute("auto-save");
+
       setTimeout(() => {
-        this.loadState();
+        if (this.autoSaveState) {
+          this.loadState();
+        }
 
         this.toggleButton = e("button", {});
         this.toggleButton.style["margin-bottom"] = "1rem";
@@ -94,6 +99,7 @@ export const xDevtools = () => {
         this.rootElement.style.padding = "0.5rem";
 
         this.appendChild(this.rootElement);
+        Alpine.devtools = this;
 
         this.toggleButton.onclick = () => {
           this.toggle();
@@ -101,8 +107,10 @@ export const xDevtools = () => {
 
         Alpine.effect(() => {
           // React to all changes by stringifying the state
-          const state = JSON.parse(JSON.stringify(getAt() || {}, null, 2));
-          this.saveState();
+          const state = JSON.parse(JSON.stringify(getAt(), null, 2));
+          if (this.autoSaveState) {
+            this.saveState();
+          }
 
           if (this.setFromDevTools) {
             this.setFromDevTools = false;
@@ -136,6 +144,7 @@ export const xDevtools = () => {
         };
 
         document.addEventListener("keydown", (event) => {
+          console.log(`event`, event);
           if (event.ctrlKey && event.altKey && event.key === "k") {
             this.toggle();
           }

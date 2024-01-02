@@ -83,7 +83,9 @@ export const valueDirective = (
       if (elementProperty) {
         effect(() => {
           const newStateValue = getAt(valuePathFromRoot);
-          el[elementProperty] = newStateValue;
+          if (newStateValue !== undefined) {
+            el[elementProperty] = newStateValue;
+          }
         });
       }
 
@@ -143,6 +145,13 @@ const syncElementPropertyToStateRules = {
     },
     default: {
       eventName: "input",
+      elementProperty: "value",
+      getValueFromEvent: (event) => event.target.value,
+    },
+  },
+  SELECT: {
+    default: {
+      eventName: "change",
       elementProperty: "value",
       getValueFromEvent: (event) => event.target.value,
     },
