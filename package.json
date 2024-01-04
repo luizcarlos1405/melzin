@@ -1,5 +1,5 @@
 {
-  "name": "auto-fields-alpine",
+  "name": "melzin",
   "version": "1.0.50",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -8,6 +8,7 @@
   "dependencies": {
     "alpinejs": "^3.13.0",
     "lodash": "^4.17.21",
+    "highlight.js": "^11.9.0",
     "yaml": "^2.3.2"
   },
   "devDependencies": {

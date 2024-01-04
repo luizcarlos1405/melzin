@@ -107,7 +107,7 @@ export const xDevtools = () => {
 
         Alpine.effect(() => {
           // React to all changes by stringifying the state
-          const state = JSON.parse(JSON.stringify(getAt(), null, 2));
+          const state = JSON.parse(JSON.stringify(getAt("", null)));
           if (this.autoSaveState) {
             this.saveState();
           }
