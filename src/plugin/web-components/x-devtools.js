@@ -144,7 +144,6 @@ export const xDevtools = () => {
         };
 
         document.addEventListener("keydown", (event) => {
-          console.log(`event`, event);
           if (event.ctrlKey && event.altKey && event.key === "k") {
             this.toggle();
           }
