@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Counter</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "count": { "type": "number" }
+        },
+        "required": ["count"]
+      },
+      "events": {
+        "increment": {}
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "zero": { "data": { "count": 0 } },
+      "a few clicks": { "data": { "count": 3 } },
+      "huge number": { "data": { "count": 1234567 } }
+    }
+  </script>
+</head>
+<body>
+  <main class="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-50">
+    <p class="text-6xl font-bold tabular-nums text-zinc-900" m-text="count"></p>
+    <button class="rounded-lg bg-violet-600 px-5 py-2.5 font-medium text-white hover:bg-violet-500"
+            m-on:click="emit('increment')">
+      Click me
+    </button>
+  </main>
+</body>
+</html>
