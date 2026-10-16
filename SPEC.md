@@ -80,12 +80,17 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 - **D9. Styling uses Tailwind.** Plain CSS may be allowed later if a real need shows up; maybe it never
   will.
 - **D10. Directives use an `m-` prefix** (for Melzin) with Vue-like shapes, such as `m-if` and `m-for`;
-  the exact set is Q10. The prefix keeps models from treating the file as full Vue or Alpine, where any
+  the exact set is D13. The prefix keeps models from treating the file as full Vue or Alpine, where any
   JavaScript is allowed, and avoids clashes with host pages that use them. (Tailwind's margin classes,
   like `m-4`, also start with `m-`, but they're class values rather than attribute names, so nothing
   clashes.)
 - **D11. Standalone mode uses the generic host in §7:** the URL picks a screen, the backend-for-frontend
   serves its data, events go to the backend, and realtime screens get patches pushed by the server.
+- **D12. One Tailwind theme per project.** Every screen shares it, since design tokens are brand-wide.
+- **D13. Vue's directive set, under the `m-` prefix:** `m-text`, `m-html`, `m-show`, `m-if`,
+  `m-else-if`, `m-else`, `m-for`, `m-on`, `m-bind`, `m-model` and `m-slot`, with Vue's modifiers
+  (`.prevent`, `.enter`, `.trim`...). The `@`, `:` and `#` shorthands are left out (D10). What goes
+  inside the directives is the next battle (§11).
 
 ## 5. Principles
 
@@ -146,8 +151,9 @@ instead of inventing something. Models already know these, and so do developers 
 
 ## 6. Building blocks
 
-The conceptual parts of a Melzin file. Directives use the `m-` prefix (D10) and styling uses Tailwind
-(D9); the rest of the syntax isn't decided yet (Q10).
+The conceptual parts of a Melzin file. Directives are Vue's set under the `m-` prefix (D10, D13), and
+styling uses Tailwind with a project-wide theme (D9, D12). What goes inside directives, and how the file
+is laid out, is the next battle (§11).
 
 **View tree.** The UI, made of nodes that can carry bindings:
 
@@ -194,16 +200,18 @@ that cite a decision are settled; the rest are proposals.
 
 - **Markup:** plain HTML with semantic elements (`button`, `form`, `label`, `ul`, headings), which also
   covers much of accessibility (#28).
-- **Bindings and control flow:** Vue-like directives under the `m-` prefix (D10): text, attributes,
-  show/if, a keyed for on `<template>`, model for two-way input binding, event handlers. Limited to an
-  analyzable subset (P1); the exact set is Q10.
+- **Directives:** Vue's built-in set under the `m-` prefix (D13). What goes inside them is limited to an
+  analyzable subset (P1).
 - **Reuse:** `<template>` for repeated content, `<slot>` for content passed into components, custom
   elements for components.
 - **Forms:** native input types and validation attributes (`required`, `pattern`, `min`, `max`,
   `maxlength`, `type="email"`) and the browser's built-in constraint validation (#20).
 - **Formatting:** the browser's `Intl` APIs (dates, relative times, numbers, plurals, lists), exposed as
   formatters (#6).
-- **Styling:** Tailwind (D9), with its theme holding the design tokens (Q9).
+- **Styling:** Tailwind (D9), with one project-wide theme holding the design tokens (D12).
+- **Conditional classes:** Vue's class-binding object syntax, such as
+  `m-bind:class="{ 'bg-yellow-100': item.featured }"`, which keeps Tailwind class names literal (#8,
+  #52).
 - **Schema:** JSON Schema. Every language can validate it, and it already has `default`, `examples`,
   `enum`, `maxLength` and required fields; a custom keyword adds stable field IDs (P2).
 - **Snapshots:** JSON documents inside the Melzin file (D8) that validate against the schema.
@@ -353,8 +361,9 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
    the surface. Template languages historically fail here by growing into bad programming languages.
 7. ⚑ **Sample vs. default vs. placeholder** (P4).
 8. ⚑ **Conditionals and variants:** show/hide, styles driven by a boolean or enum, position-based
-   variants in lists. With Tailwind (D9), a variant is either a literal class list per value or a
-   `data-*` attribute styled with `data-[…]:` variants; class names are never built from strings (#52).
+   variants in lists. With Tailwind (D9) and Vue's directives (D13), a variant is a class binding with
+   literal class names (`m-bind:class="{ 'font-bold': item.unread }"`) or a `data-*` attribute styled
+   with `data-[…]:` variants. Class names are never built from strings (#52).
 9. ⚑ **Optional fields:** each one doubles the number of states and needs a designed fallback.
 10. ⚑ **Values with one of several shapes:** loading/error/ready, mixed feed items, different block
     types.
@@ -387,7 +396,8 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
 23. **Overlays:** modals, toasts and dropdowns render outside their parent, which brings stacking order
     and keyboard focus trapping.
 24. **Security:** script injection (XSS) through text, rich text, URL and style bindings. A strict
-    Content Security Policy rules out expression engines that rely on `eval`.
+    Content Security Policy rules out expression engines that rely on `eval`. `m-html` (D13) must only
+    accept sanitized rich text.
 25. **Authorization:** an admin section in the design must not mean always sending admin data. Fields
     that depend on permissions are optional.
 26. **Server rendering and performance:** first paint, SEO, long lists, runtime size. A pure view makes
@@ -402,7 +412,8 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
 29. **Translation:** static text becomes data (message catalogs), plural rules, longer text in other
     languages, right-to-left layouts.
 30. **Theming and design tokens:** dark mode, brand tokens, and where tokens end and data begins.
-    Tailwind's theme holds the tokens and `dark:` handles dark mode (D9); where the theme lives is Q9.
+    Tailwind's theme holds the tokens and `dark:` handles dark mode (D9), and there's one theme per
+    project (D12).
 31. **Routing and multiple screens:** syncing URL and state, a shared app shell, navigation events, deep
     links to specific UI states. Needed for standalone mode (D7, §7).
 
@@ -429,7 +440,8 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
     out. *Settled by D7: both embedded and standalone; approach in §7. The `m-` prefix (D10) avoids
     clashing with host pages that use Vue or Alpine. Still open: Shadow DOM isolates styles both ways,
     which is safe but awkward for sharing fonts and tokens with the host, and each view's Tailwind CSS
-    has to be available inside its shadow root (#52).*
+    has to be available inside its shadow root (#52). Without Shadow DOM, a host that also uses Tailwind
+    with a different theme would clash: same class names, different values.*
 40. **The editor itself:** a visual editor good enough for humans is a huge build. *Deferred by D1: the
     preview shell (§8) replaces it.*
 
@@ -474,6 +486,9 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
     the shell needs it live as the AI edits. A generator running in the browser can serve the shell
     while production precompiles, as long as both produce the same CSS (P5). Class names must appear
     literally in the file, never built from strings, which also fits P1.
+53. **Project context** (D12): a file only renders correctly with its project's theme, so the shell, the
+    AI's renders and embedded views all have to find and load it. The project needs a known layout, such
+    as the theme at the project root.
 
 ## 11. Choosing battles
 
@@ -481,8 +496,21 @@ The ⚑ items change what the file means, so getting one wrong means migrating e
 can be added without breaking anything. Settle the ⚑ items on paper first; put off animations,
 translation, server rendering, form polish, routing and theming.
 
-**Next on paper:** the language inside `m-` attributes: which directives exist (Q10), what a binding can
-express (#6) and which state operations handlers can use (#46). It's ⚑ and gates the first prototype.
+**Next on paper:** the language inside `m-` attributes. It's ⚑ and gates the first prototype. To settle:
+
+- what an expression can contain: paths, literals, comparisons, `!`, `&&`, `||`, maybe ternaries,
+  formatter calls (#6)
+- `m-for`: which of Vue's forms are allowed (index, destructuring, ranges), and whether the key comes
+  from `m-bind:key` or from the schema (§9.1)
+- empty states: Vue has no `empty` slot, so it's `m-if`/`m-else` around the list, which needs `.length`
+  in expressions
+- handler operations (#46) and which modifiers apply
+- `m-model`: what it can write to (only `ui`, since `data` belongs to the host?) and its modifiers
+- `m-html`: sanitized rich text only (#24)
+- whether Vue's niche directives (`v-pre`, `v-once`, `v-memo`, `v-cloak`) carry over
+
+**After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
+(#37).
 
 **First build battle**, when it's time: a small prototype of the core.
 
@@ -510,13 +538,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Q6. Plain CSS or Tailwind?** *Settled by D9: Tailwind.*
 - **Q7. Exact Vue/Alpine directive names, or a Melzin prefix?** *Settled by D10: `m-`.*
 - **Q8. Is the standalone host in §7 the right shape?** *Settled by D11: yes.*
-- **Q9. Where does the Tailwind theme live?** In each Melzin file, so the file is self-contained, or in
-  one project-level theme every screen shares? Lean: project-level, since tokens are brand-wide and
-  every screen should agree.
-- **Q10. Which directives, exactly?** Lean: mirror Vue's set under the prefix (`m-text`, `m-if` and
-  `m-else`, `m-show`, `m-for` with `m-key`, `m-model`, `m-on:click`, `m-bind:href`), without Vue's `@`
-  and `:` shorthands. Shorthands would bring back the clash with Vue and Alpine that the prefix avoids
-  (D10, #38).
+- **Q9. Where does the Tailwind theme live?** *Settled by D12: one theme per project.*
+- **Q10. Which directives, exactly?** *Settled by D13: Vue's set.*
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -534,9 +557,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 
 ## 14. Risks
 
-- **LLMs don't know the format.** Models know HTML and React deeply and Melzin not at all. D6, D9 and D10
-  keep the format close to what they know, and the AI gets fast validate-and-render feedback (§8). The
-  flip side is #38.
+- **LLMs don't know the format.** Models know HTML and React deeply and Melzin not at all. D6, D9, D10
+  and D13 keep the format close to what they know, and the AI gets fast validate-and-render feedback
+  (§8). The flip side is #38.
 - **There's a ceiling.** Anything that isn't a pure function of state needs code. Make that boundary
   explicit and typed (P7) instead of pretending it isn't there. This behavior boundary (events, UI
   state, forms, complex widgets) is likely the hardest part of the project, and it's where existing
@@ -573,8 +596,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Protobuf, Avro, Pact:** stable field IDs, rules for which schema changes are compatible, contract
   tests written from the consumer's side. Reuse as-is for #3.
 - **Elm architecture:** the view is a pure function of the model; user interactions go out as messages.
-- **Vue and Alpine:** directive syntax for HTML templates that models already write fluently; the
-  starting point for Melzin's bindings (D6, D10).
+- **Vue and Alpine:** directive syntax for HTML templates that models already write fluently. Melzin uses
+  Vue's built-in set under its own prefix (D10, D13).
 - **Web Components:** the standard way to ship a component that works in any framework, or none (§7).
 - **JSON Schema:** language-neutral schemas with validators in every language; the likely schema format
   (§6).
@@ -589,7 +612,7 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Binding:** a declared link from part of a node (text, attribute, visibility, style, list) to a data
   path, plus operations.
 - **Directive:** an `m-` attribute that binds part of an element to data or state, or handles an event
-  (D10).
+  (D10, D13).
 - **Field:** a schema entry: stable ID, name, type, optionality, default, constraints.
 - **Schema:** the declared `data` fields, `ui` fields and events. Its `data` fields and events form the
   contract with the backend.
@@ -617,3 +640,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   ⚑) and questions Q6–Q8.
 - 2026-10-16: settled Q5–Q8 as D8–D11 (snapshots inside the file, Tailwind, the `m-` prefix, the
   standalone host). Added complication #52, questions Q9–Q10 and the next battle on paper.
+- 2026-10-16: settled Q9–Q10 as D12–D13 (one Tailwind theme per project, Vue's directive set). Added
+  complication #53 and the checklist for the next battle.
