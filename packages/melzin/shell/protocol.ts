@@ -1,0 +1,55 @@
+// Messages between the shell page and its frames, sent with postMessage (same origin). The frame
+// acts as the view's host: it mounts the view and reports everything to the shell, which plays the
+// mock host's UI (state editor, event log, warnings).
+
+import { isPlainObject } from '../src/core/index.ts'
+
+export const FRAME_SOURCE = 'melzin-frame'
+export const SHELL_SOURCE = 'melzin-shell'
+
+/** Frame → shell. */
+export type FrameMessage = { source: typeof FRAME_SOURCE } & (
+  | { type: 'ready'; title: string }
+  | { type: 'event'; name: string; time: number }
+  /** A link or form in the view that the frame didn't follow (the host page would have navigated). */
+  | { type: 'link'; href: string; time: number }
+  /** `update` is true for warnings about the current data (they go stale when the shell sends new data). */
+  | { type: 'warning'; message: string; update?: boolean }
+  | { type: 'error'; message: string }
+)
+
+/** Shell → frame: replace the view's data (applied with `view.update`). */
+export type ShellMessage = { source: typeof SHELL_SOURCE; type: 'set-data'; data: Record<string, unknown> }
+
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
+export type FrameMessageBody = DistributiveOmit<FrameMessage, 'source'>
+
+export function frameMessage(body: FrameMessageBody): FrameMessage {
+  return { source: FRAME_SOURCE, ...body } as FrameMessage
+}
+
+export function setDataMessage(data: Record<string, unknown>): ShellMessage {
+  return { source: SHELL_SOURCE, type: 'set-data', data }
+}
+
+export function isFrameMessage(value: unknown): value is FrameMessage {
+  if (!isPlainObject(value) || value.source !== FRAME_SOURCE) return false
+  switch (value.type) {
+    case 'ready':
+      return typeof value.title === 'string'
+    case 'event':
+      return typeof value.name === 'string' && typeof value.time === 'number'
+    case 'link':
+      return typeof value.href === 'string' && typeof value.time === 'number'
+    case 'warning':
+      return typeof value.message === 'string' && (value.update === undefined || typeof value.update === 'boolean')
+    case 'error':
+      return typeof value.message === 'string'
+    default:
+      return false
+  }
+}
+
+export function isShellMessage(value: unknown): value is ShellMessage {
+  return isPlainObject(value) && value.source === SHELL_SOURCE && value.type === 'set-data' && isPlainObject(value.data)
+}

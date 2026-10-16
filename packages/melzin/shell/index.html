@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Melzin shell</title>
+  <link rel="stylesheet" href="./shell.css">
+  <script type="module" src="./shell.ts"></script>
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <div class="brand" aria-label="Melzin shell">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">melzin</span>
+      <span class="brand-sub">shell</span>
+    </div>
+    <label class="control">
+      <span class="control-label">View</span>
+      <select id="view-picker" aria-label="View"></select>
+    </label>
+    <label class="control">
+      <span class="control-label">Device</span>
+      <select id="device-picker" aria-label="Device"></select>
+    </label>
+    <div class="control">
+      <span class="control-label">Zoom</span>
+      <div class="zoom">
+        <button type="button" id="zoom-out" class="icon-button" title="Zoom out" aria-label="Zoom out">−</button>
+        <select id="zoom-picker" aria-label="Zoom"></select>
+        <button type="button" id="zoom-in" class="icon-button" title="Zoom in" aria-label="Zoom in">+</button>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <span class="view-meta" id="view-meta"></span>
+    <button type="button" id="reload" class="button" title="Reload every frame from the files (drops edits)">Reload</button>
+  </header>
+  <div class="notices" id="notices" aria-live="polite"></div>
+  <main class="canvas" id="canvas"></main>
+</body>
+</html>
