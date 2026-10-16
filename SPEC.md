@@ -39,7 +39,8 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 
 - One source of truth: production runs the file the AI designs. Automatically stripping design-time
   content or compiling the file is fine; translating it by hand is not.
-- An explicit, typed, diffable data contract between the UI and the backend.
+- An explicit, typed, diffable contract between the UI and the backend, covering data in and events out
+  (D14).
 - Every UI state can be rendered, inspected and tested.
 - Precise reactive updates: a data change only touches the DOM that depends on it.
 - A format built from HTML and other widely known web patterns, so models can write, validate and check
@@ -91,6 +92,10 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   `m-else-if`, `m-else`, `m-for`, `m-on`, `m-bind`, `m-model` and `m-slot`, with Vue's modifiers
   (`.prevent`, `.enter`, `.trim`...). The `@`, `:` and `#` shorthands are left out (D10). What goes
   inside the directives is the next battle (§11).
+- **D14. The schema declares every event the view emits,** with typed payloads, like Vue's `emits`.
+  Interactions that only change `ui` state aren't events (§9.4).
+- **D15. Static analysis catches unhandled events.** Every declared event must have a handler in
+  whatever consumes the view, and the view can't emit an event the schema doesn't declare (§9.4).
 
 ## 5. Principles
 
@@ -131,9 +136,9 @@ standalone host) feeds `data` in and handles events. The view owns its `ui` stat
   changed only by the view's own interactions (#46).
 
 Both are visible to tools: snapshots can set them and the shell can inspect and edit them. Only `data`
-and events go into the backend contract. Event payloads are typed (`follow {userId}`,
-`sendMessage {text}`) and are often built from `ui` state. In the preview, an event can be linked to a
-snapshot ("click Follow → the *following* snapshot"), which is prototyping.
+and events go into the backend contract. Every event is declared in the schema (D14), and its payload is
+typed (`follow {userId}`, `sendMessage {text}`) and often built from `ui` state. In the preview, an
+event can be linked to a snapshot ("click Follow → the *following* snapshot"), which is prototyping.
 
 **P7. Code components are typed black boxes.** Where design can't express behavior (date picker, map,
 rich text editor), a hand-written component with declared props and events plugs in. The ceiling becomes
@@ -172,10 +177,11 @@ is laid out, is the next battle (§11).
 
 - `data` fields: the contract with the host
 - `ui` fields: internal state, with initial values (D5)
-- events, with payload types
+- events: everything the view can emit, with payload types (D14)
 
-Each field has a stable ID, name, type, optionality, default and constraints. List item types declare
-their key field. The contract exported for the backend covers `data` and events only.
+Each field has a stable ID, name, type, optionality, default and constraints; events have stable IDs
+too, so renames stay renames. List item types declare their key field. The contract exported for the
+backend covers `data` and events only.
 
 **Snapshots.** Named states (`data` + `ui`), stored inside the file (D8). A base snapshot holds the sample
 values; other snapshots override parts of it.
@@ -202,6 +208,8 @@ that cite a decision are settled; the rest are proposals.
   covers much of accessibility (#28).
 - **Directives:** Vue's built-in set under the `m-` prefix (D13). What goes inside them is limited to an
   analyzable subset (P1).
+- **Events:** declared like Vue's `emits`, with typed payloads (D14), and sent to the host as DOM events
+  (§7).
 - **Reuse:** `<template>` for repeated content, `<slot>` for content passed into components, custom
   elements for components.
 - **Forms:** native input types and validation attributes (`required`, `pattern`, `min`, `max`,
@@ -258,7 +266,7 @@ The browser app where humans review and explore the design (D1–D3), and where 
 **For the AI** (needed, since the AI is the main or only author: D1, P8)
 
 - Render any snapshot at any viewport size and get a screenshot.
-- Validate the file and its snapshots against the schema.
+- Validate the file and its snapshots against the schema, including the event checks (§9.4).
 - Show the schema diff between two versions of the file (§9.3).
 - Generate hostile states from the schema (P8).
 
@@ -277,7 +285,7 @@ The browser app where humans review and explore the design (D1–D3), and where 
 - Show the generated hostile states (P8) in the grid.
 - Click a schema field to highlight every element bound to it.
 
-## 9. Approach to the first three complications
+## 9. Approaches to key complications
 
 ### 9.1 Lists (#1)
 
@@ -330,6 +338,8 @@ Avro's reader rules classify each change:
 | Type changed | Breaking |
 | Rename (same ID) | Routine: rename it in the adapter |
 
+Events follow the same idea with the roles flipped (§9.4).
+
 The diff feeds:
 
 - generated types for the backend (TypeScript, Zod, Pydantic)
@@ -338,6 +348,48 @@ The diff feeds:
 
 To avoid version mismatches between a new UI and an old backend (#35), deploy the adapter with the UI
 (P3), and check data where it enters the UI: fall back to defaults and report anything missing.
+
+### 9.4 Events (#4)
+
+The schema declares every event the view can emit, with typed payloads (D14), like Vue's `emits`. Only
+what the view sends to its host counts as an event; interactions that only change `ui` state don't.
+
+Static analysis checks both ends (D15):
+
+- **View against schema:** every `emit` in a handler names a declared event and passes a payload of the
+  right type. Anything else is an error.
+- **Schema against view:** a declared event that nothing emits gets a warning.
+- **Schema against consumer:** every declared event needs a handler in whatever consumes the view: the
+  host for a screen, the parent view for a component (#12). A missing handler is an error. An event the
+  consumer deliberately ignores needs an explicit no-op, so the check stays exhaustive.
+
+How the host side gets checked (proposed):
+
+- Melzin generates typed handler definitions from the schema, TypeScript first and other backend
+  languages later, with one required handler per event. A missing handler then fails the host's own type
+  check.
+  - Embedded: the typed wrapper for the custom element requires a handler for every event.
+  - Standalone (D11): the backend-for-frontend registers each screen's handlers through the same
+    generated types.
+- Where types can't reach, a contract test sends each event with a sample payload and expects it to be
+  handled (#54).
+- In development, an event that fires with no handler logs a loud warning. In the shell, which has no
+  host, events show up in the event log (§8).
+
+When events change, the view writes and the host reads, so the rules run the other way from §9.3:
+
+| Event change | Host impact |
+|---|---|
+| New event | Breaking: the host needs a handler |
+| Event removed | Safe: the old handler becomes dead code (warning) |
+| Payload field added | Safe: handlers can ignore it |
+| Payload field removed | Breaking if a handler uses it |
+| Payload field type changed | Breaking |
+| Required → optional payload field | Breaking: handlers can no longer rely on it |
+| Optional → required payload field | Safe |
+| Enum value added | Breaking: handlers may not expect it |
+| Enum value removed | Safe |
+| Rename (same ID) | Routine: rename the handler |
 
 ## 10. Complications
 
@@ -349,9 +401,10 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
 2. ⚑ **Schema extraction:** getting a consistent schema out of the design as it changes. Approach in
    §9.2.
 3. **Schema change analysis:** when the design changes, know exactly how the schema changed and whether
-   data fetching has to change. Approach in §9.3.
+   data fetching has to change. Approach in §9.3 for data and §9.4 for events.
 4. ⚑ **Events:** the contract goes both ways. Typed events (`follow {userId}`,
-   `saveProfile {name, bio}`), and who handles them (P6).
+   `saveProfile {name, bio}`), and who handles them (P6). *Settled in part: events are declared in the
+   schema (D14) and unhandled ones are caught statically (D15). Approach in §9.4.*
 5. ⚑ **UI state vs. data:** "menu open", "selected tab", unsaved input. Can be snapshotted, but isn't
    part of the backend contract (P6). *Ownership settled by D5: the view owns `ui` state. Still open:
    where the line falls. Rule of thumb: if the host needs it to load or save data, it's `data` or an
@@ -490,6 +543,15 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
     AI's renders and embedded views all have to find and load it. The project needs a known layout, such
     as the theme at the project root.
 
+### Events
+
+54. **Hosts the checker can't see** (D15): the host is arbitrary code, such as a React app or a Python
+    backend. Generated types catch missing handlers only where the host uses them and has a type
+    checker; elsewhere the check falls back to contract tests and runtime warnings (§9.4).
+55. **Event outcomes:** most results come back as new data (P6), but some UIs need to know how a specific
+    event ended (saving, saved, failed, validation errors) to update `ui` state: disable a button, clear
+    a draft, show an error (#47, Q11).
+
 ## 11. Choosing battles
 
 The ⚑ items change what the file means, so getting one wrong means migrating every file later. The rest
@@ -504,7 +566,8 @@ translation, server rendering, form polish, routing and theming.
   from `m-bind:key` or from the schema (§9.1)
 - empty states: Vue has no `empty` slot, so it's `m-if`/`m-else` around the list, which needs `.length`
   in expressions
-- handler operations (#46) and which modifiers apply
+- handler operations (#46), what `emit` payloads can be built from (`data`, `ui`, the list item in scope,
+  the DOM event), and which modifiers apply
 - `m-model`: what it can write to (only `ui`, since `data` belongs to the host?) and its modifiers
 - `m-html`: sanitized rich text only (#24)
 - whether Vue's niche directives (`v-pre`, `v-once`, `v-memo`, `v-cloak`) carry over
@@ -540,6 +603,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Q8. Is the standalone host in §7 the right shape?** *Settled by D11: yes.*
 - **Q9. Where does the Tailwind theme live?** *Settled by D12: one theme per project.*
 - **Q10. Which directives, exactly?** *Settled by D13: Vue's set.*
+- **Q11. Can the view see how an event ended?** Lean: yes, through a built-in status per event (idle,
+  pending, done, failed) that the view can bind to, like React's `useActionState` or Remix's fetchers.
+  Anything richer comes back as data (P6, #55).
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -597,7 +663,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   tests written from the consumer's side. Reuse as-is for #3.
 - **Elm architecture:** the view is a pure function of the model; user interactions go out as messages.
 - **Vue and Alpine:** directive syntax for HTML templates that models already write fluently. Melzin uses
-  Vue's built-in set under its own prefix (D10, D13).
+  Vue's built-in set under its own prefix (D10, D13), and Vue's `emits` is the model for declared events
+  (D14).
 - **Web Components:** the standard way to ship a component that works in any framework, or none (§7).
 - **JSON Schema:** language-neutral schemas with validators in every language; the likely schema format
   (§6).
@@ -619,7 +686,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Data (`data`):** state that comes from the host. The backend contract.
 - **Internal state (`ui`):** state the view owns, declared in the file and changed by the view's own
   interactions. Visible to tools, not part of the backend contract.
-- **Event:** a typed message the view sends to its host.
+- **Event:** a typed message the view sends to its host, declared in the schema (D14).
+- **Handler:** code that consumes an event: in the host for a screen, in the parent view for a component.
+  Every declared event needs one (D15).
 - **Host:** whatever feeds a view its `data` and handles its events: the app embedding it, or Melzin's
   standalone host.
 - **Snapshot:** a named state (`data` + `ui`) that renders the UI in one particular situation.
@@ -642,3 +711,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   standalone host). Added complication #52, questions Q9–Q10 and the next battle on paper.
 - 2026-10-16: settled Q9–Q10 as D12–D13 (one Tailwind theme per project, Vue's directive set). Added
   complication #53 and the checklist for the next battle.
+- 2026-10-16: D14–D15 (events declared in the schema; unhandled events caught by static analysis). Added
+  §9.4, complications #54–#55 and Q11.
