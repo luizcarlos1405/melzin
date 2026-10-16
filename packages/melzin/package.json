@@ -2,6 +2,24 @@
   "name": "melzin",
   "version": "0.0.0",
   "private": true,
+  "description": "Design is implementation: HTML views that are both the design and the production UI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luizcarlos1405/melzin.git",
+    "directory": "packages/melzin"
+  },
+  "homepage": "https://github.com/luizcarlos1405/melzin#readme",
+  "bugs": "https://github.com/luizcarlos1405/melzin/issues",
+  "keywords": [
+    "ui",
+    "design",
+    "html",
+    "tailwindcss",
+    "ai",
+    "templates",
+    "reactive"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/runtime/index.ts",
