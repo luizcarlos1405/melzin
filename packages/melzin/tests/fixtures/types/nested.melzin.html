@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>T</title>
+  <script type="melzin/schema">
+{
+  "data": {
+    "type": "object",
+    "properties": {
+      "user": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "stats": {
+            "type": "object",
+            "properties": { "followers": { "type": "number" } },
+            "required": ["followers"]
+          }
+        },
+        "required": ["name"]
+      }
+    },
+    "required": ["user"]
+  },
+  "events": { "follow": {} }
+}
+  </script>
+  <script type="melzin/snapshots">
+{ "a": { "data": { "user": { "name": "Ada" } } } }
+  </script>
+</head>
+<body>
+  <p m-text="user.name"></p><p m-text="user.stats.followers"></p>
+  <button m-on:click="emit('follow')">Follow</button>
+</body>
+</html>

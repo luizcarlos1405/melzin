@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>T</title>
+  <script type="melzin/schema">
+    { "data": { "type": "object", "properties": { "user": { "type": "object", "description": "who", "properties": { "name": { "type": "string" }, "bio": { "type": "string", "default": "" } }, "required": ["name"] } }, "required": ["user"] }, "events": {} }
+  </script>
+  <script type="melzin/snapshots">
+    { "typical": { "data": { "user": { "name": "Ada", "bio": "Math" } } }, "empty bio": { "data": { "user": { "name": "Ada" } } } }
+  </script>
+</head>
+<body>
+  <h1 m-text="user.name"></h1>
+  <p m-text=" user.bio "></p>
+</body>
+</html>

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>T</title>
+  <script type="melzin/schema">
+    { "data": { "type": "object", "properties": { "count": { "type": "number" } }, "required": ["count"] }, "events": { "increment": {} } }
+  </script>
+</head>
+<body>
+  <p m-text="count"></p>
+  <button m-on:click="emit('increment')">Add</button>
+</body>
+</html>

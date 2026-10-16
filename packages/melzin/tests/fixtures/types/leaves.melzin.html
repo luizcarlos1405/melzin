@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>T</title>
+  <script type="melzin/schema">
+{
+  "data": {
+    "type": "object",
+    "properties": {
+      "label": { "type": "string", "description": "Shown above the value" },
+      "amount": { "type": "number" },
+      "active": { "type": "boolean", "default": false }
+    },
+    "required": ["label", "amount"]
+  },
+  "events": {
+    "save": { "description": "Saves the */ form" },
+    "cancel": {}
+  }
+}
+  </script>
+  <script type="melzin/snapshots">
+{ "a": { "data": { "label": "L", "amount": 1 } } }
+  </script>
+</head>
+<body>
+  <p m-text="label"></p><p m-text="amount"></p><p m-text="active"></p>
+  <button m-on:click="emit('save')">Save</button><button m-on:click="emit('cancel')">Cancel</button>
+</body>
+</html>
