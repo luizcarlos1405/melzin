@@ -75,6 +75,17 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   pattern wherever one fits (P9, §6).
 - **D7. Embeddable and standalone.** A Melzin view can be mounted inside an existing app, and a whole
   webapp front end can also be built with Melzin alone (§7).
+- **D8. Snapshots live inside the Melzin file,** at least to start. Production builds strip them, like
+  any design-time content (§3).
+- **D9. Styling uses Tailwind.** Plain CSS may be allowed later if a real need shows up; maybe it never
+  will.
+- **D10. Directives use an `m-` prefix** (for Melzin) with Vue-like shapes, such as `m-if` and `m-for`;
+  the exact set is Q10. The prefix keeps models from treating the file as full Vue or Alpine, where any
+  JavaScript is allowed, and avoids clashes with host pages that use them. (Tailwind's margin classes,
+  like `m-4`, also start with `m-`, but they're class values rather than attribute names, so nothing
+  clashes.)
+- **D11. Standalone mode uses the generic host in §7:** the URL picks a screen, the backend-for-frontend
+  serves its data, events go to the backend, and realtime screens get patches pushed by the server.
 
 ## 5. Principles
 
@@ -135,7 +146,8 @@ instead of inventing something. Models already know these, and so do developers 
 
 ## 6. Building blocks
 
-The conceptual parts of a Melzin file. The exact syntax isn't decided yet (Q6, Q7).
+The conceptual parts of a Melzin file. Directives use the `m-` prefix (D10) and styling uses Tailwind
+(D9); the rest of the syntax isn't decided yet (Q10).
 
 **View tree.** The UI, made of nodes that can carry bindings:
 
@@ -159,10 +171,11 @@ The conceptual parts of a Melzin file. The exact syntax isn't decided yet (Q6, Q
 Each field has a stable ID, name, type, optionality, default and constraints. List item types declare
 their key field. The contract exported for the backend covers `data` and events only.
 
-**Snapshots.** Named states (`data` + `ui`). A base snapshot holds the sample values; other snapshots
-override parts of it.
+**Snapshots.** Named states (`data` + `ui`), stored inside the file (D8). A base snapshot holds the sample
+values; other snapshots override parts of it.
 
-**Design-time content.** Notes, explorations and similar, kept apart from what runs in production (#37).
+**Design-time content.** Snapshots, notes, explorations and similar. They live in the file but are
+stripped from production (#37).
 
 **Types (draft):** string, number, boolean, enum, id, date, money, url, color, image (url, size, alt),
 rich text; list of T (with a key), object, optional, tagged union. Constraints such as max length and
@@ -174,25 +187,26 @@ list joining (like `Intl.ListFormat`); comparisons. Whether to go further is #6.
 **State operations (draft):** set, toggle, reset to the initial value, add or remove a list item, emit an
 event (#46).
 
-### Known patterns (proposed)
+### Known patterns
 
-Following D6 and P9, each building block maps to something models and developers already know:
+Following D6 and P9, each building block maps to something models and developers already know. Items
+that cite a decision are settled; the rest are proposals.
 
 - **Markup:** plain HTML with semantic elements (`button`, `form`, `label`, `ul`, headings), which also
   covers much of accessibility (#28).
-- **Bindings and control flow:** Vue/Alpine-style directives (text, attributes, show/if, a keyed for on
-  `<template>`, model for two-way input binding, event handlers), limited to an analyzable subset (P1,
-  Q7).
+- **Bindings and control flow:** Vue-like directives under the `m-` prefix (D10): text, attributes,
+  show/if, a keyed for on `<template>`, model for two-way input binding, event handlers. Limited to an
+  analyzable subset (P1); the exact set is Q10.
 - **Reuse:** `<template>` for repeated content, `<slot>` for content passed into components, custom
   elements for components.
 - **Forms:** native input types and validation attributes (`required`, `pattern`, `min`, `max`,
   `maxlength`, `type="email"`) and the browser's built-in constraint validation (#20).
 - **Formatting:** the browser's `Intl` APIs (dates, relative times, numbers, plurals, lists), exposed as
   formatters (#6).
-- **Styling:** CSS with custom properties for design tokens, or Tailwind (Q6).
+- **Styling:** Tailwind (D9), with its theme holding the design tokens (Q9).
 - **Schema:** JSON Schema. Every language can validate it, and it already has `default`, `examples`,
   `enum`, `maxLength` and required fields; a custom keyword adds stable field IDs (P2).
-- **Snapshots:** JSON documents that validate against the schema.
+- **Snapshots:** JSON documents inside the Melzin file (D8) that validate against the schema.
 - **Embedding:** Web Components: data in as a property, events out as DOM events (§7).
 - **Partial updates:** JSON Patch, with a caveat: it addresses list items by index, which breaks when
   lists change concurrently (#16).
@@ -200,13 +214,12 @@ Following D6 and P9, each building block maps to something models and developers
 ## 7. Embedding and standalone
 
 Melzin views must work inside existing apps and also make up a whole webapp front end on their own (D7).
-Proposed, not decided:
 
-**Embedded.** Each Melzin view is a custom element. The host app sets `data` as a property (or sends
-partial updates, #16) and listens for the view's events as DOM events. That works the same in React,
-Vue, Svelte or plain HTML, with no per-framework adapter.
+**Embedded** (proposed). Each Melzin view is a custom element. The host app sets `data` as a property (or
+sends partial updates, #16) and listens for the view's events as DOM events. That works the same in
+React, Vue, Svelte or plain HTML, with no per-framework adapter.
 
-**Standalone.** A small generic host does a host app's job (#51):
+**Standalone** (D11). A small generic host does a host app's job (#51):
 
 - the URL picks a screen (#31)
 - the host loads that screen's `data` from the backend-for-frontend (P3)
@@ -340,7 +353,8 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
    the surface. Template languages historically fail here by growing into bad programming languages.
 7. ⚑ **Sample vs. default vs. placeholder** (P4).
 8. ⚑ **Conditionals and variants:** show/hide, styles driven by a boolean or enum, position-based
-   variants in lists.
+   variants in lists. With Tailwind (D9), a variant is either a literal class list per value or a
+   `data-*` attribute styled with `data-[…]:` variants; class names are never built from strings (#52).
 9. ⚑ **Optional fields:** each one doubles the number of states and needs a designed fallback.
 10. ⚑ **Values with one of several shapes:** loading/error/ready, mixed feed items, different block
     types.
@@ -388,6 +402,7 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
 29. **Translation:** static text becomes data (message catalogs), plural rules, longer text in other
     languages, right-to-left layouts.
 30. **Theming and design tokens:** dark mode, brand tokens, and where tokens end and data begins.
+    Tailwind's theme holds the tokens and `dark:` handles dark mode (D9); where the theme lives is Q9.
 31. **Routing and multiple screens:** syncing URL and state, a shared app shell, navigation events, deep
     links to specific UI states. Needed for standalone mode (D7, §7).
 
@@ -403,15 +418,18 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
 35. **Version mismatch at deploy:** the new UI expects a field the deployed backend doesn't send yet (P3,
     §9.3).
 36. **Adapter and contract tests:** generated types, contract tests, an adapter the AI keeps up to date.
-37. ⚑ **File format:** HTML-based (D6), plain text, easy to diff and merge, with what runs in production
-    kept separate from design-time content (notes, explorations, snapshots). See Q5.
-38. **LLMs and the format:** a brand-new format is unknown to models. A Vue/Alpine-like one (D6) is
-    familiar but tempts them to write arbitrary JavaScript, which P1 forbids, so the validator must
-    explain what's allowed (Q7).
+37. ⚑ **File format:** HTML-based (D6), plain text, easy to diff and merge. Snapshots live inside the
+    file (D8), so design-time content must be easy to strip from production builds, and the file grows
+    with every snapshot.
+38. **LLMs and the format:** a brand-new format is unknown to models. A Vue-like one (D6, D10) is
+    familiar but tempts them to write arbitrary JavaScript, which P1 forbids, or to slip back into
+    `v-if`, `x-for` and `@click`. The validator must explain what's allowed and suggest the `m-`
+    equivalent.
 39. **Gradual adoption:** mounting a Melzin view inside an existing React/Vue app, and a way to export
-    out. *Settled by D7: both embedded and standalone; proposed approach in §7. Open details: Shadow DOM
-    isolates styles both ways (safe, but awkward for sharing fonts and tokens with the host), and the
-    attribute syntax must not collide with a host page that uses Vue or Alpine (Q7).*
+    out. *Settled by D7: both embedded and standalone; approach in §7. The `m-` prefix (D10) avoids
+    clashing with host pages that use Vue or Alpine. Still open: Shadow DOM isolates styles both ways,
+    which is safe but awkward for sharing fonts and tokens with the host, and each view's Tailwind CSS
+    has to be available inside its shadow root (#52).*
 40. **The editor itself:** a visual editor good enough for humans is a huge build. *Deferred by D1: the
     preview shell (§8) replaces it.*
 
@@ -448,7 +466,14 @@ To avoid version mismatches between a new UI and an old backend (#35), deploy th
 50. **Reviewing AI changes:** if humans never read the file (D1), they review by looking: before/after
     renders of every snapshot, plus the schema diff (§9.3).
 51. **Standalone host** (D7): building only with Melzin means something has to do a host app's job:
-    routing (#31), loading data, sending events, realtime updates. Proposal in §7.
+    routing (#31), loading data, sending events, realtime updates. *Shape settled by D11 (§7).*
+
+### Styling
+
+52. **Generating Tailwind CSS** (D9): production needs CSS for exactly the classes the file uses, and
+    the shell needs it live as the AI edits. A generator running in the browser can serve the shell
+    while production precompiles, as long as both produce the same CSS (P5). Class names must appear
+    literally in the file, never built from strings, which also fits P1.
 
 ## 11. Choosing battles
 
@@ -456,15 +481,19 @@ The ⚑ items change what the file means, so getting one wrong means migrating e
 can be added without breaking anything. Settle the ⚑ items on paper first; put off animations,
 translation, server rendering, form polish, routing and theming.
 
+**Next on paper:** the language inside `m-` attributes: which directives exist (Q10), what a binding can
+express (#6) and which state operations handlers can use (#46). It's ⚑ and gates the first prototype.
+
 **First build battle**, when it's time: a small prototype of the core.
 
-- One hand-written profile page with text, an image attribute, an optional field with a fallback, a list
-  with keys and an empty state, an enum variant, a tab switch held in internal state, and one event.
+- One hand-written profile page in HTML with `m-` directives and Tailwind classes, snapshots included:
+  text, an image attribute, an optional field with a fallback, a list with keys and an empty state, an
+  enum variant, a tab switch held in internal state, and one event.
 - A tiny runtime that renders it, packaged as a custom element so embedding (D7) is tested from day one.
 - A minimal shell: about six snapshots in a grid, zoom, and a state inspector per render.
 - TypeScript types generated from the schema.
 
-That tests #1, #2, #4, #7–#9, #13 and #46, and the state inspector exercises reactive updates.
+That tests #1, #2, #4, #7–#9, #13, #46 and #52, and the state inspector exercises reactive updates.
 
 **Second battle:** #3, schema diffs plus the compatibility rules.
 
@@ -477,18 +506,17 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Q2. Does the view hold any state of its own?** *Settled by D5: yes, its `ui` state.*
 - **Q3. What shape is the file?** *Settled by D6: HTML and known patterns.*
 - **Q4. Standalone or embeddable?** *Settled by D7: both.*
-- **Q5. Where do snapshots live?** In the Melzin file itself (one artifact; the shell reloads one file)
-  or in files next to it (smaller production file, fewer merge conflicts, like Storybook stories)? Lean:
-  the same file to start (#37).
-- **Q6. Plain CSS or Tailwind?** Plain CSS with custom properties needs no build step and is the most
-  standard. Tailwind is what models write most fluently, keeps styles on the element they affect (so AI
-  edits stay local), and its variants (`hover:`, `md:`, `dark:`, `data-[…]:`) line up with #8, #27 and
-  #30. Production would need a build step, which is allowed (§3). Lean: Tailwind.
-- **Q7. Exact Vue/Alpine directive names, or Vue-like shapes under a Melzin prefix?** Exact names would
-  make models even more fluent, but they'd tempt models to write arbitrary JavaScript (#38) and collide
-  with a host page that uses Vue or Alpine (D7). Lean: a Melzin prefix.
-- **Q8. Is the standalone host in §7 the right shape?** Lean: yes. It keeps business logic in the backend
-  and makes realtime a matter of pushing patches.
+- **Q5. Where do snapshots live?** *Settled by D8: inside the file, to start.*
+- **Q6. Plain CSS or Tailwind?** *Settled by D9: Tailwind.*
+- **Q7. Exact Vue/Alpine directive names, or a Melzin prefix?** *Settled by D10: `m-`.*
+- **Q8. Is the standalone host in §7 the right shape?** *Settled by D11: yes.*
+- **Q9. Where does the Tailwind theme live?** In each Melzin file, so the file is self-contained, or in
+  one project-level theme every screen shares? Lean: project-level, since tokens are brand-wide and
+  every screen should agree.
+- **Q10. Which directives, exactly?** Lean: mirror Vue's set under the prefix (`m-text`, `m-if` and
+  `m-else`, `m-show`, `m-for` with `m-key`, `m-model`, `m-on:click`, `m-bind:href`), without Vue's `@`
+  and `:` shorthands. Shorthands would bring back the clash with Vue and Alpine that the prefix avoids
+  (D10, #38).
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -506,9 +534,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 
 ## 14. Risks
 
-- **LLMs don't know the format.** Models know HTML and React deeply and Melzin not at all. D6 keeps the
-  format close to what they know, and the AI gets fast validate-and-render feedback (§8). The flip side
-  is #38.
+- **LLMs don't know the format.** Models know HTML and React deeply and Melzin not at all. D6, D9 and D10
+  keep the format close to what they know, and the AI gets fast validate-and-render feedback (§8). The
+  flip side is #38.
 - **There's a ceiling.** Anything that isn't a pure function of state needs code. Make that boundary
   explicit and typed (P7) instead of pretending it isn't there. This behavior boundary (events, UI
   state, forms, complex widgets) is likely the hardest part of the project, and it's where existing
@@ -546,18 +574,22 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   tests written from the consumer's side. Reuse as-is for #3.
 - **Elm architecture:** the view is a pure function of the model; user interactions go out as messages.
 - **Vue and Alpine:** directive syntax for HTML templates that models already write fluently; the
-  starting point for Melzin's bindings (D6, Q7).
+  starting point for Melzin's bindings (D6, D10).
 - **Web Components:** the standard way to ship a component that works in any framework, or none (§7).
 - **JSON Schema:** language-neutral schemas with validators in every language; the likely schema format
   (§6).
 - **Phoenix LiveView and Hotwire:** apps where the server drives the UI over a live connection. The
   standalone host idea is similar but sends data instead of HTML (§7).
+- **Tailwind CSS:** utility classes that models write fluently, with variants for state, breakpoints and
+  dark mode; Melzin's styling (D9).
 
 ## 16. Glossary
 
 - **Melzin file:** the artifact: view tree, schema and snapshots.
 - **Binding:** a declared link from part of a node (text, attribute, visibility, style, list) to a data
   path, plus operations.
+- **Directive:** an `m-` attribute that binds part of an element to data or state, or handles an event
+  (D10).
 - **Field:** a schema entry: stable ID, name, type, optionality, default, constraints.
 - **Schema:** the declared `data` fields, `ui` fields and events. Its `data` fields and events form the
   contract with the backend.
@@ -583,3 +615,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   internal state, HTML and known patterns, embeddable and standalone). Added P9, the known-patterns and
   embedding/standalone proposals (§6, §7), the AI's tools in the shell, complications #46–#51 (#20 is now
   ⚑) and questions Q6–Q8.
+- 2026-10-16: settled Q5–Q8 as D8–D11 (snapshots inside the file, Tailwind, the `m-` prefix, the
+  standalone host). Added complication #52, questions Q9–Q10 and the next battle on paper.
