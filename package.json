@@ -1,0 +1,14 @@
+{
+  "name": "melzin-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "sample"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun run --filter '*' typecheck",
+    "check": "bun run --cwd packages/melzin check && bun run --cwd sample check"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "melzin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/runtime/index.ts",
+    "./core": "./src/core/index.ts",
+    "./tools": "./src/cli/tools.ts"
+  },
+  "bin": {
+    "melzin": "./src/cli/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun src/cli/index.ts check",
+    "shell": "bun src/cli/index.ts shell",
+    "example:counter": "bun examples/counter/serve.ts"
+  },
+  "dependencies": {
+    "@tailwindcss/node": "^4.3.3",
+    "@tailwindcss/oxide": "^4.3.3",
+    "parse5": "^8.0.1",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^21.0.3",
+    "@types/bun": "^1.4.3",
+    "happy-dom": "^21.0.3",
+    "typescript": "^7.0.2"
+  }
+}
