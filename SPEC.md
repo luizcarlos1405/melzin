@@ -2,7 +2,8 @@
 
 > Design is implementation.
 
-**Status:** draft from the first design discussions (2026-10-16). Nothing is implemented yet.
+**Status:** design record, started 2026-10-16. The proof of concept described in [POC.md](POC.md) is
+built; everything beyond it is still design.
 
 Every numbered item keeps its number: decisions (D1, D2, ...), principles (P1, ...), complications
 (#1, ...) and open questions (Q1, ...). New items are appended; settled ones stay in place with a note.
