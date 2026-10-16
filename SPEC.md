@@ -575,6 +575,10 @@ translation, server rendering, form polish, routing and theming.
 **After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
 (#37).
 
+**Step zero: [POC.md](POC.md).** An even smaller first version: static pages, text bindings and click
+events, with the shell, the checker and a production page. It only needs paths and `emit('name')`, so it
+doesn't wait for the language battle above.
+
 **First build battle**, when it's time: a small prototype of the core.
 
 - One hand-written profile page in HTML with `m-` directives and Tailwind classes, snapshots included:
@@ -713,3 +717,4 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   complication #53 and the checklist for the next battle.
 - 2026-10-16: D14–D15 (events declared in the schema; unhandled events caught by static analysis). Added
   §9.4, complications #54–#55 and Q11.
+- 2026-10-16: added POC.md as step zero before the first build battle (§11).
