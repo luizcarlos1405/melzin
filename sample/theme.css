@@ -1,0 +1,33 @@
+/* Project-wide theme for the poll app (D12). `buildCss` imports Tailwind; this file only adds theme
+   tokens and a little base CSS, and must not import tailwindcss itself. The shell's frames and the
+   production page both load it, so they look the same (P5). */
+
+@theme {
+  /* A warm tomato scale for the brand: bg-brand-600, text-brand-700 and so on. */
+  --color-brand-50: oklch(0.975 0.016 45);
+  --color-brand-100: oklch(0.948 0.038 45);
+  --color-brand-200: oklch(0.898 0.078 43);
+  --color-brand-300: oklch(0.832 0.122 41);
+  --color-brand-400: oklch(0.746 0.165 38);
+  --color-brand-500: oklch(0.677 0.189 36);
+  --color-brand-600: oklch(0.606 0.196 33);
+  --color-brand-700: oklch(0.52 0.175 32);
+  --color-brand-800: oklch(0.443 0.145 32);
+  --color-brand-900: oklch(0.384 0.118 33);
+  --color-brand-950: oklch(0.262 0.08 33);
+
+  /* Page background and default text colour. */
+  --color-canvas: oklch(0.975 0.008 70);
+  --color-ink: oklch(0.216 0.006 56);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

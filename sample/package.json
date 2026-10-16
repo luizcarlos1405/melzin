@@ -1,0 +1,21 @@
+{
+  "name": "melzin-sample-poll",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun server.ts",
+    "start": "NODE_ENV=production bun server.ts",
+    "check": "melzin check",
+    "types": "melzin types views/poll.melzin.html",
+    "shell": "melzin shell",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "melzin": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "typescript": "^7.0.2"
+  }
+}
