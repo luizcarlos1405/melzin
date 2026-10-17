@@ -5,12 +5,12 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadViewFile } from '../src/cli/check.ts'
-import { generateTypes } from '../src/cli/types.ts'
+import { loadViewFile } from '../src/check.ts'
+import { generateTypes } from '../src/types.ts'
 
 const root = join(import.meta.dir, '..')
 const tsc = join(root, 'node_modules/.bin/tsc')
-const runtime = join(root, 'src/runtime/index.ts')
+const runtime = join(root, '../melzin/src/runtime/index.ts')
 const fixtures = join(import.meta.dir, 'fixtures/types')
 let dir = ''
 

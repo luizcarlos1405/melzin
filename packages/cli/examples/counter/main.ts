@@ -2,7 +2,7 @@
 // the shell previews. The types come from `melzin types views/counter.mel.html`, so a missing or
 // misspelled handler fails `tsc`.
 
-import { mount } from '../../src/runtime/mount.ts'
+import { mount } from 'melzin'
 import type { Data, Handlers } from '../../views/counter.types.ts'
 
 await linkStylesheet('/styles.css')

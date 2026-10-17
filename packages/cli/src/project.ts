@@ -2,7 +2,7 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
-import { VIEW_FILE_SUFFIX } from '../core/constants.ts'
+import { VIEW_FILE_SUFFIX } from 'melzin/core'
 
 export const DEFAULT_VIEWS_DIR = 'views'
 export const DEFAULT_THEME_FILE = 'theme.css'

@@ -4,8 +4,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createShellServer, listViewEntries, resolveViewFile } from '../src/cli/shell.ts'
-import { resolveProject } from '../src/cli/project.ts'
+import { createShellServer, listViewEntries, resolveViewFile } from '../src/shell.ts'
+import { resolveProject } from '../src/project.ts'
 
 const COUNTER = `<!doctype html>
 <html lang="en">

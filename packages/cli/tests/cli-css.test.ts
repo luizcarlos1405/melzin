@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { buildCss, entryCss } from '../src/cli/css.ts'
+import { buildCss, entryCss } from '../src/css.ts'
 
-const cli = join(import.meta.dir, '../src/cli/index.ts')
+const cli = join(import.meta.dir, '../src/index.ts')
 let dir = ''
 
 beforeAll(() => {

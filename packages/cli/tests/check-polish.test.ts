@@ -4,8 +4,8 @@ import { afterAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { checkFiles, checkSource, loadViewSource } from '../src/cli/check.ts'
-import { generateTypes } from '../src/cli/typegen.ts'
+import { checkFiles, checkSource, loadViewSource } from '../src/check.ts'
+import { generateTypes } from '../src/typegen.ts'
 
 const VIEW = `<!doctype html>
 <html>

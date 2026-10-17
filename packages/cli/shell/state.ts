@@ -1,7 +1,7 @@
 // Pure helpers for the shell UI: devices, zoom, URL state and small formatters. No DOM access here,
 // so tests can import this file without a browser environment.
 
-import { VIEW_FILE_SUFFIX, isPlainObject } from '../src/core/index.ts'
+import { VIEW_FILE_SUFFIX, isPlainObject } from 'melzin/core'
 
 export type Device = { width: number; height: number }
 export type DevicePreset = Device & { id: string; label: string }

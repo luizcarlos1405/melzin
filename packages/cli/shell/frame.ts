@@ -3,8 +3,8 @@
 // handler for every declared event, and reports events and warnings to the shell. The shell sends
 // new data with a "set-data" message, applied with `view.update`.
 
-import { VIEW_FILE_SUFFIX } from '../src/core/index.ts'
-import { DATA_WARNING_PREFIX, type MelzinView, mountSource, parseViewHtml } from '../src/runtime/index.ts'
+import { VIEW_FILE_SUFFIX } from 'melzin/core'
+import { DATA_WARNING_PREFIX, type MelzinView, mountSource, parseViewHtml } from 'melzin'
 import { type FrameMessageBody, frameMessage, isShellMessage } from './protocol.ts'
 import { viewFileName, viewFileUrl } from './state.ts'
 

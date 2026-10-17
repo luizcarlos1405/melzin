@@ -2,7 +2,7 @@
 // a stale types file).
 
 import { basename, dirname, join } from 'node:path'
-import { type MelzinSchema, type ObjectSchema, VIEW_FILE_SUFFIX } from '../core/index.ts'
+import { type MelzinSchema, type ObjectSchema, VIEW_FILE_SUFFIX } from 'melzin/core'
 
 const EMPTY = 'Record<string, never>'
 

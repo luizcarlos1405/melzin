@@ -1,7 +1,7 @@
 // The checker's JSON parser: same values as JSON.parse, plus positions for paths and errors.
 
 import { describe, expect, test } from 'bun:test'
-import { parseJsonWithLocations, pathAncestors } from '../src/cli/check.ts'
+import { parseJsonWithLocations, pathAncestors } from '../src/check.ts'
 
 describe('values match JSON.parse', () => {
   const inputs = [

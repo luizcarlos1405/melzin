@@ -2,8 +2,8 @@
 
 import { expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { loadViewFile, loadViewSource } from '../src/cli/check.ts'
-import * as tools from '../src/cli/tools.ts'
+import { loadViewFile, loadViewSource } from '../src/check.ts'
+import * as tools from '../src/tools.ts'
 
 const fixtures = join(import.meta.dir, 'fixtures/check')
 
@@ -58,7 +58,7 @@ test('a missing file rejects', async () => {
   await expect(loadViewFile(join(fixtures, 'nope.mel.html'))).rejects.toThrow()
 })
 
-test('melzin/tools exports the checker API', () => {
+test('@melzin/cli/tools exports the checker API', () => {
   for (const name of ['checkFiles', 'checkSource', 'loadViewFile', 'loadViewSource', 'formatDiagnostic', 'formatSummary', 'generateTypes', 'typesPathFor', 'buildCss', 'resolveProject']) {
     expect(typeof (tools as Record<string, unknown>)[name]).toBe('function')
   }

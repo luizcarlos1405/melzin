@@ -18,7 +18,7 @@ data it shows and the events it sends, and sample states. The same file is the d
 every state and the front end you ship. Nothing gets handed off or translated between the two.
 
 > **Early proof of concept.** The basics work end to end and are tested, but the format has only two
-> directives so far, nothing is on npm yet, and everything can still change. Ideas, questions and
+> directives so far, the npm packages are early placeholders, and everything can still change. Ideas, questions and
 > critique are very welcome in [issues](https://github.com/luizcarlos1405/melzin/issues).
 
 ## Why
@@ -97,13 +97,20 @@ Rendering happens in the browser for now; server-side rendering is on the roadma
 
 ## Try it
 
-You need [Bun](https://bun.sh) 1.4 or newer. Melzin isn't on npm yet, so you run it from this repository.
+You need [Bun](https://bun.sh) 1.4 or newer. To use Melzin in your own project:
+
+```bash
+bun add melzin           # the runtime your app mounts views with
+bun add -d @melzin/cli   # the `melzin` command: check, types, shell and css
+```
+
+To run the sample and the tests, clone this repository.
 
 ```bash
 git clone https://github.com/luizcarlos1405/melzin.git
 cd melzin
 bun install        # installs every workspace
-bun test           # runs every test
+bun run test       # builds the runtime, then runs every test
 ```
 
 Then try the sample poll app, a separate app that uses Melzin as a package and has a small Bun backend:
@@ -120,8 +127,8 @@ More commands:
 |---|---|---|
 | root | `bun run typecheck` | type-checks every package |
 | root | `bun run check` | checks every view in the package and the sample |
-| `packages/melzin` | `bun run shell` | the preview shell for the example views |
-| `packages/melzin` | `bun run example:counter` | the counter's production page, on http://localhost:3001 |
+| `packages/cli` | `bun run shell` | the preview shell for the example views |
+| `packages/cli` | `bun run example:counter` | the counter's production page, on http://localhost:3001 |
 | `sample` | `bun run types` | regenerates `views/poll.types.ts` |
 
 The CLI has four commands: `check`, `types`, `shell` and `css`. Run `bunx melzin --help` in `sample/` to
@@ -130,7 +137,8 @@ see their usage.
 ## What's in the repository
 
 ```
-packages/melzin/      the framework: runtime, checker, type generator, CSS builder, preview shell
+packages/melzin/      `melzin`: the runtime (mount, update, destroy) and the shared core
+packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, preview shell
   views/              example views (hello, profile card, counter)
   examples/counter/   a production page that mounts the counter
 sample/               a poll app that uses Melzin, with a small Bun backend
@@ -190,13 +198,14 @@ built.
 - [ ] Checks for unknown Tailwind classes
 
 **Distribution.**
-- [ ] Publish to npm: a dependency-free `melzin` runtime and a separate CLI package
+- [x] Publish to npm: a dependency-free `melzin` runtime and a separate `@melzin/cli` package
+- [ ] Compile the CLI so it also runs on Node, and publish with provenance from CI
 
 ## Contributing
 
 Melzin is at the stage where design discussion is worth more than code. Issues about the idea, the format
 or the numbered problems in SPEC.md are the most useful contributions right now. If you send a pull
-request, run `bun test`, `bun run typecheck` and `bun run check` first.
+request, run `bun run test`, `bun run typecheck` and `bun run check` first.
 
 ## The name, and Zin
 

@@ -5,7 +5,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const cli = join(import.meta.dir, '../src/cli/index.ts')
+const cli = join(import.meta.dir, '../src/index.ts')
 const fixtures = join(import.meta.dir, 'fixtures/check')
 let dir = ''
 

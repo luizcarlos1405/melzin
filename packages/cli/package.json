@@ -1,0 +1,41 @@
+{
+  "name": "@melzin/cli",
+  "version": "0.1.0",
+  "description": "Melzin command line: check views, generate types, build Tailwind CSS and run the preview shell (needs Bun)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luizcarlos1405/melzin.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/luizcarlos1405/melzin#readme",
+  "bugs": "https://github.com/luizcarlos1405/melzin/issues",
+  "keywords": ["melzin", "cli", "design", "html", "tailwindcss", "ai", "bun"],
+  "type": "module",
+  "engines": { "bun": ">=1.4" },
+  "exports": {
+    "./tools": "./src/tools.ts"
+  },
+  "bin": {
+    "melzin": "./src/index.ts"
+  },
+  "files": ["src", "shell", "theme.css"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "bun src/index.ts check",
+    "shell": "bun src/index.ts shell",
+    "example:counter": "bun examples/counter/serve.ts"
+  },
+  "dependencies": {
+    "@tailwindcss/node": "^4.3.3",
+    "@tailwindcss/oxide": "^4.3.3",
+    "melzin": "workspace:*",
+    "parse5": "^8.0.1",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.3",
+    "typescript": "^7.0.2"
+  }
+}

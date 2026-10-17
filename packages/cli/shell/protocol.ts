@@ -2,7 +2,7 @@
 // acts as the view's host: it mounts the view and reports everything to the shell, which plays the
 // mock host's UI (state editor, event log, warnings).
 
-import { isPlainObject } from '../src/core/index.ts'
+import { isPlainObject } from 'melzin/core'
 
 export const FRAME_SOURCE = 'melzin-frame'
 export const SHELL_SOURCE = 'melzin-shell'

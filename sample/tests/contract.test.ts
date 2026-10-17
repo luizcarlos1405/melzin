@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { validateData } from 'melzin/core'
-import { loadViewFile, type LoadedView } from 'melzin/tools'
+import { loadViewFile, type LoadedView } from '@melzin/cli/tools'
 import { QUESTION, emptyState, toViewModel, type PollState } from '../server.ts'
 
 const POLL_VIEW = join(import.meta.dir, '..', 'views', 'poll.mel.html')

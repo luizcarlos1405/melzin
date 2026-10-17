@@ -1,8 +1,7 @@
 {
   "name": "melzin",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Design is implementation: HTML views that are both the design and the production UI",
+  "version": "0.1.0",
+  "description": "Melzin runtime: mount HTML views that are both the design and the production UI",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -11,36 +10,19 @@
   },
   "homepage": "https://github.com/luizcarlos1405/melzin#readme",
   "bugs": "https://github.com/luizcarlos1405/melzin/issues",
-  "keywords": [
-    "ui",
-    "design",
-    "html",
-    "tailwindcss",
-    "ai",
-    "templates",
-    "reactive"
-  ],
+  "keywords": ["ui", "design", "html", "tailwindcss", "ai", "templates", "reactive"],
   "type": "module",
   "exports": {
-    ".": "./src/runtime/index.ts",
-    "./core": "./src/core/index.ts",
-    "./tools": "./src/cli/tools.ts"
+    ".": { "bun": "./src/runtime/index.ts", "types": "./dist/runtime/index.d.ts", "default": "./dist/runtime/index.js" },
+    "./core": { "bun": "./src/core/index.ts", "types": "./dist/core/index.d.ts", "default": "./dist/core/index.js" }
   },
-  "bin": {
-    "melzin": "./src/cli/index.ts"
-  },
+  "files": ["dist", "src"],
+  "sideEffects": false,
   "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun run build",
     "test": "bun test",
-    "typecheck": "tsc --noEmit",
-    "check": "bun src/cli/index.ts check",
-    "shell": "bun src/cli/index.ts shell",
-    "example:counter": "bun examples/counter/serve.ts"
-  },
-  "dependencies": {
-    "@tailwindcss/node": "^4.3.3",
-    "@tailwindcss/oxide": "^4.3.3",
-    "parse5": "^8.0.1",
-    "tailwindcss": "^4.3.3"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^21.0.3",

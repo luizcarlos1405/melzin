@@ -5,7 +5,7 @@
 > working button.
 
 **Status:** built, and M3's AI authoring trial passed (§10). The code is a Bun workspace: the Melzin
-package in `packages/melzin` and a sample app in `sample/` (§7). It follows [SPEC.md](SPEC.md);
+packages in `packages/melzin` and `packages/cli` and a sample app in `sample/` (§7). It follows [SPEC.md](SPEC.md);
 references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
 
@@ -41,7 +41,7 @@ one comes in.
 
 ## 3. The view file
 
-`packages/melzin/views/counter.mel.html`:
+`packages/cli/views/counter.mel.html`:
 
 ```html
 <!doctype html>
@@ -251,7 +251,7 @@ types. `Handlers` has one required method per event, so a host that misses one f
 
 ## 7. Production example
 
-`packages/melzin/examples/counter/` is a plain page that mounts the counter and counts clicks:
+`packages/cli/examples/counter/` is a plain page that mounts the counter and counts clicks:
 
 ```ts
 import { mount } from '../../src/runtime/mount.ts'
@@ -295,7 +295,7 @@ sushi.
 
 ## 8. Example views
 
-They live in `packages/melzin/views/`, with the theme in `packages/melzin/theme.css` (a honey-amber
+They live in `packages/cli/views/`, with the theme in `packages/cli/theme.css` (a honey-amber
 `brand` scale, D12).
 
 - `hello.mel.html`: a static page with no schema. Plain design has to work too.
@@ -321,7 +321,7 @@ Stack:
 - happy-dom for the runtime's DOM tests.
 - The `melzin` CLI: `check`, `types`, `shell` and `css`. Other projects import the runtime from
   `melzin`, the shared code from `melzin/core` and the Bun-side helpers (`buildCss`, `loadViewFile`,
-  `checkFiles`) from `melzin/tools`.
+  `checkFiles`) from `@melzin/cli/tools`.
 
 Layout:
 
@@ -329,10 +329,12 @@ Layout:
 package.json            workspace root: packages/*, sample
 tsconfig.base.json      shared strict compiler options
 docs/authoring.md       authoring guide for the AI
-packages/melzin/        the Melzin package
+packages/melzin/        `melzin`, the runtime package (compiled to dist/ on publish)
   src/core/             expression parser, schema and snapshot helpers, shared by runtime, checker and shell
   src/runtime/          mount, binding table, updates (browser)
-  src/cli/              the melzin CLI and tools.ts (Bun)
+  tests/
+packages/cli/           `@melzin/cli`, the CLI package (Bun)
+  src/                  the melzin CLI and tools.ts
   shell/                preview shell
   views/                example views and their generated *.types.ts
   theme.css             project-wide Tailwind theme for the example views (D12)
@@ -341,8 +343,8 @@ packages/melzin/        the Melzin package
 sample/                 the poll app (§7)
 ```
 
-Commands, from the root after `bun install`: `bun test`, `bun run typecheck` and `bun run check`. In
-`packages/melzin`: `bun run shell` and `bun run example:counter`.
+Commands, from the root after `bun install`: `bun run test` (builds the runtime first), `bun run typecheck`
+and `bun run check`. In `packages/cli`: `bun run shell` and `bun run example:counter`.
 
 ## 10. Milestones
 

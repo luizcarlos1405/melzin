@@ -5,10 +5,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { loadViewFile } from '../src/cli/check.ts'
-import { generateTypes, typesPathFor } from '../src/cli/types.ts'
+import { loadViewFile } from '../src/check.ts'
+import { generateTypes, typesPathFor } from '../src/types.ts'
 
-const cli = join(import.meta.dir, '../src/cli/index.ts')
+const cli = join(import.meta.dir, '../src/index.ts')
 const fixtures = join(import.meta.dir, 'fixtures/types')
 let dir = ''
 

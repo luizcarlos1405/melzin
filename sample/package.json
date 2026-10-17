@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@melzin/cli": "workspace:*",
     "melzin": "workspace:*"
   },
   "devDependencies": {

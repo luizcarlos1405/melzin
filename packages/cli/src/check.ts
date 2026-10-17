@@ -31,7 +31,7 @@ import {
   resolvePath,
   suggest,
   validateSchema,
-} from '../core/index.ts'
+} from 'melzin/core'
 import { UsageError, resolveProject } from './project.ts'
 import { generateTypes, typesPathFor } from './typegen.ts'
 

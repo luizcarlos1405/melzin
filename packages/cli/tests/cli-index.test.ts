@@ -2,10 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { COMMANDS, helpText } from '../src/cli/index.ts'
-import { resolveProject } from '../src/cli/project.ts'
+import { COMMANDS, helpText } from '../src/index.ts'
+import { resolveProject } from '../src/project.ts'
 
-const cli = join(import.meta.dir, '../src/cli/index.ts')
+const cli = join(import.meta.dir, '../src/index.ts')
 
 async function run(args: string[]) {
   const proc = Bun.spawn(['bun', cli, ...args], { stdout: 'pipe', stderr: 'pipe' })

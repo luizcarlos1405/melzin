@@ -1,7 +1,7 @@
 // Checker edge cases on inline sources: positions, schema-less views, invalid schemas, odd markup.
 
 import { describe, expect, test } from 'bun:test'
-import { type Diagnostic, checkSource } from '../src/cli/check.ts'
+import { type Diagnostic, checkSource } from '../src/check.ts'
 
 const SCHEMA = '{ "data": { "type": "object", "properties": { "count": { "type": "number" } }, "required": ["count"] }, "events": { "increment": {} } }'
 const SNAPSHOTS = '{ "zero": { "data": { "count": 0 } } }'

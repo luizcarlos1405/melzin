@@ -517,13 +517,16 @@ shows both.
 
 ## 11. Setting up a project
 
-A project that uses Melzin is a Bun project with `melzin` as a dependency. Inside this repository's
-workspace that's `"melzin": "workspace:*"` (as in `sample/`); elsewhere, add the package by path:
+A project that uses Melzin is a Bun project. `melzin` is the runtime your app mounts views with, and
+`@melzin/cli` provides the `melzin` command and the server-side helpers. Inside this repository's
+workspace that's `"melzin": "workspace:*"` and `"@melzin/cli": "workspace:*"` (as in `sample/`);
+elsewhere:
 
 ```
 mkdir my-app && cd my-app && mkdir views
 bun init -y
-bun add /path/to/melzin/packages/melzin
+bun add melzin
+bun add -d @melzin/cli
 bunx melzin check      # and types, shell, css as above
 ```
 
@@ -531,7 +534,7 @@ bunx melzin check      # and types, shell, css as above
 
 ### Type-checking the host
 
-Melzin ships TypeScript sources with `.ts` imports, not compiled `.d.ts` files, so `tsc` needs a
+`melzin` ships compiled JavaScript with type declarations. `@melzin/cli/tools` ships TypeScript sources with `.ts` imports, not `.d.ts` files, so for a server file that imports it, `tsc` needs a
 `tsconfig.json` that allows them (`skipLibCheck` doesn't cover sources). This is enough:
 
 ```json
@@ -558,18 +561,18 @@ data of the wrong shape, fails.
 Production needs three things from the host page's server:
 
 1. **The CSS.** `bunx melzin css -o public/app.css --minify` compiles Tailwind for every view with the
-   project's theme, or call `buildCss` from `melzin/tools` in the server. With a Bun HTML import, add
+   project's theme, or call `buildCss` from `@melzin/cli/tools` in the server. With a Bun HTML import, add
    the `<link rel="stylesheet">` from the host script, as `sample/client.ts` does: Bun's HTML bundler
    would try to resolve a static link to a server route at bundle time.
 2. **The view file, unchanged, at the URL given to `mount`**, such as `/views/order-status.mel.html`.
-   `resolveViewFile` from `melzin/tools` maps a request to a file in `views/` safely, and
+   `resolveViewFile` from `@melzin/cli/tools` maps a request to a file in `views/` safely, and
    `VIEW_FILE_HEADERS` holds the headers to send with it.
 3. **The host script, bundled**: a Bun HTML import in `Bun.serve`, or `bun build host.ts --outdir public`.
 
 A minimal Bun server:
 
 ```ts
-import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from 'melzin/tools'
+import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from '@melzin/cli/tools'
 import page from './index.html' // <div id="app"></div> and <script type="module" src="./host.ts">
 
 const project = resolveProject()

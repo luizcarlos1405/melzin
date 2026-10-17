@@ -1,7 +1,7 @@
 // The poll app's backend: it owns the votes, shapes them for the screen and serves the page, the view
 // files (unchanged, P5) and the CSS built from those same views.
 
-import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from 'melzin/tools'
+import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from '@melzin/cli/tools'
 import indexPage from './index.html'
 import type { Data } from './views/poll.types.ts'
 

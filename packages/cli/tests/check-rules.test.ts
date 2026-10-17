@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type Diagnostic, type Severity, checkFiles } from '../src/cli/check.ts'
+import { type Diagnostic, type Severity, checkFiles } from '../src/check.ts'
 
 const dir = join(import.meta.dir, 'fixtures/check')
 

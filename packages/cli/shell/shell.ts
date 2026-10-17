@@ -2,7 +2,7 @@
 // zoom, and plays the mock host's UI for each frame (state editor, event log, warnings). All state
 // worth sharing lives in the URL (see state.ts), so a refresh reloads everything from the files (D3).
 
-import { type Issue, type Snapshot, parseViewHtml } from '../src/runtime/index.ts'
+import { type Issue, type Snapshot, parseViewHtml } from 'melzin'
 import { type FrameMessage, isFrameMessage, setDataMessage } from './protocol.ts'
 import {
   DEVICE_MAX,

@@ -3,7 +3,7 @@
 // unchanged, and the CSS comes from the same buildCss the shell uses (P5).
 
 import { join } from 'node:path'
-import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from '../../src/cli/tools.ts'
+import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from '../../src/tools.ts'
 import page from './index.html'
 
 export const DEFAULT_PORT = 3001

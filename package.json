@@ -8,8 +8,9 @@
     "sample"
   ],
   "scripts": {
-    "test": "bun test",
+    "build": "bun run --cwd packages/melzin build",
+    "test": "bun run build && bun test",
     "typecheck": "bun run --filter '*' typecheck",
-    "check": "bun run --cwd packages/melzin check && bun run --cwd sample check"
+    "check": "bun run --cwd packages/cli check && bun run --cwd sample check"
   }
 }

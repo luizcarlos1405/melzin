@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { connect } from 'node:net'
 import { join } from 'node:path'
 import { validateData } from 'melzin/core'
-import { loadViewFile } from 'melzin/tools'
+import { loadViewFile } from '@melzin/cli/tools'
 import { createPollServer, toViewModel } from '../server.ts'
 
 let server: ReturnType<typeof createPollServer>
