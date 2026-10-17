@@ -4,9 +4,10 @@
 > shell previews it in several states, and the same file runs in production with real data and a
 > working button.
 
-**Status:** built, and M3's AI authoring trial passed (§10). The code is a Bun workspace: the Melzin
-packages in `packages/melzin` and `packages/cli` and an example app in `examples/poll/` (§7). It follows [SPEC.md](SPEC.md);
-references such as D9, P1 or #46 point there. The guide for authors is
+**Status:** built, and M3's AI authoring trial passed (§10). Since then, conditionals and a second
+example app have been added (§14). The code is a Bun workspace: the Melzin packages in
+`packages/melzin` and `packages/cli` and example apps in `examples/` (§7, §14). It follows
+[SPEC.md](SPEC.md); references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
 
 ## 1. What the POC must prove
@@ -107,8 +108,8 @@ Rules:
 | `m-text` | a path, such as `count` or `user.name` | sets the element's text to that value from `data` |
 | `m-on:click` | `emit('increment')` | sends the declared event to the host |
 
-That's the whole language for now. Values are parsed into a small syntax tree and never evaluated (P1,
-#24). Paths and event names are identifiers (`[A-Za-z_][A-Za-z0-9_]*`); paths join them with dots. The
+That was the whole language of the POC; conditions came after it (§14). Values are parsed into a small
+syntax tree and never evaluated (P1, #24). Paths and event names are identifiers (`[A-Za-z_][A-Za-z0-9_]*`); paths join them with dots. The
 event name is a string in single or double quotes. Vue's `$emit(...)` is an error with the hint
 "use emit('name') instead of Vue's $emit" (§13).
 
@@ -341,6 +342,7 @@ packages/cli/           `@melzin/cli`, the CLI package (Bun)
   examples/counter/     production page
   tests/
 examples/poll/          the poll app (§7); more examples go in examples/<name>/
+examples/profile/       the profile app (§14)
 ```
 
 Commands, from the root after `bun install`: `bun run test` (builds the runtime first), `bun run typecheck`
@@ -389,7 +391,7 @@ reuses the binding table, the shared parser and the host API.
 
 | Next | SPEC |
 |---|---|
-| `m-show`, `m-if` and `m-else` | #8, #9 |
+| `m-show`, `m-if` and `m-else`: *built, with `m-else-if` (§14)* | #8, #9 |
 | `m-bind`, including `m-bind:class` with literal classes | #8, #11, #52 |
 | `m-for` with keys and empty states | #1, §9.1 |
 | Internal `ui` state and state operations in handlers | D5, #46 |
@@ -438,3 +440,81 @@ The plan's open questions, settled before the build:
 - **A separate example app.** Besides the counter page, `examples/poll/` is an app of its own that uses Melzin as
   a workspace package and has a small backend. It shows the adapter (P3), typed events (D14, D15) and the
   same file in production (P5) from outside the package (§7).
+
+## 14. After the POC: conditionals
+
+The first row of §11, built on 2026-10-17 together with a second example app. It grows the POC's pieces
+instead of adding new ones: the shared parser gained `!`, the binding table gained two kinds of entries,
+and the runtime and the checker still share their rules through `src/core`.
+
+### Format
+
+| Directive | Value | Effect |
+|---|---|---|
+| `m-if` | a condition | the element is in the document only while the condition holds |
+| `m-else-if` | a condition | in a chain after an `m-if`: the first element whose condition holds shows |
+| `m-else` | none | in a chain: shows when no condition before it holds |
+| `m-show` | a condition | `display: none` while the condition doesn't hold |
+
+- A condition is a path, optionally negated with `!`: `condition := '!'? path`. It holds when its value
+  is truthy in JavaScript, so `false`, `""`, `0` and missing values don't hold; a missing value uses the
+  field's `default` first. Objects hold when present, which makes an optional object (`viewer`) a
+  natural condition.
+- A chain is an `m-if` element followed by `m-else-if` and `m-else` siblings, with only whitespace and
+  comments in between. An element has at most one of the three, and may also have `m-show`, `m-text`
+  and `m-on:click`.
+- No operators. Comparisons, `&&`, `||` and ternaries get one error that names the workaround, a boolean
+  the host computes; nested elements cover "and".
+
+### Runtime
+
+- The view is bound and rendered in a document fragment and attached when it's finished.
+- Each chain leaves a comment anchor (`<!--m-if-->`) where its first element was, and the element whose
+  condition holds sits right after it. The others are out of the document but stay bound, so they show
+  current data when they come back, and every element keeps its identity across switches.
+- `m-show` sets `style.display` to `none` and restores the element's own value, like Vue's `v-show`.
+- A condition the runtime can't use (a parse error, an unknown field) warns and counts as false. An
+  `m-else` with no chain to join is ignored, so it shows; an `m-else-if` with none works as an `m-if`.
+
+### Checker
+
+Errors: a condition that doesn't parse (operators get the hint above), an unknown field, a call, an
+`m-else` or `m-else-if` with no chain to join, a value on `m-else`, and more than one of `m-if`,
+`m-else-if` and `m-else` on an element. Warnings:
+
+- a condition on a required object, which always holds (or never, with `!`)
+- **no snapshot shows an element behind a condition** (P8). The checker evaluates every condition
+  against every snapshot with the runtime's own rules (`core/data.ts`) and names the condition that never
+  holds, or says that it only holds where an element around it is hidden. It waits until the snapshots
+  match the schema, and reports only the outermost element that never shows.
+
+"data field 'x' is never displayed" became "is never used", since conditions use fields too.
+
+### Profile example
+
+`examples/profile/` is a member profile with a follow button and a small Bun backend that owns who follows
+whom. The button is a four-way chain on the optional `viewer` object (sign in, this is you, following,
+follow or follow back), optional fields get designed fallbacks with `m-else`, and the badges use
+`m-show`. Its six snapshots cover every branch, and the hostile one found a design limit: nine-digit
+counts don't fit the stats row on a phone, so the adapter sends compact ones (`98.8M`). Besides contract
+and API tests, it has view tests that mount the real view file with the real runtime in happy-dom, fed by
+the adapter. It's the seed of the profile page in SPEC §11's first build battle.
+
+### Decisions
+
+Made for this step. The binding-language battle (SPEC §11) can still revisit them.
+
+- **A condition is a path with an optional `!`.** It's the smallest part of the language conditionals
+  need. Comparisons would bring literals and enum types with them, so they wait for the battle; until
+  then the host sends booleans, which also keeps the schema shaped for the screen (P3).
+- **JavaScript truthiness, as in Vue** (P9), applied after defaults. Numbers included:
+  `m-show="unread"` hides a zero count.
+- **A broken condition is false.** A typo in `m-if="isAdmin"` should hide the admin button, not show it
+  to everyone.
+- **Hidden branches stay bound.** Simpler than binding on demand, and showing one again is a single
+  insert. Images in a hidden branch still load; binding on demand can come later without changing the
+  format.
+- **`m-show` sets an inline `display`, not the `hidden` attribute.** On a host page without Tailwind's
+  preflight, a class such as `flex` would override `hidden`. Vue does the same.
+- **Snapshot coverage is a warning**, like the other P8 checks: a view in progress can have a branch
+  without a snapshot yet.

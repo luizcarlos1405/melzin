@@ -3,7 +3,7 @@
 > Design is implementation.
 
 **Status:** design record, started 2026-10-16. The proof of concept described in [POC.md](POC.md) is
-built; everything beyond it is still design.
+built, and so are conditionals (POC.md §14); everything beyond them is still design.
 
 Every numbered item keeps its number: decisions (D1, D2, ...), principles (P1, ...), complications
 (#1, ...) and open questions (Q1, ...). New items are appended; settled ones stay in place with a note.
@@ -740,6 +740,10 @@ translation, server rendering, form polish, routing and theming.
 - `m-html`: sanitized rich text only (#24)
 - whether Vue's niche directives (`v-pre`, `v-once`, `v-memo`, `v-cloak`) carry over
 
+Conditionals (`m-if`, `m-else-if`, `m-else`, `m-show`) were built ahead of this battle with a
+provisional subset: a condition is a path, optionally negated with `!`, tested for truthiness
+(POC.md §14). The battle can still change it.
+
 **After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
 (#37).
 
@@ -897,3 +901,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-16: added POC.md as step zero before the first build battle (§11).
 - 2026-10-16: D16–D19 (every view is a component; flat types, nested data; props are whole subtrees;
   encapsulated children). Added §9.5, complications #56–#59 and Q12.
+- 2026-10-17: conditionals built ahead of the language battle, with a provisional condition syntax, and
+  the profile example that uses them (POC.md §14).

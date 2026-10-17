@@ -12,12 +12,13 @@ const view = await mount(document.querySelector('#app')!, '/views/counter.mel.ht
 })
 ```
 
-`mount` fetches the view, strips anything unsafe, binds its `m-` directives once, and rewrites only the
-text that changed on `update`. Generated types make a missing handler or wrong data a compile error.
+`mount` fetches the view, strips anything unsafe, binds its `m-` directives once, and on `update` touches
+only what changed: text, and elements behind conditions. Generated types make a missing handler or wrong
+data a compile error.
 
 The `melzin` command (check, types, preview shell, CSS) is in [`@melzin/cli`](https://www.npmjs.com/package/@melzin/cli).
 The view format and the plan are in the [main repository](https://github.com/luizcarlos1405/melzin).
 
-> Early proof of concept: the format has two directives so far and can still change.
+> Early proof of concept: the format has only a few directives so far and can still change.
 
 MIT

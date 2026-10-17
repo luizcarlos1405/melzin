@@ -17,7 +17,7 @@ Melzin is a UI framework built for AI authors. A view is one HTML file: Tailwind
 data it shows and the events it sends, and sample states. The same file is the design you preview in
 every state and the front end you ship. Nothing gets handed off or translated between the two.
 
-> **Early proof of concept.** The basics work end to end and are tested, but the format has only two
+> **Early proof of concept.** The basics work end to end and are tested, but the format has only a few
 > directives so far, the npm packages are early placeholders, and everything can still change. Ideas, questions and
 > critique are very welcome in [issues](https://github.com/luizcarlos1405/melzin/issues).
 
@@ -91,7 +91,8 @@ The view never changes its own data. It emits `increment`, the host decides what
    screenshots, so an AI can review its own work.
 4. **Generate types** with `melzin types` and wire the host or backend to them.
 5. **Ship** the same file. In the browser, `mount` parses the view, strips anything unsafe, binds the `m-`
-   directives once, and from then on rewrites only the text whose value changed.
+   directives once, and from then on touches only what changed: the text whose value changed and the
+   elements whose condition flipped.
 
 Rendering happens in the browser for now; server-side rendering is on the roadmap.
 
@@ -121,6 +122,9 @@ bun run dev        # the app, on http://localhost:3000
 bun run shell      # the preview shell for its views, on http://127.0.0.1:4321
 ```
 
+`examples/profile` works the same way, on http://localhost:3002: a member profile whose follow button
+depends on who is looking.
+
 More commands:
 
 | Where | Command | What it does |
@@ -130,6 +134,7 @@ More commands:
 | `packages/cli` | `bun run shell` | the preview shell for the example views |
 | `packages/cli` | `bun run example:counter` | the counter's production page, on http://localhost:3001 |
 | `examples/poll` | `bun run types` | regenerates `views/poll.types.ts` |
+| `examples/profile` | `bun run dev` | the profile app, on http://localhost:3002 |
 
 The CLI has four commands: `check`, `types`, `shell` and `css`. Run `bunx melzin --help` in `examples/poll/` to
 see their usage.
@@ -143,6 +148,7 @@ packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, previ
   examples/counter/   a production page that mounts the counter
 examples/             apps that use Melzin as a package; each folder is its own workspace
   poll/               a poll with a small Bun backend, contract tests and API tests
+  profile/            a profile with a follow button driven by conditionals, and view tests
 docs/authoring.md     the view format and its rules, for whoever writes views
 SPEC.md               the design record: decisions, principles and a numbered list of hard problems
 POC.md                what the proof of concept builds, how, and what comes next
@@ -163,16 +169,23 @@ The proof of concept ([POC.md](POC.md)) is done:
 - [x] AI authoring trial: an agent given only the guide wrote a new view that passed the checker on its
   first draft
 
+Since then:
+
+- [x] Conditionals: `m-if`, `m-else-if`, `m-else` and `m-show`, with a checker that warns when no snapshot
+  shows an element behind a condition
+- [x] A second example app: a member profile whose follow button depends on who is looking, with view
+  tests that mount the real view in happy-dom
+
 ## Roadmap
 
 Roughly in order. [SPEC.md](SPEC.md) explains the reasoning, and POC.md §11 maps each step to the spec.
 
 **Next: the binding language, on paper.** What an expression can contain, list syntax and keys, internal
 state operations, event payloads and forms. It shapes the file format, so it gets designed before it gets
-built.
+built. Conditionals came first, with a provisional syntax: a path, optionally negated with `!`.
 
-**First real prototype: a profile page.**
-- [ ] `m-show`, `m-if` and `m-else`
+**First real prototype: a profile page**, growing from [examples/profile](examples/profile/).
+- [x] `m-show`, `m-if`, `m-else-if` and `m-else`
 - [ ] `m-bind` for attributes, including `m-bind:class` with literal Tailwind classes
 - [ ] `m-for` with keys and empty states
 - [ ] Internal UI state (open menus, selected tabs, drafts) and state operations in handlers
