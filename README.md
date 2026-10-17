@@ -1,12 +1,17 @@
-<img src="assets/icon.svg" width="64" height="64" alt="">
-
-# Melzin
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+    <img src="assets/logo-light.svg" alt="Melzin" height="72">
+  </picture>
+</h1>
 
 **Design is implementation.**
 
 [![CI](https://github.com/luizcarlos1405/melzin/actions/workflows/ci.yml/badge.svg)](https://github.com/luizcarlos1405/melzin/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Status: proof of concept](https://img.shields.io/badge/status-proof%20of%20concept-orange.svg)
+
+<img align="right" src="assets/mascot/zin-sticker.svg" width="120" alt="Zin, the Melzin bee, waving">
 
 Melzin is a UI framework built for AI authors. A view is one HTML file: Tailwind classes, a schema of the
 data it shows and the events it sends, and sample states. The same file is the design you preview in
@@ -132,6 +137,7 @@ sample/               a poll app that uses Melzin, with a small Bun backend
 docs/authoring.md     the view format and its rules, for whoever writes views
 SPEC.md               the design record: decisions, principles and a numbered list of hard problems
 POC.md                what the proof of concept builds, how, and what comes next
+assets/               the logo, the icon and Zin, the mascot
 ```
 
 ## Progress
@@ -191,6 +197,17 @@ built.
 Melzin is at the stage where design discussion is worth more than code. Issues about the idea, the format
 or the numbered problems in SPEC.md are the most useful contributions right now. If you send a pull
 request, run `bun test`, `bun run typecheck` and `bun run check` first.
+
+## The name, and Zin
+
+*Mel* is Portuguese for honey, and *melzin* is a cute, informal way to say it. The name also nods to
+*melzinho na chupeta*, "a little honey on the pacifier", a Brazilian saying for something that's a
+piece of cake. That's how building a UI should feel.
+
+<img src="assets/mascot/zin-building.svg" width="96" alt="Zin carrying a honeycomb cell with the Melzin logo">
+
+Zin is the mascot: a bee that builds the comb one cell at a time, the way AI agents build views. The
+logo, Zin's poses and the colors are in [assets/](assets/README.md).
 
 ## License
 
