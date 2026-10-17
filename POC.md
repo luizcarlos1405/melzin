@@ -5,7 +5,7 @@
 > working button.
 
 **Status:** built, and M3's AI authoring trial passed (§10). The code is a Bun workspace: the Melzin
-packages in `packages/melzin` and `packages/cli` and a sample app in `sample/` (§7). It follows [SPEC.md](SPEC.md);
+packages in `packages/melzin` and `packages/cli` and an example app in `examples/poll/` (§7). It follows [SPEC.md](SPEC.md);
 references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
 
@@ -32,7 +32,7 @@ It touches D1–D3, D6, D8–D10, D12–D15, P1 and P4–P6, each in its smalles
 - A runtime with `mount`, `update` and `destroy`.
 - A preview shell: snapshot grid, device sizes, zoom, and a state editor and event log per render.
 - A checker CLI, and TypeScript types for hosts.
-- Three example views, one production page, a sample app with a small backend, and an authoring guide
+- Three example views, one production page, an example app with a small backend, and an authoring guide
   for the AI.
 
 **Out:** everything else, including lists, conditionals, attribute bindings, internal state, event
@@ -274,7 +274,7 @@ const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/view
 
 ### Sample app
 
-`sample/` is a separate app, `melzin-sample-poll`, that depends on Melzin as a workspace package. It's
+`examples/poll/` is a separate app, `melzin-example-poll`, that depends on Melzin as a workspace package. It's
 a quick poll, "What should we eat at the next team meetup?", with three fixed options: pizza, tacos and
 sushi.
 
@@ -290,8 +290,8 @@ sushi.
   refreshes from the API every 3 seconds.
 - A contract test validates the adapter's output for several states against the schema read with
   `loadViewFile` (SPEC §9.3). API tests run against the server on a random port.
-- From `sample/`: `bun run dev` runs the app, `bun run shell` previews its views, `bun run check` checks
-  them. `sample/README.md` has the rest.
+- From `examples/poll/`: `bun run dev` runs the app, `bun run shell` previews its views, `bun run check` checks
+  them. `examples/poll/README.md` has the rest.
 
 ## 8. Example views
 
@@ -326,7 +326,7 @@ Stack:
 Layout:
 
 ```
-package.json            workspace root: packages/*, sample
+package.json            workspace root: packages/*, examples/*
 tsconfig.base.json      shared strict compiler options
 docs/authoring.md       authoring guide for the AI
 packages/melzin/        `melzin`, the runtime package (compiled to dist/ on publish)
@@ -340,7 +340,7 @@ packages/cli/           `@melzin/cli`, the CLI package (Bun)
   theme.css             project-wide Tailwind theme for the example views (D12)
   examples/counter/     production page
   tests/
-sample/                 the poll app (§7)
+examples/poll/          the poll app (§7); more examples go in examples/<name>/
 ```
 
 Commands, from the root after `bun install`: `bun run test` (builds the runtime first), `bun run typecheck`
@@ -434,6 +434,6 @@ The plan's open questions, settled before the build:
   instead of Vue's $emit". The binding language (SPEC §11) can still revisit this.
 - **Bun, not Vite and Node.** Bun runs the TypeScript, serves (HTML imports), bundles and tests, so one
   tool replaces Vite, Vitest and Node. `tsc` only type-checks. The cost is a less common setup (P9).
-- **A separate sample app.** Besides the counter page, `sample/` is an app of its own that uses Melzin as
+- **A separate example app.** Besides the counter page, `examples/poll/` is an app of its own that uses Melzin as
   a workspace package and has a small backend. It shows the adapter (P3), typed events (D14, D15) and the
   same file in production (P5) from outside the package (§7).

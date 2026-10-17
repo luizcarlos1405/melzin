@@ -104,7 +104,7 @@ bun add melzin           # the runtime your app mounts views with
 bun add -d @melzin/cli   # the `melzin` command: check, types, shell and css
 ```
 
-To run the sample and the tests, clone this repository.
+To run the examples and the tests, clone this repository.
 
 ```bash
 git clone https://github.com/luizcarlos1405/melzin.git
@@ -113,10 +113,10 @@ bun install        # installs every workspace
 bun run test       # builds the runtime, then runs every test
 ```
 
-Then try the sample poll app, a separate app that uses Melzin as a package and has a small Bun backend:
+Then try the poll example, a separate app that uses Melzin as a package and has a small Bun backend:
 
 ```bash
-cd sample
+cd examples/poll
 bun run dev        # the app, on http://localhost:3000
 bun run shell      # the preview shell for its views, on http://127.0.0.1:4321
 ```
@@ -126,12 +126,12 @@ More commands:
 | Where | Command | What it does |
 |---|---|---|
 | root | `bun run typecheck` | type-checks every package |
-| root | `bun run check` | checks every view in the package and the sample |
+| root | `bun run check` | checks every view in the package and the examples |
 | `packages/cli` | `bun run shell` | the preview shell for the example views |
 | `packages/cli` | `bun run example:counter` | the counter's production page, on http://localhost:3001 |
-| `sample` | `bun run types` | regenerates `views/poll.types.ts` |
+| `examples/poll` | `bun run types` | regenerates `views/poll.types.ts` |
 
-The CLI has four commands: `check`, `types`, `shell` and `css`. Run `bunx melzin --help` in `sample/` to
+The CLI has four commands: `check`, `types`, `shell` and `css`. Run `bunx melzin --help` in `examples/poll/` to
 see their usage.
 
 ## What's in the repository
@@ -141,7 +141,8 @@ packages/melzin/      `melzin`: the runtime (mount, update, destroy) and the sha
 packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, preview shell
   views/              example views (hello, profile card, counter)
   examples/counter/   a production page that mounts the counter
-sample/               a poll app that uses Melzin, with a small Bun backend
+examples/             apps that use Melzin as a package; each folder is its own workspace
+  poll/               a poll with a small Bun backend, contract tests and API tests
 docs/authoring.md     the view format and its rules, for whoever writes views
 SPEC.md               the design record: decisions, principles and a numbered list of hard problems
 POC.md                what the proof of concept builds, how, and what comes next
@@ -158,7 +159,7 @@ The proof of concept ([POC.md](POC.md)) is done:
 - [x] Type generation, so a missing handler or wrong data fails type checking
 - [x] Tailwind v4 CSS build with one project-wide theme
 - [x] Preview shell: snapshot grid, device sizes, zoom, live state editor, event log, single-state URLs
-- [x] A production example, and a sample app with a backend, contract tests and API tests
+- [x] A production example, and an example app with a backend, contract tests and API tests
 - [x] AI authoring trial: an agent given only the guide wrote a new view that passed the checker on its
   first draft
 

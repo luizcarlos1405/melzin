@@ -519,7 +519,7 @@ shows both.
 
 A project that uses Melzin is a Bun project. `melzin` is the runtime your app mounts views with, and
 `@melzin/cli` provides the `melzin` command and the server-side helpers. Inside this repository's
-workspace that's `"melzin": "workspace:*"` and `"@melzin/cli": "workspace:*"` (as in `sample/`);
+workspace that's `"melzin": "workspace:*"` and `"@melzin/cli": "workspace:*"` (as in `examples/poll/`);
 elsewhere:
 
 ```
@@ -562,7 +562,7 @@ Production needs three things from the host page's server:
 
 1. **The CSS.** `bunx melzin css -o public/app.css --minify` compiles Tailwind for every view with the
    project's theme, or call `buildCss` from `@melzin/cli/tools` in the server. With a Bun HTML import, add
-   the `<link rel="stylesheet">` from the host script, as `sample/client.ts` does: Bun's HTML bundler
+   the `<link rel="stylesheet">` from the host script, as `examples/poll/client.ts` does: Bun's HTML bundler
    would try to resolve a static link to a server route at bundle time.
 2. **The view file, unchanged, at the URL given to `mount`**, such as `/views/order-status.mel.html`.
    `resolveViewFile` from `@melzin/cli/tools` maps a request to a file in `views/` safely, and
@@ -590,5 +590,5 @@ Bun.serve({
 })
 ```
 
-`sample/` in this repository is a complete app built this way, with an API, a contract test and API
+`examples/poll/` in this repository is a complete app built this way, with an API, a contract test and API
 tests.

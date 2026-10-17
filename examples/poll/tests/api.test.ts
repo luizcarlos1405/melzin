@@ -128,7 +128,7 @@ describe('static routes', () => {
     for (const path of ['/views/../package.json', '/views/../server.ts', '/views/./../theme.css']) {
       const response = await rawGet(path)
       expect(response.startsWith('HTTP/1.1 404')).toBe(true)
-      expect(response).not.toContain('melzin-sample-poll')
+      expect(response).not.toContain('melzin-example-poll')
       expect(response).not.toContain('createPollServer')
     }
   })

@@ -1,4 +1,4 @@
-# Melzin sample: meetup poll
+# Melzin example: meetup poll
 
 A quick poll, "What should we eat at the next team meetup?", with three fixed options. It's a separate
 app that uses Melzin as a workspace package (`"melzin": "workspace:*"`) and has a tiny Bun backend that
@@ -6,7 +6,7 @@ owns the votes.
 
 ## Run it
 
-From the repo root, run `bun install` once. Then, from `sample/`:
+From the repo root, run `bun install` once. Then, from `examples/poll/`:
 
 | Command | What it does |
 |---|---|
