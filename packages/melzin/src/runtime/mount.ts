@@ -2,22 +2,31 @@
 
 import {
   CLICK_DIRECTIVE,
+  type ChainDirective,
+  ELSE_DIRECTIVE,
+  ELSE_IF_DIRECTIVE,
+  IF_DIRECTIVE,
   type Issue,
   type MelzinSchema,
+  SHOW_DIRECTIVE,
   TEXT_DIRECTIVE,
   VOID_ELEMENTS,
   attributeProblem,
   classifyAttribute,
+  conditionHolds,
   dataBlockType,
-  defaultAt,
   elementProblem,
   hasField,
-  isPlainObject,
+  isChainDirective,
+  isInterElementWhitespace,
   parseClickDirective,
+  parseConditionDirective,
   parseTextDirective,
+  resolveField,
   resolvePath,
   suggest,
   validateData,
+  valueOrDefault,
 } from '../core/index.ts'
 import { parseDocument, readSchemaBlock } from './viewdoc.ts'
 
@@ -41,6 +50,17 @@ export type MelzinView<D> = {
 
 type TextBinding = { segments: readonly string[]; el: Element; lastText: string | null }
 type ClickBinding = { el: Element; listener: (event: Event) => void }
+/** m-show: `display: none` while the condition is false; `display` is the element's own value to restore. */
+type ShowBinding = { style: CSSStyleDeclaration; holds: () => boolean; display: string; shown: boolean | null }
+/**
+ * An m-if chain. The anchor comment marks where the chain's elements go, and the first branch whose
+ * condition holds sits right after it; the others are out of the document, still bound.
+ */
+type ChainBinding = { anchor: Comment; branches: { el: Element; holds: () => boolean }[]; active: Element | null }
+
+const ELEMENT_NODE = 1
+const TEXT_NODE = 3
+const COMMENT_NODE = 8
 
 /** Fetches a view file and mounts it into `element` (see mountSource). */
 export async function mount<
@@ -75,17 +95,12 @@ function formatIssues(issues: readonly Issue[]): string {
 }
 
 function describeElement(el: Element, attribute: string, value: string): string {
-  return `<${el.tagName.toLowerCase()} ${attribute}="${value}">`
+  return `<${el.tagName.toLowerCase()} ${attribute}${value === '' ? '' : `="${value}"`}>`
 }
 
-/** Reads a path with hasField: getters and prototypes count, Object.prototype members (`constructor`) don't. */
-function valueAt(data: unknown, segments: readonly string[]): unknown {
-  let node: unknown = data
-  for (const segment of segments) {
-    if (!isPlainObject(node) || !hasField(node, segment)) return undefined
-    node = node[segment]
-  }
-  return node
+/** The element's m-if, m-else-if or m-else: the first one, if it has several. */
+function chainRole(el: Element): ChainDirective | undefined {
+  return el.getAttributeNames().find(isChainDirective)
 }
 
 /** Text for a value: primitives through String(); objects (wrong data, already warned about) show nothing. */
@@ -144,20 +159,17 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   const body = doc.body
   sanitize(body, warn)
 
+  // The view is bound and rendered in a fragment, so the host page only ever sees it finished.
   const target = element.ownerDocument
   const fragment = target.createDocumentFragment()
-  const nodes: Node[] = []
-  for (const child of body.childNodes) {
-    const copy = target.importNode(child, true)
-    nodes.push(copy)
-    fragment.appendChild(copy)
-  }
-  element.appendChild(fragment)
+  for (const child of body.childNodes) fragment.appendChild(target.importNode(child, true))
 
   let data = options.data
   let destroyed = false
   const texts: TextBinding[] = []
   const clicks: ClickBinding[] = []
+  const shows: ShowBinding[] = []
+  const chains: ChainBinding[] = []
   const undeclaredWarned = new Set<string>()
 
   const emit = (name: string): void => {
@@ -207,24 +219,98 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     clicks.push({ el, listener })
   }
 
+  // A condition that can't be used (a parse error, an unknown field) warns and counts as false, so a
+  // broken m-if hides its element rather than showing it to everyone.
+  const conditionTest = (el: Element, directive: string): (() => boolean) => {
+    const value = el.getAttribute(directive) ?? ''
+    const parsed = parseConditionDirective(directive, value)
+    if (!parsed.ok) {
+      warn(`${describeElement(el, directive, value)}: ${parsed.message} (at column ${parsed.offset + 1}); treated as false`)
+      return () => false
+    }
+    const resolved = resolveField(schema, parsed.condition.path)
+    if (!resolved.ok) {
+      warn(`${describeElement(el, directive, value)}: ${resolved.message}; treated as false`)
+      return () => false
+    }
+    const { condition } = parsed
+    return () => conditionHolds(schema, data, condition)
+  }
+
+  const bindShow = (el: Element): void => {
+    const { style } = el as Element & Partial<ElementCSSInlineStyle>
+    if (style === undefined) {
+      warn(`${describeElement(el, SHOW_DIRECTIVE, el.getAttribute(SHOW_DIRECTIVE) ?? '')}: <${el.localName}> has no style to hide it with; skipped`)
+      return
+    }
+    shows.push({ style, holds: conditionTest(el, SHOW_DIRECTIVE), display: style.display, shown: null })
+  }
+
+  const elseTest = (el: Element): (() => boolean) => {
+    const value = el.getAttribute(ELSE_DIRECTIVE) ?? ''
+    if (value.trim() !== '') {
+      warn(`${describeElement(el, ELSE_DIRECTIVE, value)}: ${ELSE_DIRECTIVE} takes no value; for another condition use ${ELSE_IF_DIRECTIVE}="${value}"`)
+    }
+    return () => true
+  }
+
+  // Elements already taken into a chain, so the walk doesn't call them orphans.
+  const chained = new Set<Element>()
+
+  // The chain that starts at `first`: the m-else-if and m-else siblings right after it, with only
+  // whitespace and comments in between, up to the first m-else.
+  const collectChain = (first: Element, role: ChainDirective): ChainBinding => {
+    chained.add(first)
+    const branches = [{ el: first, holds: conditionTest(first, role) }]
+    for (let node = first.nextSibling; node !== null; node = node.nextSibling) {
+      if (node.nodeType === COMMENT_NODE) continue
+      if (node.nodeType === TEXT_NODE && isInterElementWhitespace(node.textContent ?? '')) continue
+      if (node.nodeType !== ELEMENT_NODE) break
+      const el = node as Element
+      const next = chainRole(el)
+      if (next !== ELSE_IF_DIRECTIVE && next !== ELSE_DIRECTIVE) break
+      chained.add(el)
+      branches.push({ el, holds: next === ELSE_DIRECTIVE ? elseTest(el) : conditionTest(el, next) })
+      if (next === ELSE_DIRECTIVE) break
+    }
+    return { anchor: target.createComment(IF_DIRECTIVE), branches, active: null }
+  }
+
   // One walk over the copied elements builds the binding table; directive attributes stay in place.
-  for (const node of nodes) {
-    if (node.nodeType !== 1) continue
-    const root = node as Element
-    for (const el of [root, ...root.querySelectorAll('*')]) {
-      for (const name of el.getAttributeNames()) {
-        const kind = classifyAttribute(name)
-        if (kind.kind === 'plain') continue
-        if (kind.kind !== 'directive') {
-          warn(`<${el.tagName.toLowerCase()}>: ${kind.message}; ignored`)
-          continue
-        }
-        const value = el.getAttribute(name) ?? ''
-        if (kind.name === TEXT_DIRECTIVE) bindText(el, value)
-        else bindClick(el, value)
+  for (const el of [...fragment.querySelectorAll('*')]) {
+    const role = chainRole(el)
+    for (const name of el.getAttributeNames()) {
+      const kind = classifyAttribute(name)
+      if (kind.kind === 'plain') continue
+      if (kind.kind !== 'directive') {
+        warn(`<${el.tagName.toLowerCase()}>: ${kind.message}; ignored`)
+        continue
+      }
+      const value = el.getAttribute(name) ?? ''
+      if (kind.name === TEXT_DIRECTIVE) bindText(el, value)
+      else if (kind.name === CLICK_DIRECTIVE) bindClick(el, value)
+      else if (kind.name === SHOW_DIRECTIVE) bindShow(el)
+      else if (kind.name !== role) {
+        warn(`<${el.tagName.toLowerCase()}>: an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}; ${kind.name} ignored`)
       }
     }
+    if (role === undefined || chained.has(el)) continue
+    if (role !== IF_DIRECTIVE) {
+      const fallback = role === ELSE_DIRECTIVE ? 'ignored' : `treated as ${IF_DIRECTIVE}`
+      warn(`${describeElement(el, role, el.getAttribute(role) ?? '')}: ${role} must come right after an element with ${IF_DIRECTIVE} or ${ELSE_IF_DIRECTIVE}; ${fallback}`)
+      if (role === ELSE_DIRECTIVE) continue
+    }
+    chains.push(collectChain(el, role))
   }
+
+  // Each chain's elements leave the tree; render() puts the one that should show after the anchor.
+  for (const chain of chains) {
+    chain.branches[0]!.el.before(chain.anchor)
+    for (const { el } of chain.branches) el.remove()
+  }
+  // What destroy() removes: the top-level nodes, and the branch showing in a top-level chain.
+  const nodes: Node[] = [...fragment.childNodes]
+  const topLevelChains = chains.filter((chain) => chain.anchor.parentNode === fragment)
 
   const checkData = (next: unknown): void => {
     for (const issue of validateData(schema, next)) {
@@ -233,10 +319,21 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   }
 
   const render = (): void => {
+    for (const chain of chains) {
+      const next = chain.branches.find((branch) => branch.holds())?.el ?? null
+      if (next === chain.active) continue
+      chain.active?.remove()
+      if (next !== null) chain.anchor.after(next)
+      chain.active = next
+    }
+    for (const binding of shows) {
+      const shown = binding.holds()
+      if (shown === binding.shown) continue
+      binding.style.display = shown ? binding.display : 'none'
+      binding.shown = shown
+    }
     for (const binding of texts) {
-      let value = valueAt(data, binding.segments)
-      if (value === undefined || value === null) value = defaultAt(schema, binding.segments)
-      const text = toText(value)
+      const text = toText(valueOrDefault(schema, data, binding.segments))
       if (text !== binding.lastText) {
         binding.el.textContent = text
         binding.lastText = text
@@ -256,6 +353,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
 
   checkData(data)
   render()
+  element.appendChild(fragment)
 
   return {
     get data() {
@@ -277,6 +375,10 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       for (const { el, listener } of clicks) el.removeEventListener('click', listener)
       clicks.length = 0
       texts.length = 0
+      shows.length = 0
+      for (const chain of topLevelChains) chain.active?.remove()
+      topLevelChains.length = 0
+      chains.length = 0
       for (const node of nodes) node.parentNode?.removeChild(node)
       nodes.length = 0
     },

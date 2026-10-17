@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>T</title>
+  <script type="melzin/schema">
+    { "data": { "type": "object", "properties": { "user": { "type": "object", "properties": { "name": { "type": "string" } }, "required": ["name"] } }, "required": ["user"] } }
+  </script>
+  <script type="melzin/snapshots">
+    { "typical": { "data": { "user": { "name": "Ana" } } } }
+  </script>
+</head>
+<body>
+  <section m-if="user">
+    <h1 m-text="user.name"></h1>
+  </section>
+</body>
+</html>

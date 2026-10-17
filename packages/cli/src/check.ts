@@ -9,10 +9,16 @@ import { parseArgs } from 'node:util'
 import { parse, type DefaultTreeAdapterTypes } from 'parse5'
 import {
   CLICK_DIRECTIVE,
+  type ChainDirective,
+  type Condition,
   type DataBlockType,
+  ELSE_DIRECTIVE,
+  ELSE_IF_DIRECTIVE,
+  IF_DIRECTIVE,
   type Issue,
   type MelzinSchema,
   SCHEMA_BLOCK_TYPE,
+  SHOW_DIRECTIVE,
   SNAPSHOTS_BLOCK_TYPE,
   type Snapshot,
   TEXT_DIRECTIVE,
@@ -20,14 +26,18 @@ import {
   VOID_ELEMENTS,
   attributeProblem,
   classifyAttribute,
+  conditionHolds,
   dataBlockType,
   elementProblem,
+  isInterElementWhitespace,
   joinPath,
   leafPaths,
   parseClickDirective,
+  parseConditionDirective,
   parseExpression,
   parseSnapshots,
   parseTextDirective,
+  resolveField,
   resolvePath,
   suggest,
   validateSchema,
@@ -537,6 +547,7 @@ function analyze(input: string, fileName: string | undefined): Analysis {
   let snapshots: Snapshot[] = []
   const snapshotsBlock = blocks.get(SNAPSHOTS_BLOCK_TYPE)
   let snapshotsUnreadable = false
+  let snapshotsValid = true
   if (snapshotsBlock !== undefined) {
     const parsed = parseBlock(snapshotsBlock, { rootPath: 'snapshots', bracketTopLevel: true })
     if (parsed.ok) {
@@ -555,6 +566,7 @@ function analyze(input: string, fileName: string | undefined): Analysis {
         error(snapshotsBlock.textStart + locate(parsed.locations, issue.path, 0), `${where}: ${issue.message}`)
         issues.push(issue)
       }
+      snapshotsValid = result.issues.length === 0
     } else {
       snapshotsUnreadable = true
     }
@@ -568,10 +580,11 @@ function analyze(input: string, fileName: string | undefined): Analysis {
 
   const checked: MelzinSchema | null = schemaState === 'valid' ? schema : schemaState === 'none' ? {} : null
   const noSchemaHint = schemaState === 'none' ? ` (the view has no ${SCHEMA_BLOCK_TYPE} block)` : ''
-  const displayed = new Set<string>()
+  // Leaves that something displays or tests.
+  const used = new Set<string>()
   const emitted = new Set<string>()
-  // A broken binding would also show up as "never displayed" or "nothing emits it"; skip those then.
-  const broken = { text: false, click: false }
+  // A broken binding would also show up as "never used" or "nothing emits it"; skip those then.
+  const broken = { text: false, click: false, condition: false }
 
   // Where an attribute's value starts, and whether value offsets map 1:1 onto the source (they don't
   // when the value uses character references such as &quot;).
@@ -603,7 +616,7 @@ function analyze(input: string, fileName: string | undefined): Analysis {
       const expr = parseExpression(value)
       const pathStart = expr.ok ? expr.expr.start : 0
       if (resolved.ok) {
-        displayed.add(parsed.path.join('.'))
+        used.add(parsed.path.join('.'))
       } else {
         broken.text = true
         error(at(pathStart), `${TEXT_DIRECTIVE}: ${resolved.message}${noSchemaHint}`)
@@ -649,28 +662,63 @@ function analyze(input: string, fileName: string | undefined): Analysis {
     )
   }
 
-  // The same element and attribute rules the runtime applies (core/markup.ts), as errors.
-  const walk = (node: ChildNode): void => {
-    if (isText(node)) {
-      const match = MUSTACHE_RE.exec(node.value)
-      const location = node.sourceCodeLocation
-      if (match !== null) {
-        const raw = location ? source.slice(location.startOffset, location.endOffset) : node.value
-        const at = (location?.startOffset ?? 0) + Math.max(0, raw.indexOf('{{'))
-        warning(at, `'${match[0]}' isn't Melzin syntax and would show as is; bind an empty element instead: <span ${TEXT_DIRECTIVE}="name"></span>`)
-      }
-      return
+  // m-show, m-if and m-else-if: the condition, or undefined when it's broken or constant (already reported).
+  const checkConditionDirective = (element: Element, directive: string, value: string): Condition | undefined => {
+    const { start, exact } = valueStart(element, directive, value)
+    const at = (offset: number): number => (exact ? start + offset : start)
+    const parsed = parseConditionDirective(directive, value)
+    if (!parsed.ok) {
+      broken.condition = true
+      error(at(parsed.offset), `${directive}: ${parsed.message}`)
+      return undefined
     }
-    if (!isElement(node)) return
+    if (checked === null) return undefined
+    const { condition, pathStart } = parsed
+    const resolved = resolveField(checked, condition.path)
+    if (!resolved.ok) {
+      broken.condition = true
+      error(at(pathStart), `${directive}: ${resolved.message}${noSchemaHint}`)
+      return undefined
+    }
+    const name = condition.path.join('.')
+    if (resolved.field.type !== 'object') {
+      used.add(name)
+    } else if (resolved.required) {
+      warning(at(pathStart), `${directive}: '${name}' is a required object, so this condition is always ${condition.negated ? 'false' : 'true'}`)
+      return undefined // the snapshot coverage check would only repeat this
+    }
+    return condition
+  }
+
+  // For the snapshot coverage warning: the conditions that decide whether an element shows (its m-if
+  // chain and its m-show), and the nearest element around it that has conditions of its own.
+  type Conditional = {
+    /** The element's first condition directive, where the warning points. */
+    offset: number
+    /** Each condition with the result it needs; undefined when one of them is broken or constant. */
+    tests: { condition: Condition; holds: boolean }[] | undefined
+    /** What has to be true, for the message: `m-if="user.bio" holds`. */
+    clauses: string[]
+    parent: Conditional | undefined
+  }
+  const conditionals: Conditional[] = []
+  // The m-if chain open among a run of siblings: its conditions so far (undefined: broken or constant).
+  type Chain = { conditions: (Condition | undefined)[] }
+
+  const checkMustache = (node: TextNode): void => {
+    const match = MUSTACHE_RE.exec(node.value)
+    if (match === null) return
+    const location = node.sourceCodeLocation
+    const raw = location ? source.slice(location.startOffset, location.endOffset) : node.value
+    const at = (location?.startOffset ?? 0) + Math.max(0, raw.indexOf('{{'))
+    warning(at, `'${match[0]}' isn't Melzin syntax and would show as is; bind an empty element instead: <span ${TEXT_DIRECTIVE}="name"></span>`)
+  }
+
+  // An element's directives and attributes. Returns the m-if chain that continues after it, if any.
+  const checkElement = (node: Element, scope: Conditional | undefined, chain: Chain | undefined): Chain | undefined => {
     const offset = startOf(node) ?? 0
-    const blockType = node.tagName === 'script' ? dataBlockType(getAttr(node, 'type')) : undefined
-    const problem = blockType === undefined
-      ? elementProblem(node.tagName, node.namespaceURI, (name) => getAttr(node, name) ?? null)
-      : { message: `the ${blockType} block belongs in <head>`, drop: true }
-    if (problem !== undefined) {
-      error(offset, problem.message)
-      if (problem.drop) return // the runtime drops it, content included
-    }
+    let role: { directive: ChainDirective; at: number; value: string; condition: Condition | undefined } | undefined
+    let show: { at: number; value: string; condition: Condition | undefined } | undefined
     for (const attr of node.attrs) {
       const name = attr.prefix ? `${attr.prefix}:${attr.name}` : attr.name
       const at = node.sourceCodeLocation?.attrs?.[name]?.startOffset ?? offset
@@ -682,13 +730,89 @@ function analyze(input: string, fileName: string | undefined): Analysis {
         error(at, kind.message)
       } else if (kind.name === TEXT_DIRECTIVE) {
         checkTextDirective(node, attr.value)
-      } else {
+      } else if (kind.name === CLICK_DIRECTIVE) {
         checkClickDirective(node, attr.value)
+      } else if (kind.name === SHOW_DIRECTIVE) {
+        show = { at, value: attr.value, condition: checkConditionDirective(node, SHOW_DIRECTIVE, attr.value) }
+      } else if (role !== undefined) {
+        error(at, `an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}`)
+      } else if (kind.name === ELSE_DIRECTIVE) {
+        if (attr.value.trim() !== '') {
+          error(at, `${ELSE_DIRECTIVE} takes no value; for another condition use ${ELSE_IF_DIRECTIVE}="${attr.value}"`)
+        }
+        role = { directive: ELSE_DIRECTIVE, at, value: '', condition: undefined }
+      } else {
+        role = { directive: kind.name, at, value: attr.value, condition: checkConditionDirective(node, kind.name, attr.value) }
       }
     }
-    node.childNodes.forEach(walk)
+
+    // Like the runtime: an m-else-if with no chain to join starts one, an m-else with none always shows.
+    let previous: (Condition | undefined)[] = []
+    let next: Chain | undefined
+    if (role !== undefined && role.directive !== IF_DIRECTIVE) {
+      if (chain === undefined) {
+        error(role.at, `${role.directive} must come right after an element with ${IF_DIRECTIVE} or ${ELSE_IF_DIRECTIVE}`)
+      } else {
+        previous = chain.conditions
+      }
+    }
+    const tests: { condition: Condition | undefined; holds: boolean }[] = []
+    const clauses: string[] = []
+    if (role !== undefined && (role.directive !== ELSE_DIRECTIVE || chain !== undefined)) {
+      tests.push(...previous.map((condition) => ({ condition, holds: false })))
+      if (role.directive === ELSE_DIRECTIVE) {
+        clauses.push(`the conditions before its ${ELSE_DIRECTIVE} are all false`)
+      } else {
+        tests.push({ condition: role.condition, holds: true })
+        const before = previous.length > 0 ? " and the conditions before it don't" : ''
+        clauses.push(`${role.directive}="${role.value.trim()}" holds${before}`)
+        next = { conditions: [...previous, role.condition] }
+      }
+    }
+    if (show !== undefined) {
+      tests.push({ condition: show.condition, holds: true })
+      clauses.push(`${SHOW_DIRECTIVE}="${show.value.trim()}" holds`)
+    }
+
+    let conditional: Conditional | undefined
+    if (tests.length > 0) {
+      const complete = tests.every((test) => test.condition !== undefined)
+      conditional = {
+        offset: Math.min(role?.at ?? Infinity, show?.at ?? Infinity),
+        tests: complete ? (tests as { condition: Condition; holds: boolean }[]) : undefined,
+        clauses,
+        parent: scope,
+      }
+      conditionals.push(conditional)
+    }
+    walkNodes(node.childNodes, conditional ?? scope)
+    return next
   }
-  bodyNodes.forEach(walk)
+
+  // The same element and attribute rules the runtime applies (core/markup.ts), as errors. Siblings are
+  // walked in order, so an m-else-if or m-else knows the chain it continues.
+  const walkNodes = (nodes: ChildNode[], scope: Conditional | undefined): void => {
+    let chain: Chain | undefined
+    for (const node of nodes) {
+      if (isText(node)) {
+        checkMustache(node)
+        if (!isInterElementWhitespace(node.value)) chain = undefined
+        continue
+      }
+      if (!isElement(node)) continue // comments don't end a chain
+      const offset = startOf(node) ?? 0
+      const blockType = node.tagName === 'script' ? dataBlockType(getAttr(node, 'type')) : undefined
+      const problem = blockType === undefined
+        ? elementProblem(node.tagName, node.namespaceURI, (name) => getAttr(node, name) ?? null)
+        : { message: `the ${blockType} block belongs in <head>`, drop: true }
+      if (problem !== undefined) {
+        error(offset, problem.message)
+        if (problem.drop) continue // the runtime drops it, content included
+      }
+      chain = checkElement(node, scope, chain)
+    }
+  }
+  walkNodes(bodyNodes, undefined)
 
   // --- contract warnings (only against a schema we fully understood)
   if (schemaState === 'valid' && schema !== null && schemaBlock !== undefined) {
@@ -698,14 +822,45 @@ function analyze(input: string, fileName: string | undefined): Analysis {
     }
     const leaves = leafPaths(schema)
     for (const leaf of leaves) {
-      if (displayed.has(leaf) || broken.text) continue
+      if (used.has(leaf) || broken.text || broken.condition) continue
       const schemaPath = leaf.split('.').reduce((path, name) => joinPath(joinPath(path, 'properties'), name), 'data')
-      warning(at(schemaPath), `data field '${leaf}' is never displayed`)
+      warning(at(schemaPath), `data field '${leaf}' is never used`)
     }
     if (leaves.length > 0 && snapshots.length === 0 && !snapshotsUnreadable) {
       warning(
         startOf(schemaBlock.element) ?? 0,
         `the view has data fields but no snapshots; add a ${SNAPSHOTS_BLOCK_TYPE} block with sample states, awkward ones included (very long text, zero, huge numbers)`,
+      )
+    }
+  }
+
+  // --- snapshot coverage: every element behind a condition shows in at least one snapshot, so its
+  // design can be reviewed. Waits until the snapshots match the schema.
+  if (checked !== null && snapshots.length > 0 && snapshotsValid) {
+    type Coverage = { own: boolean[]; shows: boolean[] } | undefined
+    const coverage = new Map<Conditional, Coverage>()
+    const cover = (conditional: Conditional): Coverage => {
+      if (coverage.has(conditional)) return coverage.get(conditional)
+      const parent = conditional.parent === undefined ? undefined : cover(conditional.parent)
+      let result: Coverage
+      if (conditional.tests !== undefined && (conditional.parent === undefined || parent !== undefined)) {
+        const { tests } = conditional
+        const own = snapshots.map(({ data }) => tests.every(({ condition, holds }) => conditionHolds(checked, data, condition) === holds))
+        result = { own, shows: own.map((value, i) => value && (parent?.shows[i] ?? true)) }
+      }
+      coverage.set(conditional, result)
+      return result
+    }
+    for (const conditional of conditionals) {
+      const result = cover(conditional)
+      if (result === undefined || result.shows.some(Boolean)) continue
+      // Inside an element that never shows either, only that one gets the warning.
+      if (conditional.parent !== undefined && !cover(conditional.parent)!.shows.some(Boolean)) continue
+      warning(
+        conditional.offset,
+        result.own.some(Boolean)
+          ? 'no snapshot shows this element; its conditions only hold where an element around it is hidden'
+          : `no snapshot shows this element; add one where ${conditional.clauses.join(' and ')}`,
       )
     }
   }

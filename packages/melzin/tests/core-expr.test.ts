@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { describeCharacter, parseClickDirective, parseExpression, parseTextDirective, tokenize } from '../src/core/expr.ts'
+import {
+  describeCharacter,
+  parseClickDirective,
+  parseConditionDirective,
+  parseExpression,
+  parseTextDirective,
+  tokenize,
+} from '../src/core/expr.ts'
 
 describe('tokenize', () => {
   test('words, punctuation and strings with offsets', () => {
@@ -54,6 +61,17 @@ describe('parseExpression', () => {
     expect(result.ok && result.expr.kind === 'call' && result.expr.args[0]?.value).toBe("it's")
   })
 
+  test('a leading ! negates a path or a call', () => {
+    expect(parseExpression('!user.bio')).toEqual({
+      ok: true,
+      expr: { kind: 'not', operand: { kind: 'path', segments: ['user', 'bio'], start: 1, end: 9 }, start: 0, end: 9 },
+    })
+    expect(parseExpression(' ! open()')).toEqual({
+      ok: true,
+      expr: { kind: 'not', operand: { kind: 'call', callee: 'open', args: [], start: 3, end: 9 }, start: 1, end: 9 },
+    })
+  })
+
   const errors: [string, string, number][] = [
     ['', 'expected a path or a call, found an empty value', 0],
     ['   ', 'expected a path or a call, found an empty value', 0],
@@ -76,6 +94,10 @@ describe('parseExpression', () => {
     ["f('a')()", "unexpected '('", 6],
     ["$emit('x')", "use emit('name') instead of Vue's $emit", 0],
     ['a.$b', "'$b' isn't a valid name (use letters, digits and _, not starting with a digit)", 2],
+    ['!', 'expected a name, found end of value', 1],
+    ['!!a', "expected a name, found '!'", 1],
+    ['a!', "unexpected '!'", 1],
+    ['a.!b', "expected a name after '.', found '!'", 2],
   ]
   for (const [source, message, offset] of errors) {
     test(`error: ${JSON.stringify(source)}`, () => {
@@ -100,6 +122,66 @@ describe('parseTextDirective', () => {
 
   test('passes parse errors through', () => {
     expect(parseTextDirective('user.')).toEqual({ ok: false, message: "expected a name after '.', found end of value", offset: 5 })
+  })
+
+  test('rejects !, which only works in conditions', () => {
+    expect(parseTextDirective(' !count')).toEqual({
+      ok: false,
+      message: "m-text needs a path such as user.name; '!' only works in conditions (m-if, m-show)",
+      offset: 1,
+    })
+  })
+})
+
+describe('parseConditionDirective', () => {
+  test('a path, optionally negated', () => {
+    expect(parseConditionDirective('m-if', 'user.verified')).toEqual({
+      ok: true,
+      condition: { path: ['user', 'verified'], negated: false },
+      pathStart: 0,
+    })
+    expect(parseConditionDirective('m-show', ' ! user.bio ')).toEqual({
+      ok: true,
+      condition: { path: ['user', 'bio'], negated: true },
+      pathStart: 3,
+    })
+  })
+
+  test('calls are not conditions; the message names the directive', () => {
+    expect(parseConditionDirective('m-show', 'isOpen()')).toEqual({
+      ok: false,
+      message: 'm-show needs a condition such as user.verified or !user.verified, not a call',
+      offset: 0,
+    })
+    expect(parseConditionDirective('m-else-if', "!emit('x')")).toMatchObject({ ok: false, offset: 1 })
+  })
+
+  const operators: [string, string, number][] = [
+    ['count > 0', '>', 6],
+    ['count >= 1', '>=', 6],
+    ['a && b', '&&', 2],
+    ['a||b', '||', 1],
+    ["status === 'paid'", '===', 7],
+    ['a != b', '!=', 2],
+    ['a !== b', '!==', 2],
+    ["ok ? 'a' : 'b'", '?', 3],
+    ['-count', '-', 0],
+    ['count + 1', '+', 6],
+  ]
+  for (const [source, operator, offset] of operators) {
+    test(`operators get one message that names the workaround: ${JSON.stringify(source)}`, () => {
+      expect(parseConditionDirective('m-if', source)).toEqual({
+        ok: false,
+        message: `'${operator}' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes`,
+        offset,
+      })
+    })
+  }
+
+  test('other parse errors pass through', () => {
+    expect(parseConditionDirective('m-if', '')).toEqual({ ok: false, message: 'expected a path or a call, found an empty value', offset: 0 })
+    expect(parseConditionDirective('m-if', '!!a')).toEqual({ ok: false, message: "expected a name, found '!'", offset: 1 })
+    expect(parseConditionDirective('m-if', 'user.')).toEqual({ ok: false, message: "expected a name after '.', found end of value", offset: 5 })
   })
 })
 
@@ -132,8 +214,13 @@ describe('parseClickDirective', () => {
     })
   })
 
-  test('a path is not enough', () => {
+  test('a path is not enough, and ! is for conditions', () => {
     expect(parseClickDirective('increment')).toEqual({
+      ok: false,
+      message: "m-on:click needs emit('name'), for example emit('save')",
+      offset: 0,
+    })
+    expect(parseClickDirective("!emit('x')")).toEqual({
       ok: false,
       message: "m-on:click needs emit('name'), for example emit('save')",
       offset: 0,

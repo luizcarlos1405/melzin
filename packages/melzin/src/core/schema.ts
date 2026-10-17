@@ -21,6 +21,9 @@ export type ResolvedPath =
   | { ok: true; type: LeafType; default?: string | number | boolean }
   | { ok: false; message: string }
 
+/** `required` is true when every field along the path is required, so valid data always has it. */
+export type ResolvedField = { ok: true; field: FieldSchema; required: boolean } | { ok: false; message: string }
+
 const LEAF_TYPES: readonly string[] = ['string', 'number', 'boolean']
 const LEAF_KEYS = new Set(['type', 'default', 'description'])
 const OBJECT_KEYS = new Set(['type', 'properties', 'required', 'description'])
@@ -324,9 +327,10 @@ export function validateData(schema: MelzinSchema | null | undefined, data: unkn
   return issues
 }
 
-/** Finds the leaf a path such as `['user', 'name']` points at. */
-export function resolvePath(schema: MelzinSchema | null | undefined, segments: readonly string[]): ResolvedPath {
+/** Finds the field, leaf or object, that a path such as `['user', 'name']` points at. */
+export function resolveField(schema: MelzinSchema | null | undefined, segments: readonly string[]): ResolvedField {
   let node: FieldSchema = schema?.data ?? { type: 'object', properties: {} }
+  let required = true
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]!
     const sofar = segments.slice(0, i + 1).join('.')
@@ -337,18 +341,27 @@ export function resolvePath(schema: MelzinSchema | null | undefined, segments: r
     if (child === undefined) {
       const prefix = segments.slice(0, i).map((s) => `${s}.`).join('')
       let hint = suggest(segment, Object.keys(node.properties), (best) => prefix + best) || suggestNested(segment, node, prefix)
-      if (i === 0 && segment === 'data' && segments.length > 1 && resolvePath(schema, segments.slice(1)).ok) {
+      if (i === 0 && segment === 'data' && segments.length > 1 && resolveField(schema, segments.slice(1)).ok) {
         hint = ` (paths start inside data: use '${segments.slice(1).join('.')}')`
       }
       return { ok: false, message: `unknown field '${sofar}'${hint}` }
     }
+    required &&= (node.required ?? []).includes(segment)
     node = child
   }
-  if (node.type === 'object') {
+  return { ok: true, field: node, required }
+}
+
+/** Finds the leaf a path such as `['user', 'name']` points at. */
+export function resolvePath(schema: MelzinSchema | null | undefined, segments: readonly string[]): ResolvedPath {
+  const resolved = resolveField(schema, segments)
+  if (!resolved.ok) return resolved
+  const { field } = resolved
+  if (field.type === 'object') {
     const name = segments.length === 0 ? 'data' : segments.join('.')
     return { ok: false, message: `'${name}' is an object; m-text needs a string, number or boolean` }
   }
-  return node.default === undefined ? { ok: true, type: node.type } : { ok: true, type: node.type, default: node.default }
+  return field.default === undefined ? { ok: true, type: field.type } : { ok: true, type: field.type, default: field.default }
 }
 
 /** Dotted paths of every leaf field, in declaration order. */

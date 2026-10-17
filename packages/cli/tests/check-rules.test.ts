@@ -107,14 +107,15 @@ const errors: Case[] = [
   {
     file: 'foreign-other.mel.html',
     severity: 'error',
-    message: "':class': Vue/Alpine syntax isn't supported; this POC has m-text and m-on:click",
+    message: "':class': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else and m-on:click",
     at: pos('foreign-other.mel.html', ':class'),
   },
   {
     file: 'unsupported-directive.mel.html',
     severity: 'error',
-    message: '\'m-if\' is not supported yet; the POC supports only m-text and m-on:click; to hide an element, bind it to a value that may be "" and add the class empty:hidden (docs/authoring.md §7)',
-    at: pos('unsupported-directive.mel.html', 'm-if'),
+    message:
+      "'m-for' is not supported yet; Melzin supports only m-text, m-show, m-if, m-else-if, m-else and m-on:click; lists come later; use a fixed number of fields such as first, second, third, with m-if on the optional ones (docs/authoring.md §7)",
+    at: pos('unsupported-directive.mel.html', 'm-for'),
   },
   {
     file: 'text-parse-error.mel.html',
@@ -231,6 +232,49 @@ const errors: Case[] = [
     message: "m-text can't go on <input>: it has no content to set; use an element such as <span>",
     at: pos('text-void-element.mel.html', '<input'),
   },
+  // Conditions: m-show, m-if, m-else-if and m-else.
+  {
+    file: 'if-parse-error.mel.html',
+    severity: 'error',
+    message: "m-if: expected a name after '.', found end of value",
+    at: pos('if-parse-error.mel.html', 'verified."', 9),
+  },
+  {
+    file: 'if-operator.mel.html',
+    severity: 'error',
+    message: "m-if: '>' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes",
+    at: pos('if-operator.mel.html', '> 0'),
+  },
+  {
+    file: 'if-unknown-path.mel.html',
+    severity: 'error',
+    message: "m-if: unknown field 'verifed' (did you mean 'verified'?)",
+    at: pos('if-unknown-path.mel.html', 'verifed'),
+  },
+  {
+    file: 'show-call.mel.html',
+    severity: 'error',
+    message: 'm-show: m-show needs a condition such as user.verified or !user.verified, not a call',
+    at: pos('show-call.mel.html', 'isVerified()'),
+  },
+  {
+    file: 'else-orphan.mel.html',
+    severity: 'error',
+    message: 'm-else must come right after an element with m-if or m-else-if',
+    at: pos('else-orphan.mel.html', 'm-else'),
+  },
+  {
+    file: 'else-value.mel.html',
+    severity: 'error',
+    message: 'm-else takes no value; for another condition use m-else-if="!verified"',
+    at: pos('else-value.mel.html', 'm-else'),
+  },
+  {
+    file: 'chain-two-roles.mel.html',
+    severity: 'error',
+    message: 'an element can have only one of m-if, m-else-if and m-else',
+    at: pos('chain-two-roles.mel.html', 'm-else'),
+  },
 ]
 
 const warnings: Case[] = [
@@ -259,10 +303,10 @@ const warnings: Case[] = [
     at: pos('event-never-emitted.mel.html', '"increment"'),
   },
   {
-    file: 'leaf-never-displayed.mel.html',
+    file: 'leaf-never-used.mel.html',
     severity: 'warning',
-    message: "data field 'count' is never displayed",
-    at: pos('leaf-never-displayed.mel.html', '"count": { "type"'),
+    message: "data field 'count' is never used",
+    at: pos('leaf-never-used.mel.html', '"count": { "type"'),
   },
   {
     file: 'no-snapshots.mel.html',
@@ -288,10 +332,22 @@ const warnings: Case[] = [
     message: 'stale-types.types.ts is out of date with the schema; run melzin types stale-types.mel.html',
     at: { line: 1, col: 1 },
   },
+  {
+    file: 'if-always-true.mel.html',
+    severity: 'warning',
+    message: "m-if: 'user' is a required object, so this condition is always true",
+    at: pos('if-always-true.mel.html', 'user">'),
+  },
+  {
+    file: 'else-if-never-shown.mel.html',
+    severity: 'warning',
+    message: 'no snapshot shows this element; add one where m-else-if="verified" holds and the conditions before it don\'t',
+    at: pos('else-if-never-shown.mel.html', 'm-else-if'),
+  },
 ]
 
 describe('good views have no diagnostics', () => {
-  for (const file of ['good-counter.mel.html', 'good-static.mel.html', 'good-nested.mel.html']) {
+  for (const file of ['good-counter.mel.html', 'good-static.mel.html', 'good-nested.mel.html', 'good-conditionals.mel.html']) {
     test(file, async () => {
       expect(await diagnosticsOf(file)).toEqual([])
     })

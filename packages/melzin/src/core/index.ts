@@ -1,4 +1,5 @@
 export * from './constants.ts'
+export * from './data.ts'
 export * from './expr.ts'
 export * from './markup.ts'
 export * from './schema.ts'

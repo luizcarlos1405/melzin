@@ -1,9 +1,9 @@
 # Writing Melzin views
 
-This guide is everything you need to write a Melzin view: the file format, the two directives, the
-schema and snapshots, the rules the checker enforces, how to check and preview your work, and how to
-set up a project that uses the view (§11). It describes the POC (see [POC.md](../POC.md)). References
-such as P4 or D14 point to [SPEC.md](../SPEC.md); you don't need to read it.
+This guide is everything you need to write a Melzin view: the file format, the directives, the schema
+and snapshots, the rules the checker enforces, how to check and preview your work, and how to set up a
+project that uses the view (§11). It describes what is built so far (see [POC.md](../POC.md)).
+References such as P4 or D14 point to [SPEC.md](../SPEC.md); you don't need to read it.
 
 ## 1. What a view is
 
@@ -12,7 +12,8 @@ front end that runs in production. A host (a web page, or the preview shell) mou
 `data` and handles the events it sends. The view never fetches anything or runs code of its own: the
 checker rejects anything that would (§2), and the runtime drops it before the view reaches the page.
 
-- The view shows data through `m-text` and sends events through `m-on:click`.
+- The view shows data through `m-text`, shows elements only when a condition holds through `m-if`,
+  `m-else-if`, `m-else` and `m-show`, and sends events through `m-on:click`.
 - The schema in the file declares the data the view needs and the events it sends.
 - Snapshots in the file are named sample states. The shell renders one frame per snapshot.
 
@@ -78,7 +79,7 @@ The children of `<body>` are the view. Several top-level elements are fine.
 - `<body>` takes no attributes. Put backgrounds and layout on a wrapper such as
   `<main class="min-h-screen ...">`.
 - Static HTML is fine: headings, lists, links, images, inline SVG (with its `<title>`). Only `m-text`
-  content changes.
+  content and the elements behind conditions change.
 - Relative URLs in `href` and `src` resolve against the host page, not the view file, so prefer
   absolute ones (`/images/logo.svg`).
 
@@ -104,8 +105,9 @@ A literal `{{ name }}` in the text gets a warning: it isn't Melzin syntax and wo
 
 ## 3. Directives
 
-There are exactly two. Values are parsed, never evaluated: no JavaScript, no operators, no
-`{{ }}`. Attribute names are case-insensitive; values are case-sensitive.
+There are six: `m-text` shows a value, `m-if`, `m-else-if`, `m-else` and `m-show` show an element only
+when a condition holds, and `m-on:click` sends an event. Values are parsed, never evaluated: no
+JavaScript, no operators, no `{{ }}`. Attribute names are case-insensitive; values are case-sensitive.
 
 An *identifier* is a letter or `_`, then letters, digits or `_` (`[A-Za-z_][A-Za-z0-9_]*`). So `count`,
 `itemsLabel` and `total_2` are identifiers; `2nd`, `go-now` and `$emit` are not.
@@ -131,6 +133,60 @@ Grammar: `path := ident ('.' ident)*`. Spaces around the value are allowed.
 - `m-text` can't go on elements without content, such as `<input>`, `<img>` or `<br>`.
 - Several elements may bind the same path.
 - Paths start inside `data`: write `m-text="post.title"`, not `m-text="data.post.title"`.
+
+### `m-if`, `m-else-if`, `m-else` and `m-show`
+
+Grammar: `condition := '!'? path`. A condition is a path, optionally preceded by `!`, which negates
+it. Spaces around the value and after the `!` are allowed.
+
+```html
+<span m-show="user.verified">Verified</span>
+
+<p m-if="user.bio" m-text="user.bio"></p>
+<p m-else class="text-zinc-400">No bio yet.</p>
+
+<button type="button" m-if="!viewer" m-on:click="emit('signIn')">Sign in to follow</button>
+<p m-else-if="viewer.isSelf">This is you</p>
+<button type="button" m-else-if="viewer.following" m-on:click="emit('unfollow')">Following</button>
+<button type="button" m-else m-on:click="emit('follow')">Follow</button>
+```
+
+A condition holds when the value at its path is:
+
+| Value | Holds when |
+|---|---|
+| boolean | `true` |
+| string | not `""` |
+| number | not `0` |
+| object | present |
+| missing | its field's `default` holds; with no default, never |
+
+That's JavaScript's truthiness, as in Vue. `!` flips it: `m-if="!viewer"` holds while `viewer` is
+missing.
+
+- `m-if` keeps its element in the document only while the condition holds.
+- `m-else-if` and `m-else` go on the elements right after an `m-if`, with only whitespace and comments
+  in between, and form a chain with it: the first element whose condition holds shows, `m-else` shows
+  when none does, and the rest are out of the document. `m-else` takes no value.
+- `m-show` keeps its element in place and hides it with `display: none` while the condition doesn't
+  hold. Use it for things that come and go, like a badge; use `m-if` and `m-else` for alternatives.
+- An element has at most one of `m-if`, `m-else-if` and `m-else`. It may also have `m-show`, `m-text`
+  and `m-on:click`.
+- Conditions can't compare or combine values: no `==`, `>`, `&&`, `||` or `? :`. Have the host send the
+  boolean the screen needs (`"isOwner": true`, `"hasVotes": false`), or nest elements:
+  `<div m-if="a"><p m-if="b">` shows the `<p>` only when both hold.
+- Give every optional field a designed fallback: an `m-else` with an empty state or a placeholder,
+  rather than a hole in the layout.
+- A required object is always present, so `m-if="user"` always holds; the checker warns about it.
+  Test one of its fields, or make the object optional.
+- There's no `<template>` to group elements: wrap them in one element. The `contents` class makes the
+  wrapper's box disappear from the layout: `<div m-if="x" class="contents">`.
+- Elements behind a condition stay bound while they're hidden, so they show current data as soon as
+  they appear.
+- Each element behind a condition should show in at least one snapshot, so its design can be reviewed.
+  The checker warns about the ones no snapshot shows (§5).
+- The runtime treats a condition it can't use (an unknown field, say) as false, with a warning, so a
+  broken `m-if` hides its element instead of showing it to everyone.
 
 ### `m-on:click="emit('event')"`
 
@@ -212,6 +268,8 @@ shows them. Names can be any text.
 - Every view with data fields needs snapshots. Make them hostile, not just pretty (P8): very long
   text, zero, huge numbers, every optional field missing. They are how you find where the layout
   breaks.
+- Cover every condition: each element behind `m-if`, `m-else-if`, `m-else` or `m-show` should show in
+  at least one snapshot, or nobody sees its design. The checker names the condition that never holds.
 - A view without snapshots renders once in the shell, with empty data.
 - Give snapshots names with words in them. A name that is a whole number (`"0"`, `"10"`) is listed
   before all the others, whatever its place in the file (a JavaScript rule), and the checker warns
@@ -244,10 +302,10 @@ shows them. Names can be any text.
   Views can't load fonts. A font named in `--font-sans` is used when the page has it: load it with an
   `@font-face` rule in `theme.css` (an absolute URL) or from the host page. Otherwise the next font in
   the list shows, in the shell too.
-- Classes can't change with data. Use variants that react to content instead, such as
-  `empty:hidden` on an `m-text` element whose value may be `""`. For a state such as "liked", have the
-  host send the text that differs (`"likeLabel": "Liked"`), or bind two elements, one of which gets
-  `""` and hides itself with `empty:hidden`.
+- Classes can't change with data yet. For a state such as "liked", put both versions in the view and
+  let a condition pick one: `<button m-if="post.liked" class="bg-rose-600 ...">` and
+  `<button m-else class="bg-white ...">`. Variants that react to content, such as `empty:hidden`,
+  work too.
 - Plan for long values: `wrap-anywhere`, `truncate`, `min-w-0` and `text-balance` keep layouts intact.
 
 ## 7. Not supported yet
@@ -256,9 +314,9 @@ Don't try these; the checker rejects them. POC.md §11 lists when each comes in.
 
 | Not yet | What to do now |
 |---|---|
-| Lists (`m-for`, `"type": "array"`) | A fixed number of fields: `first`, `second`, `third` |
-| Conditionals (`m-if`, `m-show`) | `empty:hidden` on an element bound to a value that may be `""` |
-| Attribute and class bindings (`m-bind`, `:href`) | Static attributes and classes only |
+| Lists (`m-for`, `"type": "array"`) | A fixed number of fields: `first`, `second`, `third`, with `m-if` on the optional ones |
+| Attribute and class bindings (`m-bind`, `:href`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else` |
+| Comparisons and `&&`, `\|\|` in conditions | A boolean the host computes: `m-if="hasVotes"` |
 | Event payloads, `emit('x', ...)` | One event per action: `votePizza`, `voteTacos` |
 | Events other than click, modifiers | Clicks only, on buttons |
 | Internal state (`ui`) | Let the host send the state as data |
@@ -282,7 +340,7 @@ bunx melzin check views/order.mel.html  # some files
 Output is one line per problem, then a summary:
 
 ```
-views/order.mel.html:9:19: warning: data field 'note' is never displayed
+views/order.mel.html:9:19: warning: data field 'note' is never used
 views/order.mel.html:13:20: error: snapshots["typical"].data.total: missing required field 'total'
 views/order.mel.html:13:30: error: snapshots["typical"].data.totl: unknown field 'totl' (did you mean 'total'?)
 views/order.mel.html:17:37: warning: m-text elements should be empty; sample text belongs in snapshots
@@ -293,10 +351,12 @@ views/order.mel.html:18:37: error: m-on:click: use emit('name') instead of Vue's
 Line and column point at the problem, usually the exact character inside an attribute value or the
 JSON. The exit code is 1 when there are errors. Fix every error and every warning: a clean view
 prints `0 errors, 0 warnings`. Warnings flag a declared event nothing emits, a data field nothing
-displays, text inside an `m-text` element, a view with data but no snapshots, a snapshot named with a
-whole number, a literal `{{ }}`, a missing `<title>`, attributes on `<body>` and a `<name>.types.ts`
-that no longer matches the schema. "Nothing emits it" and "never displayed" wait until the broken
-bindings are fixed, since a broken binding is often the missing one.
+displays or tests, text inside an `m-text` element, a view with data but no snapshots, an element
+behind a condition that no snapshot shows, a condition on a required object (it always holds), a
+snapshot named with a whole number, a literal `{{ }}`, a missing `<title>`, attributes on `<body>` and
+a `<name>.types.ts` that no longer matches the schema. "Nothing emits it" and "never used" wait until
+the broken bindings are fixed, since a broken binding is often the missing one, and "no snapshot shows
+this element" waits until the snapshots match the schema.
 
 `melzin check --views <dir>` checks another folder.
 
@@ -361,6 +421,12 @@ and desktop sizes, fix what looks wrong, repeat.
 | Wrong | Right |
 |---|---|
 | `v-text="name"`, `x-text="name"`, `{{ name }}` | `m-text="name"` |
+| `v-if`, `v-else-if`, `v-else`, `v-show`, `x-show` | `m-if`, `m-else-if`, `m-else`, `m-show` |
+| `m-if="count > 0"`, `m-if="a && b"`, `m-if="status === 'paid'"` | a boolean the host computes: `m-if="hasItems"`, `m-if="isPaid"`; or nested `m-if`s for "and" |
+| `<p m-if="a">…</p><hr><p m-else>…</p>` | `m-else` right after the `m-if` element, with only whitespace or comments between |
+| `<p m-else="!a">` | `<p m-else>`, or `m-else-if="b"` for another condition |
+| `m-if="user"` on a required object | it always holds: test a field (`m-if="user.bio"`) or make the object optional |
+| `<template m-if="x">` | one wrapper element: `<div m-if="x" class="contents">` |
 | `@click="save"`, `v-on:click`, `x-on:click` | `m-on:click="emit('save')"` |
 | `m-on:click="$emit('save')"` | `m-on:click="emit('save')"` |
 | `m-on:click="save()"` | `m-on:click="emit('save')"` |
@@ -374,7 +440,7 @@ and desktop sizes, fix what looks wrong, repeat.
 | `<body class="bg-zinc-50">` | `<body><main class="min-h-screen bg-zinc-50">` |
 | `<link rel="stylesheet">`, `<style>`, `style="..."` | Tailwind classes, tokens in `theme.css` |
 | `<template>`, `<form>` | plain markup, `<button type="button">` |
-| `` class="bg-${color}-500" `` | one full class name |
+| `` class="bg-${color}-500" `` | one full class name; two elements behind `m-if`/`m-else` for two styles |
 | an event used in `m-on:click` but missing from `events` | declare it: `"events": { "save": {} }` |
 | a snapshot with `"nmae"` | the exact field name; the checker suggests it |
 | a snapshot that skips a level: `{ "title": "..." }` | the full shape: `{ "post": { "title": "..." } }` |
@@ -382,8 +448,8 @@ and desktop sizes, fix what looks wrong, repeat.
 
 ## 10. Worked example
 
-An order status card: nested data, an optional field with a default, two events, and snapshots that
-include awkward data. `views/order-status.mel.html`:
+An order status card: nested data, an optional field with a designed fallback, a badge behind a
+condition, two events, and snapshots that include awkward data. `views/order-status.mel.html`:
 
 ```html
 <!doctype html>
@@ -401,8 +467,9 @@ include awkward data. `views/order-status.mel.html`:
             "properties": {
               "number": { "type": "string" },
               "status": { "type": "string" },
-              "eta": { "type": "string", "default": "", "description": "Empty when there is no estimate yet" },
-              "total": { "type": "string", "description": "Already formatted, like \"$42.50\"" }
+              "eta": { "type": "string", "description": "Missing when there is no estimate yet" },
+              "total": { "type": "string", "description": "Already formatted, like \"$42.50\"" },
+              "delayed": { "type": "boolean", "default": false }
             },
             "required": ["number", "status", "total"]
           },
@@ -430,13 +497,14 @@ include awkward data. `views/order-status.mel.html`:
           "itemsLabel": "1 item"
         }
       },
-      "long text": {
+      "delayed, long text": {
         "data": {
           "order": {
             "number": "2024-0000000010484",
             "status": "Held at the regional distribution center awaiting customs clearance",
             "eta": "Estimated delivery between Monday, December 16 and Friday, December 20",
-            "total": "$12,345,678.90"
+            "total": "$12,345,678.90",
+            "delayed": true
           },
           "itemsLabel": "1,250 items"
         }
@@ -447,9 +515,13 @@ include awkward data. `views/order-status.mel.html`:
 <body>
   <main class="flex min-h-screen items-center justify-center bg-zinc-100 p-6">
     <article class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-900/5">
-      <p class="text-sm font-medium text-zinc-500">Order #<span m-text="order.number"></span></p>
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-sm font-medium text-zinc-500">Order #<span m-text="order.number"></span></p>
+        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800" m-show="order.delayed">Delayed</span>
+      </div>
       <h1 class="mt-1 text-xl font-semibold text-balance wrap-anywhere text-zinc-900" m-text="order.status"></h1>
-      <p class="mt-2 text-sm text-zinc-600 empty:hidden" m-text="order.eta"></p>
+      <p class="mt-2 text-sm text-zinc-600" m-if="order.eta" m-text="order.eta"></p>
+      <p class="mt-2 text-sm text-zinc-400" m-else>No delivery estimate yet</p>
       <dl class="mt-6 flex items-baseline justify-between gap-4 border-t border-zinc-100 pt-4">
         <dt class="text-sm text-zinc-500" m-text="itemsLabel"></dt>
         <dd class="truncate text-lg font-semibold tabular-nums text-zinc-900" m-text="order.total"></dd>
@@ -471,7 +543,8 @@ include awkward data. `views/order-status.mel.html`:
 ```
 
 `melzin check` prints `0 errors, 0 warnings in 1 file`. In the "no estimate yet" snapshot, `eta` is
-missing, the default `""` applies and `empty:hidden` hides the paragraph.
+missing, so the `m-else` paragraph shows instead. Only the last snapshot sets `delayed`; without it, the
+checker would warn that no snapshot shows the badge.
 
 `melzin types views/order-status.mel.html` writes:
 
@@ -481,10 +554,11 @@ export type Data = {
   order: {
     number: string
     status: string
-    /** Empty when there is no estimate yet */
+    /** Missing when there is no estimate yet */
     eta?: string
     /** Already formatted, like "$42.50" */
     total: string
+    delayed?: boolean
   }
   itemsLabel: string
 }

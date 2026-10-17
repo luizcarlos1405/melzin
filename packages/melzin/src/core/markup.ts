@@ -89,6 +89,14 @@ export function attributeProblem(name: string, value: string): MarkupProblem | u
   return undefined
 }
 
+/**
+ * Whether a text node is only HTML whitespace (spaces, tabs and line breaks), which may sit between
+ * the elements of an m-if chain. A no-break space is content, so it isn't.
+ */
+export function isInterElementWhitespace(text: string): boolean {
+  return /^[ \t\n\f\r]*$/.test(text)
+}
+
 /** Elements with no content, so m-text has nothing to set. */
 export const VOID_ELEMENTS: ReadonlySet<string> = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr',

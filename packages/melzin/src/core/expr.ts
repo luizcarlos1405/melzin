@@ -1,10 +1,11 @@
 // Tokenizer and recursive-descent parser for directive values. Values become syntax trees and are
 // never evaluated (P1, #24). Grammar for now:
 //
-//   expr   := path | call
-//   path   := ident ('.' ident)*
-//   call   := ident '(' (string (',' string)*)? ')'
-//   string := '…' | "…"
+//   expr    := '!'? operand
+//   operand := path | call
+//   path    := ident ('.' ident)*
+//   call    := ident '(' (string (',' string)*)? ')'
+//   string  := '…' | "…"
 //
 // Growing the language (operators, more calls, formatters) means extending this file.
 
@@ -13,14 +14,15 @@ import { CLICK_DIRECTIVE, EMIT_FUNCTION, NAME_HINTS, TEXT_DIRECTIVE, isIdent } f
 export type StringLit = { kind: 'string'; value: string; start: number; end: number }
 export type PathExpr = { kind: 'path'; segments: string[]; start: number; end: number }
 export type CallExpr = { kind: 'call'; callee: string; args: StringLit[]; start: number; end: number }
-export type Expr = PathExpr | CallExpr
+export type NotExpr = { kind: 'not'; operand: PathExpr | CallExpr; start: number; end: number }
+export type Expr = PathExpr | CallExpr | NotExpr
 
 /** `offset` is 0-based, into the directive value. */
 export type ParseError = { message: string; offset: number }
 
 export type ParseResult = { ok: true; expr: Expr } | { ok: false; message: string; offset: number }
 
-export type TokenKind = 'word' | 'string' | '.' | '(' | ')' | ',' | 'eof'
+export type TokenKind = 'word' | 'string' | '.' | '(' | ')' | ',' | '!' | 'eof'
 export type Token = { kind: TokenKind; value: string; start: number; end: number }
 
 class ExprSyntaxError extends Error {
@@ -32,7 +34,7 @@ class ExprSyntaxError extends Error {
 }
 
 const WHITESPACE = new Set([' ', '\t', '\n', '\r', '\f'])
-const PUNCTUATION = new Set(['.', '(', ')', ','])
+const PUNCTUATION = new Set(['.', '(', ')', ',', '!'])
 
 // Words are lexed loosely (letters, digits, _ and $) so the parser can say "'1x' isn't a valid name"
 // or give a hint for `$emit` instead of complaining about a single character.
@@ -170,6 +172,14 @@ class Parser {
   }
 
   private expr(): Expr {
+    const bang = this.peek()
+    if (bang.kind !== '!') return this.operand()
+    this.next()
+    const operand = this.operand()
+    return { kind: 'not', operand, start: bang.start, end: operand.end }
+  }
+
+  private operand(): PathExpr | CallExpr {
     const first = this.ident('a name')
     if (this.peek().kind === '(') return this.call(first)
     return this.path(first)
@@ -227,15 +237,62 @@ export function parseExpression(source: string): ParseResult {
 export type TextDirectiveResult = { ok: true; path: string[] } | { ok: false; message: string; offset: number }
 export type ClickDirectiveResult = { ok: true; event: string } | { ok: false; message: string; offset: number }
 
+/** What m-show, m-if and m-else-if test: the value at `path`, negated when written with `!`. */
+export type Condition = { path: string[]; negated: boolean }
+/** `pathStart` is the offset of the path, after any `!`. */
+export type ConditionDirectiveResult =
+  | { ok: true; condition: Condition; pathStart: number }
+  | { ok: false; message: string; offset: number }
+
 /** `m-text="user.name"` → `['user', 'name']`. */
 export function parseTextDirective(value: string): TextDirectiveResult {
   const result = parseExpression(value)
   if (!result.ok) return result
   const { expr } = result
+  if (expr.kind === 'not') {
+    return { ok: false, message: `${TEXT_DIRECTIVE} needs a path such as user.name; '!' only works in conditions (m-if, m-show)`, offset: expr.start }
+  }
   if (expr.kind !== 'path') {
     return { ok: false, message: `${TEXT_DIRECTIVE} needs a path such as user.name, not a call`, offset: expr.start }
   }
   return { ok: true, path: expr.segments }
+}
+
+// Characters that start the operators a condition might reach for: comparisons, && and ||, arithmetic
+// and ternaries. Conditions are paths for now, so these all get one message that names the workaround.
+const OPERATOR_CHARACTERS = new Set(['=', '<', '>', '&', '|', '+', '-', '*', '/', '%', '?', ':'])
+
+/** The operator that starts at `offset` (`>=`, `&&`, `!==`...), or undefined. */
+function operatorAt(source: string, offset: number): { text: string; start: number } | undefined {
+  if (!OPERATOR_CHARACTERS.has(source.charAt(offset))) return undefined
+  // The lexer reads the '!' of != and !== as a token of its own and stops at the '='.
+  const start = source.charAt(offset - 1) === '!' ? offset - 1 : offset
+  let end = offset
+  while (OPERATOR_CHARACTERS.has(source.charAt(end))) end++
+  return { text: source.slice(start, end), start }
+}
+
+/**
+ * `m-if="!user.bio"` → `{ path: ['user', 'bio'], negated: true }`. `directive` names the attribute in
+ * messages (m-show, m-if or m-else-if).
+ */
+export function parseConditionDirective(directive: string, value: string): ConditionDirectiveResult {
+  const result = parseExpression(value)
+  if (!result.ok) {
+    const operator = operatorAt(value, result.offset)
+    if (operator === undefined) return result
+    return {
+      ok: false,
+      message: `'${operator.text}' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes`,
+      offset: operator.start,
+    }
+  }
+  const { expr } = result
+  const operand = expr.kind === 'not' ? expr.operand : expr
+  if (operand.kind !== 'path') {
+    return { ok: false, message: `${directive} needs a condition such as user.verified or !user.verified, not a call`, offset: operand.start }
+  }
+  return { ok: true, condition: { path: operand.segments, negated: expr.kind === 'not' }, pathStart: operand.start }
 }
 
 const EXTRA_ARGUMENT_MESSAGE =

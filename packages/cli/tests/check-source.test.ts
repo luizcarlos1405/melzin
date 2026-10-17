@@ -161,9 +161,9 @@ describe('markup', () => {
     ])
   })
 
-  test('<template> is an error, and its content (never bound by the runtime) is not counted as displayed', () => {
+  test('<template> is an error, and its content (never bound by the runtime) is not counted as used', () => {
     expect(messages(checkSource(page(`<button m-on:click="emit('increment')">+</button><template><p m-text="count"></p></template>`)))).toEqual([
-      "warning: data field 'count' is never displayed",
+      "warning: data field 'count' is never used",
       "error: <template> isn't supported; its content would never be bound. Write the markup directly",
     ])
   })
@@ -172,9 +172,9 @@ describe('markup', () => {
     const schema =
       '{ "data": { "type": "object", "properties": { "user": { "type": "object", "properties": { "name": { "type": "string" }, "bio": { "type": "string" } } } } } }'
     expect(messages(checkSource(page('<p m-text="user.name"></p>', { schema, snapshots: '{ "a": {} }' })))).toEqual([
-      "warning: data field 'user.bio' is never displayed",
+      "warning: data field 'user.bio' is never used",
     ])
-    // A broken binding may be the missing display, so "never displayed" waits until it's fixed.
+    // A broken binding may be the missing use, so "never used" waits until it's fixed.
     expect(messages(checkSource(page('<p m-text="user.name"></p><p m-text="user.name.first"></p>', { schema, snapshots: '{ "a": {} }' })))).toEqual([
       "error: m-text: 'user.name' is a string and has no fields",
     ])
@@ -230,5 +230,138 @@ describe('review fixes', () => {
 
   test('a file with the wrong name gets only that error', () => {
     expect(messages(checkSource('just some notes', '/x/readme.txt'))).toEqual(["error: view files must be named *.mel.html (got 'readme.txt')"])
+  })
+})
+
+describe('conditions', () => {
+  const FLAGS = JSON.stringify({
+    data: {
+      type: 'object',
+      properties: {
+        count: { type: 'number' },
+        verified: { type: 'boolean' },
+        member: { type: 'boolean', default: true },
+        viewer: { type: 'object', properties: { following: { type: 'boolean' } }, required: ['following'] },
+        user: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+      },
+      required: ['count', 'user'],
+    },
+    events: { increment: {} },
+  })
+  const SNAPSHOTS = {
+    'signed out': { data: { count: 0, user: { name: 'A' } } },
+    following: { data: { count: 1, verified: true, member: false, user: { name: 'B' }, viewer: { following: true } } },
+    'not following': { data: { count: 2, user: { name: 'C' }, viewer: { following: false } } },
+  }
+  // Uses every leaf, so only what a test adds can produce diagnostics.
+  const USES = `<p m-text="count"></p><p m-text="user.name"></p><button m-on:click="emit('increment')">+</button>
+<i m-text="verified"></i><i m-text="viewer.following"></i><i m-text="member"></i>`
+  const flags = (body: string, snapshots: unknown = SNAPSHOTS): string =>
+    page(`${USES}\n${body}`, { schema: FLAGS, snapshots: JSON.stringify(snapshots) })
+
+  test('booleans, defaults, optional objects and negation, all covered by the snapshots', () => {
+    const body = `<b m-if="!viewer">Sign in</b>
+<b m-else-if="viewer.following">Following</b>
+<b m-else>Follow</b>
+<b m-if="member">Member</b><b m-else>Guest</b>`
+    expect(checkSource(flags(body))).toEqual([])
+  })
+
+  test('a condition counts as a use of its field; a broken one silences "never used"', () => {
+    const schema = '{ "data": { "type": "object", "properties": { "verified": { "type": "boolean" } } } }'
+    const snapshots = '{ "yes": { "data": { "verified": true } } }'
+    expect(checkSource(page('<b m-if="verified">✓</b>', { schema, snapshots }))).toEqual([])
+    expect(messages(checkSource(page('<b m-if="verifed">✓</b>', { schema, snapshots })))).toEqual([
+      "error: m-if: unknown field 'verifed' (did you mean 'verified'?)",
+    ])
+  })
+
+  test('comments and whitespace may sit between the branches; text or another element ends the chain', () => {
+    expect(checkSource(flags('<b m-if="verified">a</b>\n  <!-- or -->\n  <b m-else>b</b>'))).toEqual([])
+    expect(messages(checkSource(flags('<b m-if="verified">a</b><hr><b m-else>b</b>')))).toEqual([
+      'error: m-else must come right after an element with m-if or m-else-if',
+    ])
+    expect(messages(checkSource(flags('<b m-if="verified">a</b>&nbsp;<b m-else>b</b>')))).toEqual([
+      'error: m-else must come right after an element with m-if or m-else-if',
+    ])
+  })
+
+  test('an element the runtime drops does not end a chain', () => {
+    expect(messages(checkSource(flags('<b m-if="verified">a</b><script>x()</script><b m-else>b</b>')))).toEqual([
+      "error: <script> isn't allowed in the body; views have no scripts",
+    ])
+  })
+
+  test('an m-else-if with no chain starts one, so only it is reported', () => {
+    expect(messages(checkSource(flags('<b m-else-if="verified">a</b><b m-else>b</b>')))).toEqual([
+      'error: m-else-if must come right after an element with m-if or m-else-if',
+    ])
+  })
+
+  test('positions point at the path after the !, and m-text takes no !', () => {
+    const source = flags('<b m-if="! verifed">a</b>')
+    expect(checkSource(source)).toEqual([
+      { ...at(source, 'verifed"'), severity: 'error', message: "m-if: unknown field 'verifed' (did you mean 'verified'?)" },
+    ])
+    expect(messages(checkSource(flags('<p m-text="!count"></p>')))).toEqual([
+      "error: m-text: m-text needs a path such as user.name; '!' only works in conditions (m-if, m-show)",
+    ])
+  })
+
+  test('a required object is always present', () => {
+    expect(messages(checkSource(flags('<b m-if="!user">Nobody</b>')))).toEqual([
+      "warning: m-if: 'user' is a required object, so this condition is always false",
+    ])
+  })
+
+  describe('snapshot coverage', () => {
+    test('an m-else that no snapshot reaches', () => {
+      const source = flags('<b m-if="count">Some</b><b m-else>None</b>', { ...SNAPSHOTS, 'signed out': { data: { count: 5, user: { name: 'A' } } } })
+      expect(checkSource(source)).toEqual([
+        {
+          ...at(source, 'm-else>None'),
+          severity: 'warning',
+          message: 'no snapshot shows this element; add one where the conditions before its m-else are all false',
+        },
+      ])
+    })
+
+    test('defaults decide when the snapshots leave a field out', () => {
+      const snapshots = { a: { data: { count: 0, user: { name: 'A' }, verified: true, viewer: { following: true } } } }
+      expect(messages(checkSource(flags('<b m-if="!member">Guest</b>', snapshots)))).toEqual([
+        'warning: no snapshot shows this element; add one where m-if="!member" holds',
+      ])
+    })
+
+    test('m-if and m-show on one element must hold together', () => {
+      expect(messages(checkSource(flags('<b m-if="viewer" m-show="count">x</b>', { following: SNAPSHOTS.following, 'signed out': SNAPSHOTS['signed out'] })))).toEqual([])
+      expect(messages(checkSource(flags('<b m-if="viewer" m-show="!count">x</b>')))).toEqual([
+        'warning: no snapshot shows this element; add one where m-if="viewer" holds and m-show="!count" holds',
+      ])
+    })
+
+    test('inside another condition: reported when its own conditions only hold where the outer element is hidden', () => {
+      const snapshots = { 'signed out': SNAPSHOTS['signed out'], following: SNAPSHOTS.following }
+      expect(messages(checkSource(flags('<div m-if="viewer"><b m-if="!viewer.following">Follow</b></div>', snapshots)))).toEqual([
+        'warning: no snapshot shows this element; its conditions only hold where an element around it is hidden',
+      ])
+    })
+
+    test('an element inside one that never shows is not reported again', () => {
+      const snapshots = { 'signed out': SNAPSHOTS['signed out'], 'not following': SNAPSHOTS['not following'] }
+      expect(messages(checkSource(flags('<div m-if="verified"><b m-show="viewer.following">x</b></div>', snapshots)))).toEqual([
+        'warning: no snapshot shows this element; add one where m-if="verified" holds',
+      ])
+    })
+
+    test('waits until the snapshots are valid, and needs snapshots', () => {
+      const typo = { ...SNAPSHOTS, following: { data: { count: 1, user: { name: 'B' }, viewr: { following: true } } } }
+      expect(messages(checkSource(flags('<b m-if="viewer.following">x</b>', typo)))).toEqual([
+        "error: snapshots[\"following\"].data.viewr: unknown field 'viewr' (did you mean 'viewer'?)",
+      ])
+      expect(messages(checkSource(page(`${USES}<b m-if="verified">x</b>`, { schema: FLAGS, snapshots: null })))).toEqual([
+        'warning: the view has data fields but no snapshots; add a melzin/snapshots block with sample states, awkward ones included (very long text, zero, huge numbers)',
+      ])
+    })
   })
 })

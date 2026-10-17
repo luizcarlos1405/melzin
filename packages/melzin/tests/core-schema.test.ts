@@ -5,6 +5,7 @@ import {
   hasField,
   joinPath,
   leafPaths,
+  resolveField,
   resolvePath,
   suggest,
   validateData,
@@ -303,6 +304,40 @@ describe('resolvePath', () => {
 
   test('leaves have no fields', () => {
     expect(resolvePath(schema, ['user', 'name', 'first'])).toEqual({ ok: false, message: "'user.name' is a string and has no fields" })
+  })
+})
+
+describe('resolveField', () => {
+  const schema = valid(profile)
+
+  test('leaves and objects resolve, with their schema', () => {
+    expect(resolveField(schema, ['user', 'bio'])).toEqual({ ok: true, field: { type: 'string', default: '' }, required: false })
+    const user = resolveField(schema, ['user'])
+    expect(user.ok && user.field.type).toBe('object')
+  })
+
+  test('required means every step of the path is required', () => {
+    expect(resolveField(schema, ['user'])).toMatchObject({ ok: true, required: true })
+    expect(resolveField(schema, ['user', 'name'])).toMatchObject({ ok: true, required: true })
+    expect(resolveField(schema, ['user', 'bio'])).toMatchObject({ ok: true, required: false })
+    expect(resolveField(schema, ['verified'])).toMatchObject({ ok: true, required: false })
+    const nested = valid({
+      data: {
+        type: 'object',
+        properties: { viewer: { type: 'object', properties: { following: { type: 'boolean' } }, required: ['following'] } },
+      },
+    })
+    expect(resolveField(nested, ['viewer', 'following'])).toMatchObject({ ok: true, required: false })
+  })
+
+  test('the same messages as resolvePath for paths that go nowhere', () => {
+    for (const path of [['x'], ['user', 'nam'], ['name'], ['user', 'name', 'first'], ['data', 'user', 'name']]) {
+      expect(resolveField(schema, path)).toEqual(resolvePath(schema, path) as never)
+    }
+  })
+
+  test("the 'data.' hint also points at objects", () => {
+    expect(resolveField(schema, ['data', 'user'])).toEqual({ ok: false, message: "unknown field 'data' (paths start inside data: use 'user')" })
   })
 })
 
