@@ -7,6 +7,7 @@ everything.
 | Example | What it shows |
 |---|---|
 | [poll](poll/) | a meetup poll: views with data and events, a small Bun backend, generated types, a contract test and API tests |
+| [profile](profile/) | a member profile with a follow button: conditionals (`m-if`, `m-else-if`, `m-else`, `m-show`) driven by who is looking, fallbacks for optional fields, and view tests that mount the real view in happy-dom |
 
 ## Adding an example
 

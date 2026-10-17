@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Profile</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "handle": { "type": "string", "description": "Without the @" },
+              "initials": { "type": "string", "description": "One or two letters for the avatar" },
+              "verified": { "type": "boolean" },
+              "pronouns": { "type": "string" },
+              "bio": { "type": "string" },
+              "location": { "type": "string" },
+              "joined": { "type": "string", "description": "Like \"Joined March 2021\"" }
+            },
+            "required": ["name", "handle", "initials", "verified", "joined"]
+          },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "posts": { "type": "string", "description": "Formatted to fit, like \"1,204\" or \"18.2K\"" },
+              "followers": { "type": "string", "description": "Formatted to fit, like \"1,204\" or \"18.2K\"" },
+              "following": { "type": "string", "description": "Formatted to fit, like \"1,204\" or \"18.2K\"" }
+            },
+            "required": ["posts", "followers", "following"]
+          },
+          "viewer": {
+            "type": "object",
+            "description": "How the signed-in person relates to this profile; missing when nobody is signed in",
+            "properties": {
+              "isSelf": { "type": "boolean", "description": "The viewer is looking at their own profile" },
+              "following": { "type": "boolean", "description": "The viewer follows this profile" },
+              "followsYou": { "type": "boolean", "description": "This profile follows the viewer" }
+            },
+            "required": ["isSelf", "following", "followsYou"]
+          }
+        },
+        "required": ["user", "stats"]
+      },
+      "events": {
+        "follow": { "description": "The viewer wants to follow this profile" },
+        "unfollow": { "description": "The viewer wants to stop following this profile" },
+        "signIn": { "description": "Someone who isn't signed in wants to follow" }
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "signed out": {
+        "data": {
+          "user": {
+            "name": "Bruno Lima",
+            "handle": "bruno",
+            "initials": "BL",
+            "verified": false,
+            "pronouns": "he/him",
+            "bio": "Backend engineer. Writes about queues, caches and the bugs that live between them.",
+            "location": "Lisbon, Portugal",
+            "joined": "Joined March 2021"
+          },
+          "stats": { "posts": "312", "followers": "2,481", "following": "190" }
+        }
+      },
+      "follows you": {
+        "data": {
+          "user": {
+            "name": "Bruno Lima",
+            "handle": "bruno",
+            "initials": "BL",
+            "verified": false,
+            "pronouns": "he/him",
+            "bio": "Backend engineer. Writes about queues, caches and the bugs that live between them.",
+            "location": "Lisbon, Portugal",
+            "joined": "Joined March 2021"
+          },
+          "stats": { "posts": "312", "followers": "2,481", "following": "190" },
+          "viewer": { "isSelf": false, "following": false, "followsYou": true }
+        }
+      },
+      "following": {
+        "data": {
+          "user": {
+            "name": "Ana Souza",
+            "handle": "ana",
+            "initials": "AS",
+            "verified": true,
+            "pronouns": "she/her",
+            "bio": "Designs tools for people who make things. Coffee, maps and long walks.",
+            "location": "Recife, Brazil",
+            "joined": "Joined June 2019"
+          },
+          "stats": { "posts": "1,204", "followers": "18.2K", "following": "312" },
+          "viewer": { "isSelf": false, "following": true, "followsYou": false }
+        }
+      },
+      "your own profile": {
+        "data": {
+          "user": {
+            "name": "Ana Souza",
+            "handle": "ana",
+            "initials": "AS",
+            "verified": true,
+            "pronouns": "she/her",
+            "bio": "Designs tools for people who make things. Coffee, maps and long walks.",
+            "location": "Recife, Brazil",
+            "joined": "Joined June 2019"
+          },
+          "stats": { "posts": "1,204", "followers": "18.2K", "following": "312" },
+          "viewer": { "isSelf": true, "following": false, "followsYou": false }
+        }
+      },
+      "empty profile": {
+        "data": {
+          "user": { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "verified": false, "joined": "Joined September 2026" },
+          "stats": { "posts": "0", "followers": "0", "following": "1" },
+          "viewer": { "isSelf": false, "following": false, "followsYou": false }
+        }
+      },
+      "very long everything": {
+        "data": {
+          "user": {
+            "name": "Maria Aparecida dos Santos Albuquerque de Oliveira e Vasconcelos Bragança",
+            "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos",
+            "initials": "MB",
+            "verified": true,
+            "pronouns": "she/her/ela/dela",
+            "bio": "Principal engineer, part-time ceramicist and full-time collector of unfinished side projects. Ask me about distributed consensus, sourdough hydration ratios, the best bakeries between Porto and Coimbra, or why every calendar app eventually reinvents time zones badly. Opinions are my cat's.",
+            "location": "São José dos Campos, São Paulo, Brazil (and sometimes Lisbon)",
+            "joined": "Joined December 2009"
+          },
+          "stats": { "posts": "123.5M", "followers": "98.8M", "following": "1.2M" },
+          "viewer": { "isSelf": false, "following": false, "followsYou": true }
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="px-4 py-8 sm:py-14">
+    <article class="mx-auto w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-xl shadow-brand-950/10 ring-1 ring-stone-900/5">
+      <div class="h-28 bg-linear-to-br from-brand-300 via-brand-500 to-brand-700 sm:h-36" aria-hidden="true"></div>
+
+      <div class="px-5 pb-6 sm:px-8 sm:pb-8">
+        <div class="-mt-12 flex items-end justify-between gap-3 sm:-mt-14">
+          <p class="flex size-24 shrink-0 items-center justify-center rounded-full bg-brand-100 text-3xl font-semibold tracking-tight text-brand-800 ring-4 ring-white sm:size-28 sm:text-4xl" aria-hidden="true" m-text="user.initials"></p>
+
+          <!-- One of four actions, depending on who is looking. -->
+          <div class="pb-1">
+            <button type="button" class="cursor-pointer rounded-full bg-stone-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-stone-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900 active:scale-95" m-if="!viewer" m-on:click="emit('signIn')">Sign in to follow</button>
+            <p class="flex items-center gap-1.5 rounded-full bg-stone-100 px-4 py-2 text-sm font-medium text-stone-600" m-else-if="viewer.isSelf">
+              <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="4"></circle>
+                <path d="M4 20c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"></path>
+              </svg>
+              This is you
+            </p>
+            <button type="button" class="group flex cursor-pointer items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-stone-800 ring-1 ring-stone-300 transition hover:bg-rose-50 hover:text-rose-700 hover:ring-rose-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-900 active:scale-95" m-else-if="viewer.following" m-on:click="emit('unfollow')">
+              <svg class="size-4 shrink-0 group-hover:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="m5 12.5 4.5 4.5L19 7.5"></path>
+              </svg>
+              <span class="group-hover:hidden">Following</span>
+              <span class="hidden group-hover:inline">Unfollow</span>
+            </button>
+            <button type="button" class="flex cursor-pointer items-center gap-1.5 rounded-full bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-900/20 transition hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 active:scale-95" m-else m-on:click="emit('follow')">
+              <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+              <span m-if="viewer.followsYou">Follow back</span>
+              <span m-else>Follow</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h1 class="min-w-0 text-2xl leading-tight font-semibold tracking-tight text-balance wrap-anywhere text-stone-900" m-text="user.name"></h1>
+            <span class="text-brand-600" m-show="user.verified">
+              <svg class="size-5" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" fill="currentColor"></circle>
+                <path d="m7.8 12.4 2.8 2.8 5.6-5.8" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <span class="sr-only">Verified</span>
+            </span>
+            <span class="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600" m-if="user.pronouns" m-text="user.pronouns"></span>
+          </div>
+          <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-500">
+            <span class="min-w-0 wrap-anywhere">@<span m-text="user.handle"></span></span>
+            <span class="rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700" m-show="viewer.followsYou">Follows you</span>
+          </p>
+        </div>
+
+        <p class="mt-4 text-[15px] leading-relaxed text-pretty wrap-anywhere text-stone-700" m-if="user.bio" m-text="user.bio"></p>
+        <p class="mt-4 text-sm text-stone-400 italic" m-else>No bio yet.</p>
+
+        <ul class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-stone-500">
+          <li class="flex min-w-0 items-start gap-1.5" m-if="user.location">
+            <svg class="mt-0.5 size-4 shrink-0 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11Z"></path>
+              <circle cx="12" cy="10" r="2.3"></circle>
+            </svg>
+            <span class="min-w-0 wrap-anywhere" m-text="user.location"></span>
+          </li>
+          <li class="flex items-center gap-1.5">
+            <svg class="size-4 shrink-0 text-stone-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="15" rx="2.5"></rect>
+              <path d="M4 10h16M9 3v4M15 3v4"></path>
+            </svg>
+            <span m-text="user.joined"></span>
+          </li>
+        </ul>
+
+        <dl class="mt-6 grid grid-cols-3 divide-x divide-stone-200/70 rounded-2xl bg-stone-50 ring-1 ring-stone-900/5">
+          <div class="min-w-0 px-2 py-3 text-center sm:px-4">
+            <dt class="text-xs font-medium tracking-wide text-stone-500 uppercase">Posts</dt>
+            <dd class="mt-0.5 truncate text-lg font-semibold tabular-nums text-stone-900" m-text="stats.posts"></dd>
+          </div>
+          <div class="min-w-0 px-2 py-3 text-center sm:px-4">
+            <dt class="text-xs font-medium tracking-wide text-stone-500 uppercase">Followers</dt>
+            <dd class="mt-0.5 truncate text-lg font-semibold tabular-nums text-stone-900" m-text="stats.followers"></dd>
+          </div>
+          <div class="min-w-0 px-2 py-3 text-center sm:px-4">
+            <dt class="text-xs font-medium tracking-wide text-stone-500 uppercase">Following</dt>
+            <dd class="mt-0.5 truncate text-lg font-semibold tabular-nums text-stone-900" m-text="stats.following"></dd>
+          </div>
+        </dl>
+      </div>
+    </article>
+  </main>
+</body>
+</html>
