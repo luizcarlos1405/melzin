@@ -81,7 +81,7 @@ describe('positions', () => {
 
 describe('schema-less views', () => {
   test('a static view is clean', () => {
-    expect(checkSource(page('<h1 class="text-xl">Hi</h1>', { schema: null, snapshots: null }), 'a.melzin.html')).toEqual([])
+    expect(checkSource(page('<h1 class="text-xl">Hi</h1>', { schema: null, snapshots: null }), 'a.mel.html')).toEqual([])
   })
 
   test('m-text and m-on:click need a schema', () => {
@@ -229,6 +229,6 @@ describe('review fixes', () => {
   })
 
   test('a file with the wrong name gets only that error', () => {
-    expect(messages(checkSource('just some notes', '/x/readme.txt'))).toEqual(["error: view files must be named *.melzin.html (got 'readme.txt')"])
+    expect(messages(checkSource('just some notes', '/x/readme.txt'))).toEqual(["error: view files must be named *.mel.html (got 'readme.txt')"])
   })
 })

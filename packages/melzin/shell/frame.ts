@@ -1,4 +1,4 @@
-// One render of one view: `/frame?view=counter.melzin.html&snapshot=zero`. The frame is the view's
+// One render of one view: `/frame?view=counter.mel.html&snapshot=zero`. The frame is the view's
 // mock host. It mounts the view through the real runtime with the snapshot's data, gives it a
 // handler for every declared event, and reports events and warnings to the shell. The shell sends
 // new data with a "set-data" message, applied with `view.update`.

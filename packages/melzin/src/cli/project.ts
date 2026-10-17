@@ -24,8 +24,8 @@ export type Project = {
   /** Absolute theme file path (check `existsSync` before reading). */
   themeFile: string
   /**
-   * Absolute paths of the `*.melzin.html` files directly inside viewsDir, sorted by name. Dotfiles
-   * (such as an editor's `.#name.melzin.html` lock file) and entries that can't be read are skipped.
+   * Absolute paths of the `*.mel.html` files directly inside viewsDir, sorted by name. Dotfiles
+   * (such as an editor's `.#name.mel.html` lock file) and entries that can't be read are skipped.
    */
   listViews(): string[]
 }
@@ -74,7 +74,7 @@ function isInside(dir: string, path: string): boolean {
 /**
  * Maps the part of a `/views/<file>` URL after the prefix to a view file's absolute path, or null.
  * Every server that serves view files (the shell, the counter example, apps) uses this guard.
- * Only `*.melzin.html` files directly inside the views dir qualify: no separators, no `..`, no
+ * Only `*.mel.html` files directly inside the views dir qualify: no separators, no `..`, no
  * dotfiles, and the real path (after symlinks) must still be inside the views dir.
  */
 export function resolveViewFile(project: Project, rawName: string): string | null {

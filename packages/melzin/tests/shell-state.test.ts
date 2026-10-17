@@ -107,7 +107,7 @@ describe('URL state', () => {
   })
 
   test('accepts a file name for view and falls back on bad values', () => {
-    const state = parseShellState('?view=profile-card.melzin.html&device=huge&zoom=abc&snapshot=&chrome=1')
+    const state = parseShellState('?view=profile-card.mel.html&device=huge&zoom=abc&snapshot=&chrome=1')
     expect(state).toEqual({ ...defaultShellState(), view: 'profile-card' })
     expect(parseShellState('?chrome=false').chrome).toBe(false)
     expect(parseShellState('?chrome=yes').chrome).toBe(true)
@@ -123,15 +123,15 @@ describe('URL state', () => {
   })
 
   test('frame and view file URLs', () => {
-    expect(viewName('counter.melzin.html')).toBe('counter')
+    expect(viewName('counter.mel.html')).toBe('counter')
     expect(viewName('counter')).toBe('counter')
-    expect(viewFileName('counter')).toBe('counter.melzin.html')
-    expect(viewFileName('counter.melzin.html')).toBe('counter.melzin.html')
+    expect(viewFileName('counter')).toBe('counter.mel.html')
+    expect(viewFileName('counter.mel.html')).toBe('counter.mel.html')
     expect(viewFileName('')).toBe('')
-    expect(frameUrl('counter.melzin.html', 'a few clicks')).toBe('/frame?view=counter.melzin.html&snapshot=a+few+clicks')
-    expect(frameUrl('hello.melzin.html', null)).toBe('/frame?view=hello.melzin.html')
-    expect(new URLSearchParams(frameUrl('x.melzin.html', 'a&b=c').split('?')[1]).get('snapshot')).toBe('a&b=c')
-    expect(viewFileUrl('my view.melzin.html')).toBe('/views/my%20view.melzin.html')
+    expect(frameUrl('counter.mel.html', 'a few clicks')).toBe('/frame?view=counter.mel.html&snapshot=a+few+clicks')
+    expect(frameUrl('hello.mel.html', null)).toBe('/frame?view=hello.mel.html')
+    expect(new URLSearchParams(frameUrl('x.mel.html', 'a&b=c').split('?')[1]).get('snapshot')).toBe('a&b=c')
+    expect(viewFileUrl('my view.mel.html')).toBe('/views/my%20view.mel.html')
   })
 })
 

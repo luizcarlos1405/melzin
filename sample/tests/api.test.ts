@@ -49,7 +49,7 @@ describe('poll API', () => {
     expect(response.headers.get('content-type')).toContain('application/json')
     const body = await response.json()
     expect(body).toEqual(toViewModel({ pizza: 2, tacos: 1, sushi: 0 }))
-    const { schema } = await loadViewFile(join(import.meta.dir, '..', 'views', 'poll.melzin.html'))
+    const { schema } = await loadViewFile(join(import.meta.dir, '..', 'views', 'poll.mel.html'))
     expect(validateData(schema, body)).toEqual([])
   })
 
@@ -92,7 +92,7 @@ describe('poll API', () => {
   })
 
   test('view files carry the sandbox CSP', async () => {
-    const response = await fetch(`${base}/views/poll.melzin.html`)
+    const response = await fetch(`${base}/views/poll.mel.html`)
     expect(response.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
   })
 
@@ -103,7 +103,7 @@ describe('poll API', () => {
 
 describe('static routes', () => {
   test('view files are served verbatim', async () => {
-    for (const name of ['poll.melzin.html', 'header.melzin.html']) {
+    for (const name of ['poll.mel.html', 'header.mel.html']) {
       const response = await fetch(`${base}/views/${name}`)
       expect(response.status).toBe(200)
       expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
@@ -116,11 +116,11 @@ describe('static routes', () => {
     for (const path of [
       '/views/',
       '/views/poll.types.ts',
-      '/views/missing.melzin.html',
+      '/views/missing.mel.html',
       '/views/..%2Fpackage.json',
       '/views/%2e%2e%2fpackage.json',
       '/views/..%5Cpackage.json',
-      '/views/%2e%2e%2fviews%2fpoll.melzin.html',
+      '/views/%2e%2e%2fviews%2fpoll.mel.html',
       '/views/%ZZ',
     ]) {
       expect({ path, status: (await fetch(`${base}${path}`)).status }).toEqual({ path, status: 404 })

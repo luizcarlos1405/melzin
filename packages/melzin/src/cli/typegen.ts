@@ -50,7 +50,7 @@ export function generateTypes(schema: MelzinSchema | null, sourceName: string): 
   ].join('\n')
 }
 
-/** `views/counter.melzin.html` → `views/counter.types.ts`. */
+/** `views/counter.mel.html` → `views/counter.types.ts`. */
 export function typesPathFor(viewPath: string): string {
   const name = basename(viewPath)
   const stem = name.endsWith(VIEW_FILE_SUFFIX) ? name.slice(0, -VIEW_FILE_SUFFIX.length) : name.replace(/\.[^.]*$/, '')

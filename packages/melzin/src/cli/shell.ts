@@ -23,7 +23,7 @@ export const VIEWS_PATH_PREFIX = '/views/'
 
 /** One entry of `/__melzin/api/views`. */
 export type ViewEntry = {
-  /** File name minus `.melzin.html`, as used in the shell's `?view=` parameter. */
+  /** File name minus `.mel.html`, as used in the shell's `?view=` parameter. */
   name: string
   /** File name inside the views directory. */
   file: string

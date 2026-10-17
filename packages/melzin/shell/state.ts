@@ -82,7 +82,7 @@ export function stepZoom(zoom: number, direction: 1 | -1): number {
 
 /** Everything the shell keeps in its URL. */
 export type ShellState = {
-  /** View name (file name minus `.melzin.html`); null picks the first view. */
+  /** View name (file name minus `.mel.html`); null picks the first view. */
   view: string | null
   device: Device
   zoom: number
@@ -122,17 +122,17 @@ export function serializeShellState(state: ShellState): string {
   return `?${params.toString()}`
 }
 
-/** `counter.melzin.html` → `counter`; a bare name is returned unchanged. */
+/** `counter.mel.html` → `counter`; a bare name is returned unchanged. */
 export function viewName(fileOrName: string): string {
   return fileOrName.endsWith(VIEW_FILE_SUFFIX) ? fileOrName.slice(0, -VIEW_FILE_SUFFIX.length) : fileOrName
 }
 
-/** `counter` → `counter.melzin.html`; a file name is returned unchanged ('' stays ''). */
+/** `counter` → `counter.mel.html`; a file name is returned unchanged ('' stays ''). */
 export function viewFileName(nameOrFile: string): string {
   return nameOrFile === '' || nameOrFile.endsWith(VIEW_FILE_SUFFIX) ? nameOrFile : `${nameOrFile}${VIEW_FILE_SUFFIX}`
 }
 
-/** The frame page for one render: `/frame?view=counter.melzin.html&snapshot=zero`. */
+/** The frame page for one render: `/frame?view=counter.mel.html&snapshot=zero`. */
 export function frameUrl(file: string, snapshot: string | null): string {
   const params = new URLSearchParams({ view: file })
   if (snapshot !== null) params.set('snapshot', snapshot)

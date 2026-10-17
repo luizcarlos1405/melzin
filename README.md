@@ -36,7 +36,7 @@ every state and the front end you ship. Nothing gets handed off or translated be
 
 ## A quick look
 
-A view, `views/counter.melzin.html` (trimmed):
+A view, `views/counter.mel.html` (trimmed):
 
 ```html
 <head>
@@ -61,8 +61,8 @@ The checker explains mistakes the way a compiler does. With a typo and Vue's `$e
 
 ```
 $ melzin check
-views/counter.melzin.html:30:70: error: m-text: unknown field 'cuont' (did you mean 'count'?)
-views/counter.melzin.html:32:25: error: m-on:click: use emit('name') instead of Vue's $emit
+views/counter.mel.html:30:70: error: m-text: unknown field 'cuont' (did you mean 'count'?)
+views/counter.mel.html:32:25: error: m-on:click: use emit('name') instead of Vue's $emit
 ```
 
 `melzin types` turns the schema into TypeScript, and the host mounts the same file in production:
@@ -72,7 +72,7 @@ import { mount } from 'melzin'
 import type { Data, Handlers } from './views/counter.types.ts'
 
 let count = 0
-const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/views/counter.melzin.html', {
+const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/views/counter.mel.html', {
   data: { count },
   on: { increment: () => view.update({ count: ++count }) },
 })
@@ -83,7 +83,7 @@ The view never changes its own data. It emits `increment`, the host decides what
 
 ## How it works
 
-1. **Write** a `*.melzin.html` view. [docs/authoring.md](docs/authoring.md) is the complete guide, written
+1. **Write** a `*.mel.html` view. [docs/authoring.md](docs/authoring.md) is the complete guide, written
    so an AI can follow it with no other context.
 2. **Check** it with `melzin check` until it's clean.
 3. **Preview** it with `melzin shell`: every snapshot in its own frame at phone, tablet or desktop size,

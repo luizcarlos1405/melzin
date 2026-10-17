@@ -11,7 +11,7 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   check: {
     run: async (args) => (await import('./check.ts')).runCheck(args),
     usage: 'melzin check [files...] [--views dir]',
-    summary: 'check view files (default: every *.melzin.html in the views dir)',
+    summary: 'check view files (default: every *.mel.html in the views dir)',
   },
   types: {
     run: async (args) => (await import('./types.ts')).runTypes(args),

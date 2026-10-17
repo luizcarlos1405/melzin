@@ -24,7 +24,7 @@ const hosts: Host[] = [
     errors: [],
     body: `
       let count = 0
-      const view = await mount<Data, Handlers>(el, '/views/counter.melzin.html', {
+      const view = await mount<Data, Handlers>(el, '/views/counter.mel.html', {
         data: { count },
         on: { increment: (payload) => { const nothing: undefined = payload; void nothing; view.update({ count: ++count }) } },
       })
@@ -125,8 +125,8 @@ let output = ''
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'melzin-tsc-'))
   for (const name of ['counter', 'nested', 'no-data', 'no-events']) {
-    const view = await loadViewFile(join(fixtures, `${name}.melzin.html`))
-    writeFileSync(join(dir, `${name}.types.ts`), generateTypes(view.schema, `${name}.melzin.html`))
+    const view = await loadViewFile(join(fixtures, `${name}.mel.html`))
+    writeFileSync(join(dir, `${name}.types.ts`), generateTypes(view.schema, `${name}.mel.html`))
   }
   for (const host of hosts) {
     const source = [

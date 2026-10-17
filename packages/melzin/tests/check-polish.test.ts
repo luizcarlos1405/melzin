@@ -25,9 +25,9 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('stale types', () => {
   test('a types file with CRLF line endings is still up to date', async () => {
-    const view = join(dir, 'counter.melzin.html')
+    const view = join(dir, 'counter.mel.html')
     writeFileSync(view, VIEW)
-    const types = generateTypes(loadViewSource(VIEW).schema, 'counter.melzin.html')
+    const types = generateTypes(loadViewSource(VIEW).schema, 'counter.mel.html')
     writeFileSync(join(dir, 'counter.types.ts'), types.replace(/\n/g, '\r\n'))
     const result = await checkFiles([view], { cwd: dir })
     expect(result.files[0]!.diagnostics).toEqual([])
@@ -37,7 +37,7 @@ describe('stale types', () => {
 describe('hint wording', () => {
   test('a whole-number snapshot named 1 suggests "one item"', () => {
     const source = VIEW.replace('{ "zero": { "data": { "count": 0 } } }', '{ "1": { "data": { "count": 1 } } }')
-    const messages = checkSource(source, 'counter.melzin.html').map((d) => d.message)
+    const messages = checkSource(source, 'counter.mel.html').map((d) => d.message)
     expect(messages.some((m) => m.endsWith('use words, such as "one item"'))).toBe(true)
   })
 })

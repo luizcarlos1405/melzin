@@ -1,5 +1,5 @@
 // The counter's production page (POC.md §7): the host owns the count and mounts the same view file
-// the shell previews. The types come from `melzin types views/counter.melzin.html`, so a missing or
+// the shell previews. The types come from `melzin types views/counter.mel.html`, so a missing or
 // misspelled handler fails `tsc`.
 
 import { mount } from '../../src/runtime/mount.ts'
@@ -8,7 +8,7 @@ import type { Data, Handlers } from '../../views/counter.types.ts'
 await linkStylesheet('/styles.css')
 
 let count = 0
-const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/views/counter.melzin.html', {
+const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/views/counter.mel.html', {
   data: { count },
   on: { increment: () => view.update({ count: ++count }) },
 })

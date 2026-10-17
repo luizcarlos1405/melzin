@@ -24,16 +24,16 @@ test('/ serves the page with the bundled main.ts', async () => {
   const script = html.match(/<script[^>]*src="([^"]+\.js)"/)?.[1]
   expect(script).toBeDefined()
   const js = await (await fetch(new URL(script!, `${base}/`))).text()
-  expect(js).toContain('/views/counter.melzin.html')
+  expect(js).toContain('/views/counter.mel.html')
   expect(js).toContain('/styles.css')
 })
 
-test('/views/counter.melzin.html is the file, byte for byte', async () => {
-  const response = await fetch(`${base}/views/counter.melzin.html`)
+test('/views/counter.mel.html is the file, byte for byte', async () => {
+  const response = await fetch(`${base}/views/counter.mel.html`)
   expect(response.status).toBe(200)
   expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
   expect(response.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
-  const file = Bun.file(join(import.meta.dir, '..', '..', 'views', 'counter.melzin.html'))
+  const file = Bun.file(join(import.meta.dir, '..', '..', 'views', 'counter.mel.html'))
   expect(new Uint8Array(await response.arrayBuffer())).toEqual(await file.bytes())
 })
 
@@ -52,10 +52,10 @@ test('only view files in the views dir are served', async () => {
     '/views/..%2Fpackage.json',
     '/views/%2e%2e%2fpackage.json',
     '/views/..%5Cpackage.json',
-    '/views/%2e%2e%2fviews%2fcounter.melzin.html',
+    '/views/%2e%2e%2fviews%2fcounter.mel.html',
     '/views/',
     '/views/%ZZ',
-    '/views/missing.melzin.html',
+    '/views/missing.mel.html',
     '/views/counter.types.ts',
     '/package.json',
   ]) {

@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   const initial = await request('/api/poll')
 
   // A static view: no data, no events.
-  await mount(element('#header'), '/views/header.melzin.html', { data: {}, on: {} })
+  await mount(element('#header'), '/views/header.mel.html', { data: {}, on: {} })
 
   // `latest` orders responses so a slow refresh never overwrites a newer vote result.
   let latest = 0
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   }
 
   // The generated types make tsc reject a missing or misspelled handler and data of the wrong shape.
-  const view: MelzinView<Data> = await mount<Data, Handlers>(element('#poll'), '/views/poll.melzin.html', {
+  const view: MelzinView<Data> = await mount<Data, Handlers>(element('#poll'), '/views/poll.mel.html', {
     data: initial,
     on: {
       votePizza: () => void vote('pizza'),

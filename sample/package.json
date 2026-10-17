@@ -7,7 +7,7 @@
     "dev": "bun server.ts",
     "start": "NODE_ENV=production bun server.ts",
     "check": "melzin check",
-    "types": "melzin types views/poll.melzin.html",
+    "types": "melzin types views/poll.mel.html",
     "shell": "melzin shell",
     "typecheck": "tsc --noEmit",
     "test": "bun test"

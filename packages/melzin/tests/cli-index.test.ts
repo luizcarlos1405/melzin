@@ -48,11 +48,11 @@ describe('resolveProject', () => {
       expect(empty.viewsDir).toBe(join(dir, 'views'))
       expect(empty.themeFile).toBe(join(dir, 'theme.css'))
       expect(empty.listViews()).toEqual([])
-      mkdirSync(join(dir, 'views/nested.melzin.html'), { recursive: true })
-      for (const name of ['b.melzin.html', 'a.melzin.html', 'notes.html', 'c.types.ts']) {
+      mkdirSync(join(dir, 'views/nested.mel.html'), { recursive: true })
+      for (const name of ['b.mel.html', 'a.mel.html', 'notes.html', 'c.types.ts']) {
         writeFileSync(join(dir, 'views', name), '')
       }
-      expect(empty.listViews()).toEqual([join(dir, 'views/a.melzin.html'), join(dir, 'views/b.melzin.html')])
+      expect(empty.listViews()).toEqual([join(dir, 'views/a.mel.html'), join(dir, 'views/b.mel.html')])
       const custom = resolveProject({ cwd: dir, views: 'pages', theme: 'styles/theme.css' })
       expect(custom.viewsDir).toBe(join(dir, 'pages'))
       expect(custom.themeFile).toBe(join(dir, 'styles/theme.css'))

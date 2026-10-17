@@ -503,7 +503,7 @@ async function loadCurrentView(): Promise<void> {
   const pageNotices: HTMLElement[] = urlNotices()
   if (entry === undefined) {
     // Keep the requested name in the URL: once the file exists, a refresh shows it (D3).
-    if (views.length === 0) emptyState('No views yet', 'Add a *.melzin.html file to the views folder, then reload.', 'nap')
+    if (views.length === 0) emptyState('No views yet', 'Add a *.mel.html file to the views folder, then reload.', 'nap')
     else emptyState(`No view named '${state.view}'`, `Available: ${views.map((view) => view.name).join(', ')}. Pick one above, or add the file and reload.`)
     viewPicker.value = ''
     notices.replaceChildren(...pageNotices)

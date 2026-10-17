@@ -781,7 +781,7 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
-/** `views/counter.melzin.html:12:5: error: message` */
+/** `views/counter.mel.html:12:5: error: message` */
 export function formatDiagnostic(file: string, diagnostic: Diagnostic): string {
   return `${file}:${diagnostic.line}:${diagnostic.col}: ${diagnostic.severity}: ${diagnostic.message}`
 }

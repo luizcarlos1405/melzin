@@ -12,7 +12,7 @@ beforeAll(() => {
   mkdirSync(join(dir, 'views'))
   mkdirSync(join(dir, 'other'))
   writeFileSync(
-    join(dir, 'views/a.melzin.html'),
+    join(dir, 'views/a.mel.html'),
     '<!doctype html><html><head><title>A</title></head><body><p class="text-brand p-4 hover:bg-zinc-50">x</p></body></html>',
   )
   // Outside the views dir: must not be scanned.
@@ -78,7 +78,7 @@ describe('melzin css', () => {
 
   test('prints to stdout, with --views and --theme', async () => {
     mkdirSync(join(dir, 'alt'), { recursive: true })
-    writeFileSync(join(dir, 'alt/c.melzin.html'), '<p class="text-accent underline"></p>')
+    writeFileSync(join(dir, 'alt/c.mel.html'), '<p class="text-accent underline"></p>')
     writeFileSync(join(dir, 'alt.css'), '@theme { --color-accent: #123456; }')
     const proc = Bun.spawn(['bun', cli, 'css', '--views', 'alt', '--theme', 'alt.css'], { cwd: dir, stdout: 'pipe' })
     const out = await new Response(proc.stdout).text()

@@ -11,7 +11,7 @@ export function dataBlockType(type: string | null | undefined): DataBlockType | 
   return DATA_BLOCK_TYPES.find((candidate) => candidate === normalized)
 }
 
-export const VIEW_FILE_SUFFIX = '.melzin.html'
+export const VIEW_FILE_SUFFIX = '.mel.html'
 
 export const DIRECTIVE_PREFIX = 'm-'
 export const TEXT_DIRECTIVE = 'm-text'

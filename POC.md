@@ -41,7 +41,7 @@ one comes in.
 
 ## 3. The view file
 
-`packages/melzin/views/counter.melzin.html`:
+`packages/melzin/views/counter.mel.html`:
 
 ```html
 <!doctype html>
@@ -85,7 +85,7 @@ one comes in.
 
 Rules:
 
-- A view is a complete HTML document named `*.melzin.html` (D6), so it opens in any browser.
+- A view is a complete HTML document named `*.mel.html` (D6), so it opens in any browser.
 - The children of `<body>` are the view. `<body>` itself takes no attributes, and several top-level
   elements are fine.
 - `<head>` holds `<title>` (the view's name), optional `<meta>` tags and at most two data blocks:
@@ -217,7 +217,7 @@ like a compiler's, `file:line:col: error: message`, followed by a summary such a
 
 Errors:
 
-- a file not named `*.melzin.html`
+- a file not named `*.mel.html`
 - invalid JSON or a duplicate data block, or a schema outside the subset above ("lists aren't supported
   yet (SPEC #1)")
 - an unknown directive, with a hint for Vue and Alpine spellings: `v-text` → `m-text`, `@click` →
@@ -245,7 +245,7 @@ Warnings:
 
 Messages name the fix or the workaround (docs/authoring.md §7) instead of pointing at SPEC.md.
 
-`melzin types views/counter.melzin.html` writes `views/counter.types.ts` with `Data` and `Handlers`
+`melzin types views/counter.mel.html` writes `views/counter.types.ts` with `Data` and `Handlers`
 types. `Handlers` has one required method per event, so a host that misses one fails its type check
 (D15). The command refuses to write while the view has errors.
 
@@ -258,7 +258,7 @@ import { mount } from '../../src/runtime/mount.ts'
 import type { Data, Handlers } from '../../views/counter.types.ts'
 
 let count = 0
-const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/views/counter.melzin.html', {
+const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/views/counter.mel.html', {
   data: { count },
   on: { increment: () => view.update({ count: ++count }) },
 })
@@ -282,9 +282,9 @@ sushi.
   `toViewModel`, shapes them for the screen (P3): votes and a percent string per option, and a total
   label such as "12 votes". `GET /api/poll` returns that view model, and `POST /api/poll/votes` counts a
   vote and returns the new one.
-- `views/poll.melzin.html` declares `votePizza`, `voteTacos` and `voteSushi` (no payloads yet) and has
+- `views/poll.mel.html` declares `votePizza`, `voteTacos` and `voteSushi` (no payloads yet) and has
   the snapshots "no votes yet", "close race", "landslide", "huge numbers" and "very long question".
-  `views/header.melzin.html` is static. `theme.css` is the app's own theme (D12).
+  `views/header.mel.html` is static. `theme.css` is the app's own theme (D12).
 - `client.ts` mounts the poll with its generated types, and the static header (no schema, so nothing
   to type) as is. Each vote handler posts the vote and calls `update` with the answer, and the page
   refreshes from the API every 3 seconds.
@@ -298,11 +298,11 @@ sushi.
 They live in `packages/melzin/views/`, with the theme in `packages/melzin/theme.css` (a honey-amber
 `brand` scale, D12).
 
-- `hello.melzin.html`: a static page with no schema. Plain design has to work too.
-- `profile-card.melzin.html`: a name, role, bio and follower count through nested `user.*` paths.
+- `hello.mel.html`: a static page with no schema. Plain design has to work too.
+- `profile-card.mel.html`: a name, role, bio and follower count through nested `user.*` paths.
   Snapshots include a very long name and an empty bio, to see the layout under awkward data (a first
   taste of P8).
-- `counter.melzin.html`: the count and a button that emits `increment`.
+- `counter.mel.html`: the count and a button that emits `increment`.
 
 ## 9. Stack and layout
 

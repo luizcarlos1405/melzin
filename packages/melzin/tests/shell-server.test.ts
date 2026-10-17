@@ -29,15 +29,15 @@ let base: string
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'melzin-shell-'))
   mkdirSync(join(dir, 'views', 'nested'), { recursive: true })
-  writeFileSync(join(dir, 'views', 'counter.melzin.html'), COUNTER)
-  writeFileSync(join(dir, 'views', 'untitled.melzin.html'), UNTITLED)
+  writeFileSync(join(dir, 'views', 'counter.mel.html'), COUNTER)
+  writeFileSync(join(dir, 'views', 'untitled.mel.html'), UNTITLED)
   writeFileSync(join(dir, 'views', 'notes.html'), '<p>not a view</p>')
-  writeFileSync(join(dir, 'views', 'nested', 'deep.melzin.html'), UNTITLED)
-  writeFileSync(join(dir, 'secret.melzin.html'), 'SECRET')
-  symlinkSync(join(dir, 'secret.melzin.html'), join(dir, 'views', 'link.melzin.html'))
+  writeFileSync(join(dir, 'views', 'nested', 'deep.mel.html'), UNTITLED)
+  writeFileSync(join(dir, 'secret.mel.html'), 'SECRET')
+  symlinkSync(join(dir, 'secret.mel.html'), join(dir, 'views', 'link.mel.html'))
   // A dangling symlink and an editor lock file (Emacs' `.#name`) must not break the listing.
-  symlinkSync(join(dir, 'nowhere.melzin.html'), join(dir, 'views', 'broken.melzin.html'))
-  symlinkSync('user@host.1234:1700000000', join(dir, 'views', '.#counter.melzin.html'))
+  symlinkSync(join(dir, 'nowhere.mel.html'), join(dir, 'views', 'broken.mel.html'))
+  symlinkSync('user@host.1234:1700000000', join(dir, 'views', '.#counter.mel.html'))
   writeFileSync(join(dir, 'theme.css'), '@theme { --color-brand-600: #123456; }\n')
   server = createShellServer({ project: resolveProject({ cwd: dir }), port: 0, development: false })
   base = server.url.href.replace(/\/$/, '')
@@ -62,7 +62,7 @@ describe('shell server', () => {
     expect(shellHtml).toContain('id="view-picker"')
     expect(shellHtml).toContain('id="canvas"')
 
-    const frame = await fetch(`${base}/frame?view=counter.melzin.html&snapshot=zero`)
+    const frame = await fetch(`${base}/frame?view=counter.mel.html&snapshot=zero`)
     expect(frame.status).toBe(200)
     expect(await frame.text()).toContain('id="melzin-root"')
   })
@@ -89,12 +89,12 @@ describe('shell server', () => {
     expect(names).not.toContain('link')
     expect(names).not.toContain('broken')
     expect(names.some((name) => name.startsWith('.'))).toBe(false)
-    expect(list).toContainEqual({ name: 'counter', file: 'counter.melzin.html', url: '/views/counter.melzin.html', title: 'My Counter' })
-    expect(list).toContainEqual({ name: 'untitled', file: 'untitled.melzin.html', url: '/views/untitled.melzin.html', title: 'untitled' })
+    expect(list).toContainEqual({ name: 'counter', file: 'counter.mel.html', url: '/views/counter.mel.html', title: 'My Counter' })
+    expect(list).toContainEqual({ name: 'untitled', file: 'untitled.mel.html', url: '/views/untitled.mel.html', title: 'untitled' })
   })
 
   test('/views/<file> serves the file verbatim with no-store', async () => {
-    const response = await fetch(`${base}/views/counter.melzin.html`)
+    const response = await fetch(`${base}/views/counter.mel.html`)
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(response.headers.get('content-type')).toContain('text/html')
@@ -106,18 +106,18 @@ describe('shell server', () => {
 
   test('/views/ rejects traversal, other files and symlinks that leave the views dir', async () => {
     const paths = [
-      '/views/../secret.melzin.html',
-      '/views/..%2Fsecret.melzin.html',
-      '/views/%2e%2e%2fsecret.melzin.html',
-      '/views/..%5Csecret.melzin.html',
-      '/views/nested%2Fdeep.melzin.html',
-      '/views/nested/deep.melzin.html',
+      '/views/../secret.mel.html',
+      '/views/..%2Fsecret.mel.html',
+      '/views/%2e%2e%2fsecret.mel.html',
+      '/views/..%5Csecret.mel.html',
+      '/views/nested%2Fdeep.mel.html',
+      '/views/nested/deep.mel.html',
       '/views/notes.html',
-      '/views/missing.melzin.html',
-      '/views/link.melzin.html',
+      '/views/missing.mel.html',
+      '/views/link.mel.html',
       '/views/%E0%A4%A',
       '/views/',
-      '/views/counter.melzin.html%00',
+      '/views/counter.mel.html%00',
     ]
     for (const path of paths) {
       const response = await fetch(base + path)
@@ -148,7 +148,7 @@ describe('shell server', () => {
   })
 
   test('project data is refused to other host names (DNS rebinding)', async () => {
-    for (const path of ['/__melzin/api/views', '/views/counter.melzin.html', '/__melzin/styles.css', '/nope']) {
+    for (const path of ['/__melzin/api/views', '/views/counter.mel.html', '/__melzin/styles.css', '/nope']) {
       const response = await fetch(base + path, { headers: { Host: `evil.example:${server.port}` } })
       expect({ path, status: response.status }).toEqual({ path, status: 403 })
     }
@@ -158,11 +158,11 @@ describe('shell server', () => {
 })
 
 describe('resolveViewFile', () => {
-  test('accepts only listed *.melzin.html files inside the views dir', () => {
+  test('accepts only listed *.mel.html files inside the views dir', () => {
     const project = resolveProject({ cwd: dir })
-    expect(resolveViewFile(project, 'counter.melzin.html')).toBe(join(dir, 'views', 'counter.melzin.html'))
-    expect(resolveViewFile(project, 'counter%2Emelzin.html')).toBe(join(dir, 'views', 'counter.melzin.html'))
-    for (const name of ['', '..', '../secret.melzin.html', 'notes.html', '.melzin.html', 'link.melzin.html', '%', 'nested/deep.melzin.html']) {
+    expect(resolveViewFile(project, 'counter.mel.html')).toBe(join(dir, 'views', 'counter.mel.html'))
+    expect(resolveViewFile(project, 'counter%2Emel.html')).toBe(join(dir, 'views', 'counter.mel.html'))
+    for (const name of ['', '..', '../secret.mel.html', 'notes.html', '.mel.html', 'link.mel.html', '%', 'nested/deep.mel.html']) {
       expect(resolveViewFile(project, name)).toBeNull()
     }
   })

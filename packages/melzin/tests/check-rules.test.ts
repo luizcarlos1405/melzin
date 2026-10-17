@@ -34,264 +34,264 @@ const errors: Case[] = [
   {
     file: 'wrong-name.html',
     severity: 'error',
-    message: "view files must be named *.melzin.html (got 'wrong-name.html')",
+    message: "view files must be named *.mel.html (got 'wrong-name.html')",
     at: { line: 1, col: 1 },
   },
   {
-    file: 'invalid-json-schema.melzin.html',
+    file: 'invalid-json-schema.mel.html',
     severity: 'error',
     message: "invalid JSON in the melzin/schema block: trailing commas aren't allowed in JSON",
-    at: pos('invalid-json-schema.melzin.html', ', }', 2),
+    at: pos('invalid-json-schema.mel.html', ', }', 2),
   },
   {
-    file: 'invalid-json-snapshots.melzin.html',
+    file: 'invalid-json-snapshots.mel.html',
     severity: 'error',
     message: 'invalid JSON in the melzin/snapshots block: JSON strings need double quotes',
-    at: pos('invalid-json-snapshots.melzin.html', "'zero'"),
+    at: pos('invalid-json-snapshots.mel.html', "'zero'"),
   },
   {
-    file: 'duplicate-schema.melzin.html',
+    file: 'duplicate-schema.mel.html',
     severity: 'error',
     message: 'duplicate melzin/schema block; a view has at most one',
-    at: pos('duplicate-schema.melzin.html', '<script type="melzin/schema">', 0, 1),
+    at: pos('duplicate-schema.mel.html', '<script type="melzin/schema">', 0, 1),
   },
   {
-    file: 'schema-issue.melzin.html',
+    file: 'schema-issue.mel.html',
     severity: 'error',
     message: "schema data.properties.tags: lists aren't supported yet; use a fixed number of fields such as first, second, third",
-    at: pos('schema-issue.melzin.html', '"tags"'),
+    at: pos('schema-issue.mel.html', '"tags"'),
   },
   {
-    file: 'snapshot-issue.melzin.html',
+    file: 'snapshot-issue.mel.html',
     severity: 'error',
     message: 'snapshots["a few clicks"].data.count: expected number, got string',
-    at: pos('snapshot-issue.melzin.html', '"count": "3"'),
+    at: pos('snapshot-issue.mel.html', '"count": "3"'),
   },
   {
-    file: 'head-link.melzin.html',
+    file: 'head-link.mel.html',
     severity: 'error',
     message:
       "<link> isn't allowed in <head>; it may only hold <title>, <meta> and the melzin/schema and melzin/snapshots blocks (styling is Tailwind classes only)",
-    at: pos('head-link.melzin.html', '<link'),
+    at: pos('head-link.mel.html', '<link'),
   },
   {
-    file: 'head-script.melzin.html',
+    file: 'head-script.mel.html',
     severity: 'error',
     message: "<script> isn't allowed in <head>; views have no scripts, only the melzin/schema and melzin/snapshots data blocks",
-    at: pos('head-script.melzin.html', '<script src'),
+    at: pos('head-script.mel.html', '<script src'),
   },
   {
-    file: 'head-div.melzin.html',
+    file: 'head-div.mel.html',
     severity: 'error',
     message: "<div> isn't allowed in <head>; it may only hold <title>, <meta> and the melzin/schema and melzin/snapshots blocks",
-    at: pos('head-div.melzin.html', '<div>'),
+    at: pos('head-div.mel.html', '<div>'),
   },
   {
-    file: 'body-script.melzin.html',
+    file: 'body-script.mel.html',
     severity: 'error',
     message: "<script> isn't allowed in the body; views have no scripts",
-    at: pos('body-script.melzin.html', '<script>console'),
+    at: pos('body-script.mel.html', '<script>console'),
   },
   {
-    file: 'foreign-v-text.melzin.html',
+    file: 'foreign-v-text.mel.html',
     severity: 'error',
     message: "'v-text' is Vue/Alpine syntax; use m-text",
-    at: pos('foreign-v-text.melzin.html', 'v-text'),
+    at: pos('foreign-v-text.mel.html', 'v-text'),
   },
   {
-    file: 'foreign-click.melzin.html',
+    file: 'foreign-click.mel.html',
     severity: 'error',
     message: "'@click' is Vue/Alpine syntax; use m-on:click",
-    at: pos('foreign-click.melzin.html', '@click'),
+    at: pos('foreign-click.mel.html', '@click'),
   },
   {
-    file: 'foreign-other.melzin.html',
+    file: 'foreign-other.mel.html',
     severity: 'error',
     message: "':class': Vue/Alpine syntax isn't supported; this POC has m-text and m-on:click",
-    at: pos('foreign-other.melzin.html', ':class'),
+    at: pos('foreign-other.mel.html', ':class'),
   },
   {
-    file: 'unsupported-directive.melzin.html',
+    file: 'unsupported-directive.mel.html',
     severity: 'error',
     message: '\'m-if\' is not supported yet; the POC supports only m-text and m-on:click; to hide an element, bind it to a value that may be "" and add the class empty:hidden (docs/authoring.md §7)',
-    at: pos('unsupported-directive.melzin.html', 'm-if'),
+    at: pos('unsupported-directive.mel.html', 'm-if'),
   },
   {
-    file: 'text-parse-error.melzin.html',
+    file: 'text-parse-error.mel.html',
     severity: 'error',
     message: "m-text: expected a name after '.', found '.'",
     // the second dot of count..x
-    at: pos('text-parse-error.melzin.html', 'count..x', 6),
+    at: pos('text-parse-error.mel.html', 'count..x', 6),
   },
   {
-    file: 'text-unknown-path.melzin.html',
+    file: 'text-unknown-path.mel.html',
     severity: 'error',
     message: "m-text: unknown field 'cuont' (did you mean 'count'?)",
-    at: pos('text-unknown-path.melzin.html', 'cuont'),
+    at: pos('text-unknown-path.mel.html', 'cuont'),
   },
   {
-    file: 'text-object-path.melzin.html',
+    file: 'text-object-path.mel.html',
     severity: 'error',
     message: "m-text: 'user' is an object; m-text needs a string, number or boolean",
-    at: pos('text-object-path.melzin.html', 'm-text="user"', 8),
+    at: pos('text-object-path.mel.html', 'm-text="user"', 8),
   },
   {
-    file: 'text-child-elements.melzin.html',
+    file: 'text-child-elements.mel.html',
     severity: 'error',
     message: "an m-text element can't contain elements; the runtime replaces its content",
-    at: pos('text-child-elements.melzin.html', '<span>'),
+    at: pos('text-child-elements.mel.html', '<span>'),
   },
   {
-    file: 'click-parse-error.melzin.html',
+    file: 'click-parse-error.mel.html',
     severity: 'error',
     message: "m-on:click: expected a string, found 'increment' (quote it: 'increment')",
-    at: pos('click-parse-error.melzin.html', 'emit(increment)', 5),
+    at: pos('click-parse-error.mel.html', 'emit(increment)', 5),
   },
   {
-    file: 'click-dollar-emit.melzin.html',
+    file: 'click-dollar-emit.mel.html',
     severity: 'error',
     message: "m-on:click: use emit('name') instead of Vue's $emit",
-    at: pos('click-dollar-emit.melzin.html', '$emit'),
+    at: pos('click-dollar-emit.mel.html', '$emit'),
   },
   {
-    file: 'click-undeclared.melzin.html',
+    file: 'click-undeclared.mel.html',
     severity: 'error',
     message: "m-on:click: event 'incremnt' isn't declared in the schema's events (did you mean 'increment'?)",
-    at: pos('click-undeclared.melzin.html', 'incremnt'),
+    at: pos('click-undeclared.mel.html', 'incremnt'),
   },  // Body markup: the same rules the runtime applies (src/core/markup.ts).
   {
-    file: 'body-style.melzin.html',
+    file: 'body-style.mel.html',
     severity: 'error',
     message: "<style> isn't allowed; styling is Tailwind classes only, with design tokens in theme.css",
-    at: pos('body-style.melzin.html', '<style>'),
+    at: pos('body-style.mel.html', '<style>'),
   },
   {
-    file: 'body-link.melzin.html',
+    file: 'body-link.mel.html',
     severity: 'error',
     message: "<link> isn't allowed; styling is Tailwind classes only, with design tokens in theme.css",
-    at: pos('body-link.melzin.html', '<link'),
+    at: pos('body-link.mel.html', '<link'),
   },
   {
-    file: 'body-base.melzin.html',
+    file: 'body-base.mel.html',
     severity: 'error',
     message: "<base> isn't allowed; it would change how every relative URL in the host page resolves",
-    at: pos('body-base.melzin.html', '<base'),
+    at: pos('body-base.mel.html', '<base'),
   },
   {
-    file: 'body-meta.melzin.html',
+    file: 'body-meta.mel.html',
     severity: 'error',
     message: '<meta> belongs in <head>; in the body it would act on the host page',
-    at: pos('body-meta.melzin.html', '<meta http-equiv'),
+    at: pos('body-meta.mel.html', '<meta http-equiv'),
   },
   {
-    file: 'body-iframe.melzin.html',
+    file: 'body-iframe.mel.html',
     severity: 'error',
     message: "<iframe> isn't allowed; views can't embed other documents",
-    at: pos('body-iframe.melzin.html', '<iframe'),
+    at: pos('body-iframe.mel.html', '<iframe'),
   },
   {
-    file: 'body-template.melzin.html',
+    file: 'body-template.mel.html',
     severity: 'error',
     message: "<template> isn't supported; its content would never be bound. Write the markup directly",
-    at: pos('body-template.melzin.html', '<template>'),
+    at: pos('body-template.mel.html', '<template>'),
   },
   {
-    file: 'body-form.melzin.html',
+    file: 'body-form.mel.html',
     severity: 'error',
     message: '<form> isn\'t supported yet; use <button type="button"> with m-on:click instead',
-    at: pos('body-form.melzin.html', '<form>'),
+    at: pos('body-form.mel.html', '<form>'),
   },
   {
-    file: 'inline-handler.melzin.html',
+    file: 'inline-handler.mel.html',
     severity: 'error',
     message: "inline handler 'onclick' isn't allowed; use m-on:click=\"emit('name')\"",
-    at: pos('inline-handler.melzin.html', 'onclick'),
+    at: pos('inline-handler.mel.html', 'onclick'),
   },
   {
-    file: 'style-attribute.melzin.html',
+    file: 'style-attribute.mel.html',
     severity: 'error',
     message: "style attributes aren't allowed; styling is Tailwind classes only, with design tokens in theme.css",
-    at: pos('style-attribute.melzin.html', 'style="'),
+    at: pos('style-attribute.mel.html', 'style="'),
   },
   {
-    file: 'javascript-url.melzin.html',
+    file: 'javascript-url.mel.html',
     severity: 'error',
     message: "javascript: URLs aren't allowed in href; views run no code",
-    at: pos('javascript-url.melzin.html', 'href='),
+    at: pos('javascript-url.mel.html', 'href='),
   },
   {
-    file: 'srcdoc-attribute.melzin.html',
+    file: 'srcdoc-attribute.mel.html',
     severity: 'error',
     message: "srcdoc isn't allowed; views can't embed other documents",
-    at: pos('srcdoc-attribute.melzin.html', 'srcdoc'),
+    at: pos('srcdoc-attribute.mel.html', 'srcdoc'),
   },
   {
-    file: 'text-void-element.melzin.html',
+    file: 'text-void-element.mel.html',
     severity: 'error',
     message: "m-text can't go on <input>: it has no content to set; use an element such as <span>",
-    at: pos('text-void-element.melzin.html', '<input'),
+    at: pos('text-void-element.mel.html', '<input'),
   },
 ]
 
 const warnings: Case[] = [
   {
-    file: 'body-attributes.melzin.html',
+    file: 'body-attributes.mel.html',
     severity: 'warning',
     message: "<body> takes no attributes ('class'); put classes on an element inside it",
-    at: pos('body-attributes.melzin.html', 'class="bg-zinc-50"'),
+    at: pos('body-attributes.mel.html', 'class="bg-zinc-50"'),
   },
   {
-    file: 'missing-title.melzin.html',
+    file: 'missing-title.mel.html',
     severity: 'warning',
     message: 'missing <title>; the title names the view in the shell',
-    at: pos('missing-title.melzin.html', '<head>'),
+    at: pos('missing-title.mel.html', '<head>'),
   },
   {
-    file: 'text-content.melzin.html',
+    file: 'text-content.mel.html',
     severity: 'warning',
     message: 'm-text elements should be empty; sample text belongs in snapshots',
-    at: pos('text-content.melzin.html', '42'),
+    at: pos('text-content.mel.html', '42'),
   },
   {
-    file: 'event-never-emitted.melzin.html',
+    file: 'event-never-emitted.mel.html',
     severity: 'warning',
     message: "event 'increment' is declared but nothing emits it",
-    at: pos('event-never-emitted.melzin.html', '"increment"'),
+    at: pos('event-never-emitted.mel.html', '"increment"'),
   },
   {
-    file: 'leaf-never-displayed.melzin.html',
+    file: 'leaf-never-displayed.mel.html',
     severity: 'warning',
     message: "data field 'count' is never displayed",
-    at: pos('leaf-never-displayed.melzin.html', '"count": { "type"'),
+    at: pos('leaf-never-displayed.mel.html', '"count": { "type"'),
   },
   {
-    file: 'no-snapshots.melzin.html',
+    file: 'no-snapshots.mel.html',
     severity: 'warning',
     message: 'the view has data fields but no snapshots; add a melzin/snapshots block with sample states, awkward ones included (very long text, zero, huge numbers)',
-    at: pos('no-snapshots.melzin.html', '<script type="melzin/schema">'),
+    at: pos('no-snapshots.mel.html', '<script type="melzin/schema">'),
   },  {
-    file: 'mustache.melzin.html',
+    file: 'mustache.mel.html',
     severity: 'warning',
     message: "'{{ count }}' isn't Melzin syntax and would show as is; bind an empty element instead: <span m-text=\"name\"></span>",
-    at: pos('mustache.melzin.html', '{{'),
+    at: pos('mustache.mel.html', '{{'),
   },
   {
-    file: 'snapshot-index-name.melzin.html',
+    file: 'snapshot-index-name.mel.html',
     severity: 'warning',
     message:
       'snapshots["10"]: names that are whole numbers are listed before all the others, whatever their order in the file; use words, such as "10 items"',
-    at: pos('snapshot-index-name.melzin.html', '"10"'),
+    at: pos('snapshot-index-name.mel.html', '"10"'),
   },
   {
-    file: 'stale-types.melzin.html',
+    file: 'stale-types.mel.html',
     severity: 'warning',
-    message: 'stale-types.types.ts is out of date with the schema; run melzin types stale-types.melzin.html',
+    message: 'stale-types.types.ts is out of date with the schema; run melzin types stale-types.mel.html',
     at: { line: 1, col: 1 },
   },
 ]
 
 describe('good views have no diagnostics', () => {
-  for (const file of ['good-counter.melzin.html', 'good-static.melzin.html', 'good-nested.melzin.html']) {
+  for (const file of ['good-counter.mel.html', 'good-static.mel.html', 'good-nested.mel.html']) {
     test(file, async () => {
       expect(await diagnosticsOf(file)).toEqual([])
     })
@@ -316,29 +316,29 @@ describe('warnings (one fixture per rule, exactly one diagnostic each)', () => {
 
 test('checkFiles counts errors and warnings across files', async () => {
   const result = await checkFiles(
-    ['good-counter.melzin.html', 'text-unknown-path.melzin.html', 'click-undeclared.melzin.html', 'text-content.melzin.html'],
+    ['good-counter.mel.html', 'text-unknown-path.mel.html', 'click-undeclared.mel.html', 'text-content.mel.html'],
     { cwd: dir },
   )
   expect(result.files.map((file) => file.file)).toEqual([
-    'good-counter.melzin.html',
-    'text-unknown-path.melzin.html',
-    'click-undeclared.melzin.html',
-    'text-content.melzin.html',
+    'good-counter.mel.html',
+    'text-unknown-path.mel.html',
+    'click-undeclared.mel.html',
+    'text-content.mel.html',
   ])
   expect(result.errorCount).toBe(2)
   expect(result.warningCount).toBe(1)
 })
 
 test('checkFiles reports files it cannot read', async () => {
-  const result = await checkFiles(['nope.melzin.html', '.'], { cwd: dir })
+  const result = await checkFiles(['nope.mel.html', '.'], { cwd: dir })
   expect(result.files).toEqual([
-    { file: 'nope.melzin.html', diagnostics: [{ line: 1, col: 1, severity: 'error', message: "can't read the file: file not found" }] },
+    { file: 'nope.mel.html', diagnostics: [{ line: 1, col: 1, severity: 'error', message: "can't read the file: file not found" }] },
     { file: dir, diagnostics: [{ line: 1, col: 1, severity: 'error', message: "can't read the file: is a directory" }] },
   ])
   expect(result.errorCount).toBe(2)
 })
 
 test('paths are relative to the cwd option, absolute input included', async () => {
-  const result = await checkFiles([join(dir, 'good-counter.melzin.html')], { cwd: join(dir, '..') })
-  expect(result.files[0]?.file).toBe('check/good-counter.melzin.html')
+  const result = await checkFiles([join(dir, 'good-counter.mel.html')], { cwd: join(dir, '..') })
+  expect(result.files[0]?.file).toBe('check/good-counter.mel.html')
 })

@@ -24,8 +24,8 @@ describe('mount() over HTTP (Bun.serve)', () => {
       fetch(request) {
         const { pathname } = new URL(request.url)
         const headers = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/html; charset=utf-8' }
-        if (pathname === '/views/counter.melzin.html') return new NativeResponse(COUNTER, { headers })
-        if (pathname === '/views/broken.melzin.html') {
+        if (pathname === '/views/counter.mel.html') return new NativeResponse(COUNTER, { headers })
+        if (pathname === '/views/broken.mel.html') {
           return new NativeResponse('<html><head><script type="melzin/schema">{</script></head><body></body></html>', { headers })
         }
         return new NativeResponse('not found', { status: 404, statusText: 'Not Found', headers })
@@ -43,7 +43,7 @@ describe('mount() over HTTP (Bun.serve)', () => {
     const root = document.createElement('div')
     const warnings: string[] = []
     let count = 4
-    const view = await mount<{ count: number }, { increment: () => void }>(root, `${base}/views/counter.melzin.html`, {
+    const view = await mount<{ count: number }, { increment: () => void }>(root, `${base}/views/counter.mel.html`, {
       data: { count },
       on: { increment: () => view.update({ count: ++count }) },
       onWarning: (m) => warnings.push(m),
@@ -57,20 +57,20 @@ describe('mount() over HTTP (Bun.serve)', () => {
 
   test('accepts a URL object', async () => {
     const root = document.createElement('div')
-    await mount(root, new URL('/views/counter.melzin.html', base), { data: { count: 1 }, on: { increment() {} } })
+    await mount(root, new URL('/views/counter.mel.html', base), { data: { count: 1 }, on: { increment() {} } })
     expect(root.querySelector('p')?.textContent).toBe('1')
   })
 
   test('HTTP error throws a clear Error and mounts nothing', async () => {
     const root = document.createElement('div')
-    const url = `${base}/views/missing.melzin.html`
+    const url = `${base}/views/missing.mel.html`
     await expect(mount(root, url, { data: {}, on: {} })).rejects.toThrow(`melzin: couldn't load view ${url}: HTTP 404 Not Found`)
     expect(root.childNodes.length).toBe(0)
   })
 
   test('invalid schema in a fetched view names the URL', async () => {
     const root = document.createElement('div')
-    const url = `${base}/views/broken.melzin.html`
+    const url = `${base}/views/broken.mel.html`
     await expect(mount(root, url, { data: {}, on: {} })).rejects.toThrow(`melzin: view ${url} has an invalid schema:`)
   })
 })
@@ -88,15 +88,15 @@ describe('mount() with a mocked fetch', () => {
       return new Response(COUNTER)
     }) as typeof fetch
     const root = document.createElement('div')
-    await mount(root, '/views/counter.melzin.html', { data: { count: 2 }, on: { increment() {} } })
-    expect(requested).toEqual(['/views/counter.melzin.html'])
+    await mount(root, '/views/counter.mel.html', { data: { count: 2 }, on: { increment() {} } })
+    expect(requested).toEqual(['/views/counter.mel.html'])
     expect(root.querySelector('p')?.textContent).toBe('2')
   })
 
   test('HTTP 500 without a status text', async () => {
     globalThis.fetch = (async () => new Response('boom', { status: 500 })) as unknown as typeof fetch
-    await expect(mount(document.createElement('div'), '/v.melzin.html', { data: {}, on: {} })).rejects.toThrow(
-      "melzin: couldn't load view /v.melzin.html: HTTP 500",
+    await expect(mount(document.createElement('div'), '/v.mel.html', { data: {}, on: {} })).rejects.toThrow(
+      "melzin: couldn't load view /v.mel.html: HTTP 500",
     )
   })
 
@@ -107,12 +107,12 @@ describe('mount() with a mocked fetch', () => {
     }) as unknown as typeof fetch
     let error: unknown
     try {
-      await mount(document.createElement('div'), '/v.melzin.html', { data: {}, on: {} })
+      await mount(document.createElement('div'), '/v.mel.html', { data: {}, on: {} })
     } catch (caught) {
       error = caught
     }
     expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toBe("melzin: couldn't load view /v.melzin.html: Failed to fetch")
+    expect((error as Error).message).toBe("melzin: couldn't load view /v.mel.html: Failed to fetch")
     expect((error as Error).cause).toBe(cause)
   })
 })

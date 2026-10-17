@@ -6,7 +6,7 @@ import { validateData } from 'melzin/core'
 import { loadViewFile, type LoadedView } from 'melzin/tools'
 import { QUESTION, emptyState, toViewModel, type PollState } from '../server.ts'
 
-const POLL_VIEW = join(import.meta.dir, '..', 'views', 'poll.melzin.html')
+const POLL_VIEW = join(import.meta.dir, '..', 'views', 'poll.mel.html')
 
 async function loadPoll(): Promise<LoadedView> {
   const view = await loadViewFile(POLL_VIEW)
