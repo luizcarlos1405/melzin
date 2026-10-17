@@ -182,6 +182,11 @@ built.
 - [ ] Stable IDs for schema fields and events
 - [ ] Schema diffs that classify each design change as safe or breaking for the backend
 
+**Components.**
+- [ ] Any view used inside another view, with its data passed as whole subtrees and its events handled by
+  the parent
+- [ ] Schemas that refer to other views' types with `$ref`, and one generated contract per screen
+
 **Interactive apps, with a chat screen as the stress test.**
 - [ ] Event payloads, any DOM event in `m-on`, and modifiers
 - [ ] `m-model` and forms

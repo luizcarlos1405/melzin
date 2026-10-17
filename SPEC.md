@@ -97,6 +97,18 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   Interactions that only change `ui` state aren't events (§9.4).
 - **D15. Static analysis catches unhandled events.** Every declared event must have a handler in
   whatever consumes the view, and the view can't emit an event the schema doesn't declare (§9.4).
+- **D16. Every view is a component.** There's no separate component format: any Melzin file can render
+  on its own (in the shell, embedded, or as a standalone screen) and can be used inside another view.
+  It behaves the same in both cases, in the shell and in production (P5, §9.5).
+- **D17. Types are flat, data is nested.** Each view's schema is a named type in one project-wide
+  registry. A parent's schema refers to a child's type with `$ref` instead of restating it, so the data
+  a parent receives stays a nested tree shaped like the screen (P3). Melzin doesn't normalize data into
+  tables of entities (§9.5).
+- **D18. Props are subtrees, never reshaped.** A child's top-level `data` fields are its props. Each one
+  receives a whole value of the right type from the parent's data, or a literal. Renaming, merging or
+  computing values for a child belongs in the backend adapter (P3), not in the view.
+- **D19. Child views stay encapsulated.** A child's `ui` state is private to it. Its events go to its
+  parent only, and the parent handles, re-emits or explicitly ignores each one (D15, §9.4).
 
 ## 5. Principles
 
@@ -169,7 +181,7 @@ is laid out, is the next battle (§11).
 - variants: styles driven by a boolean, an enum or list position (first/last/odd)
 - repeat: a template repeated over a list, with a key and an `empty` slot
 - switch: picks a template by the tag of a value that can take one of several shapes
-- component instances, with page data mapped to the component's props
+- component instances: another view, given parts of this view's data as props (D16–D18, §9.5)
 - code components (P7)
 - event handlers: a short list of declarative operations, such as changing `ui` state or emitting an
   event (#46)
@@ -212,7 +224,9 @@ that cite a decision are settled; the rest are proposals.
 - **Events:** declared like Vue's `emits`, with typed payloads (D14), and sent to the host as DOM events
   (§7).
 - **Reuse:** `<template>` for repeated content, `<slot>` for content passed into components, custom
-  elements for components.
+  elements for components (§9.5).
+- **Composition:** JSON Schema `$ref` for a child's types (D17), and Vue's prop binding for passing
+  data: `m-bind:user="post.author"` for one prop, `m-bind="post.author"` for all of them (D18).
 - **Forms:** native input types and validation attributes (`required`, `pattern`, `min`, `max`,
   `maxlength`, `type="email"`) and the browser's built-in constraint validation (#20).
 - **Formatting:** the browser's `Intl` APIs (dates, relative times, numbers, plurals, lists), exposed as
@@ -392,6 +406,141 @@ When events change, the view writes and the host reads, so the rules run the oth
 | Enum value removed | Safe |
 | Rename (same ID) | Routine: rename the handler |
 
+### 9.5 Components and composition (#12)
+
+Every view is a component (D16). A view that renders on its own in the shell can also sit inside another
+view, unchanged, and behaves the same in both places and in production. Composing views must not make
+schemas heavy: each schema stays local and about as long as its own UI, and the composed contract for a
+screen is generated, not written.
+
+**Why the data isn't normalized.** One option is to flatten all state into top-level tables of entities
+keyed by ID, with children pointing to entries by ID, the shape of a Redux store or Apollo's cache. That
+stores each entity once and makes updates by ID easy, but for Melzin:
+
+- it's a domain model, not a view model (P3): the adapter would build a small database instead of filling
+  in a screen
+- every binding becomes a lookup by ID, which is harder to analyze (P1) and harder for an AI to write
+- every ID must point to an entry that exists, which adds integrity checks to the checker and keeps
+  snapshots consistent only with effort
+- the schema stops looking like the screen, which is what makes it readable
+
+Normalizing is a cache and transport concern. Melzin keeps its useful parts elsewhere: the flat registry
+with stable IDs holds types, not data (D17), and partial updates address data by key path, such as
+`polls[id=7].options[id=3].votes` (#16). When the same entity shows up in several places, the payload
+repeats it. That costs bytes, not complexity.
+
+**Example.** The poll example repeats the same block for pizza, tacos and sushi. As a component,
+`option-row.mel.html` declares its own schema and renders on its own in the shell:
+
+```json
+{
+  "data": {
+    "type": "object",
+    "properties": {
+      "label": { "type": "string" },
+      "votes": { "type": "number" },
+      "percent": { "type": "string" }
+    },
+    "required": ["label", "votes", "percent"]
+  },
+  "events": {
+    "vote": { "description": "One vote for this option" }
+  }
+}
+```
+
+`poll.mel.html` refers to that type instead of restating it (D17):
+
+```json
+"data": {
+  "type": "object",
+  "properties": {
+    "question": { "type": "string" },
+    "pizza": { "$ref": "option-row" },
+    "tacos": { "$ref": "option-row" },
+    "sushi": { "$ref": "option-row" },
+    "totalLabel": { "type": "string" }
+  },
+  "required": ["question", "pizza", "tacos", "sushi", "totalLabel"]
+}
+```
+
+and passes each subtree as the child's props, handling the child's event by emitting its own (D18, D19):
+
+```html
+<m-option-row m-bind="pizza" m-on:vote="emit('votePizza')"></m-option-row>
+```
+
+With lists and event payloads, the three fields become `options: array of option-row` with an `m-for`,
+and one `vote {optionId}` event. The exact syntax inside directives waits for the language battle (§11).
+
+**Names and references** (proposed)
+
+- A view's `data` type is registered under its file name without `.mel.html` (`option-row`), unique in
+  the project (#53). Types a view declares in `$defs` are registered under it (`option-row#/$defs/x`).
+- The custom element for a view is `m-` plus that name (`<m-option-row>`). Custom element names need a
+  hyphen, and the prefix keeps them apart from the host's own elements (D10).
+- `$ref` can point at a whole view type or at one of its props, for a parent that passes some props as
+  literals and only needs part of the child's type in its own data.
+
+**Props** (D18)
+
+- A child's top-level `data` fields are its props. `m-bind:label="option.label"` binds one,
+  `m-bind="option"` binds all of them from one object, as in Vue.
+- A prop gets a path into the parent's `data`, `ui` state or the list item in scope, or a literal (an
+  enum value such as `size="compact"`, a fixed string). Nothing else: no renaming of nested fields, no
+  merging objects, no computed values. If a child needs a different shape, the adapter sends that shape
+  (P3), or the child's schema changes.
+- A child that needs data from two places, such as the signed-in user and a post, gets two props. Each one
+  is still a subtree.
+
+**Checks** (extending §9.2 and §9.4)
+
+- Every `$ref` resolves to a registered type.
+- Every required prop is bound, and each bound value's type matches the prop's type. Paths are checked
+  against the parent's schema exactly like any other binding (P1).
+- Every event the child declares is handled, re-emitted or explicitly ignored by the parent (D15). A
+  parent's own `events` list only what it emits, including what it re-emits.
+- A type that requires itself through non-list, non-optional fields can't be satisfied by any data, so
+  it's an error.
+
+**Generated contract.** The checker and the type generator follow the references and produce one
+resolved contract per screen, which is what the host and the adapter see: one nested JSON document, with
+named types (`PollData`, `OptionRowData`) instead of anonymous nested objects. A child type used by many
+screens is generated once and shared.
+
+**Rendering.** One runtime (P5). Whether a child compiles into its parent's render or mounts as its own
+custom element is an implementation detail authors never see. Updates stay precise across the boundary:
+the parent's binding table maps `pizza.votes` to the child's `votes` binding, so a change touches only
+that text node. Each child instance has its own `ui` state, which the parent can't read or write (D19).
+In a list, an instance follows its item's key (§9.1); what happens to its state when the parent passes a
+different subtree is #48.
+
+**Events.** A child's events go to its parent only, one level up. The parent's handler can change its own
+`ui` state, emit its own event (with a payload built from the child's payload, the item in scope and its
+own state) or do nothing on purpose. A child event never reaches the host directly, so a parent's event
+list is its whole contract no matter how deep the tree is. Re-emitting through several levels can get
+verbose (#57).
+
+**In the shell**
+
+- A child renders on its own like any view: its own snapshots, inspector and event log.
+- A parent's snapshot holds the full nested data, children included. The inspector shows a child's data
+  as a subtree, edited with controls generated from the child's schema, and each instance's `ui` state
+  labelled with its place in the tree (proposed).
+- The event log shows what the parent emits. Child events the parent handles internally could appear as
+  nested entries (proposed).
+- Hostile states (P8) compose: the states generated for a child can be plugged into every place a parent
+  uses it. Parent snapshots could reuse a child's snapshots by name (Q12).
+
+**Recursion.** A type can refer to itself, such as a `comment` with `replies: array of comment`. Data is
+finite, so rendering ends, and nested JSON Schema handles it natively.
+
+**Change analysis.** A change to a child's schema is a change to every schema that refers to it. The diff
+(§9.3, §9.4) follows the references and reports the impact per screen: "`option-row` gained a required
+field: breaking for `poll`". Field IDs (P2, #13) belong to the type, so a field has the same ID in every
+place the type appears (#59).
+
 ## 10. Complications
 
 ⚑ marks items that change what the file means: settle them before the format hardens.
@@ -424,7 +573,9 @@ When events change, the view writes and the host reads, so the rules run the oth
 11. **Richer field types:** image (url, size, alt), rich text, date, money, url, color. "string" is too
     weak for both design and safety.
 12. ⚑ **Components and composition:** reusable parts with their own schemas, mapping a page's data to
-    each part's props, page schemas built from those parts, recursion.
+    each part's props, page schemas built from those parts, recursion. *Settled in part by D16–D19:
+    every view is a component, types are referenced and data stays nested, props are whole subtrees.
+    Approach in §9.5. Still open: #56–#59 and Q12.*
 13. ⚑ **Identity:** stable IDs for nodes, schema fields and list items.
 14. **Data that's never displayed:** IDs for list keys, events, links and analytics.
 15. **Design limits in the schema:** max lengths and ranges the backend must respect (P8).
@@ -553,6 +704,22 @@ When events change, the view writes and the host reads, so the rules run the oth
     event ended (saving, saved, failed, validation errors) to update `ui` state: disable a button, clear
     a draft, show an error (#47, Q11).
 
+### Components
+
+56. ⚑ **Content passed into components:** a `<slot>` filled with static content is simple. Content that
+    binds to data, or handles events, crosses the line between two schemas: does slotted content bind to
+    the parent's data (Vue's default) or to values the child hands it (Vue's scoped slots)? Both need
+    the checker to know which schema each binding belongs to.
+57. **Re-emitting in deep trees:** with events going one level up (D19), a button four views deep needs
+    a handler at every level. A forwarding shorthand may help, as long as each level's event list stays
+    explicit and checked (D15).
+58. **Styles across nested views:** if each view gets its own Shadow DOM (#39), every child needs the
+    project's CSS inside its shadow root too (#52). One shadow root per screen, with children rendered
+    inside it, avoids that.
+59. **Shared children:** a child used by many screens turns one schema change into many breaking
+    changes. The diff reports them per screen (§9.5); the shell could show where each view is used, and
+    render every screen that uses a changed child for review (#50).
+
 ## 11. Choosing battles
 
 The ⚑ items change what the file means, so getting one wrong means migrating every file later. The rest
@@ -611,6 +778,10 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Q11. Can the view see how an event ended?** Lean: yes, through a built-in status per event (idle,
   pending, done, failed) that the view can bind to, like React's `useActionState` or Remix's fetchers.
   Anything richer comes back as data (P6, #55).
+- **Q12. Can a parent's snapshot reuse a child's snapshot?** Such as
+  `"pizza": { "$snapshot": "option-row#landslide winner" }`, instead of repeating its data. It keeps
+  child states in sync and lets generated states compose (P8), but adds a reference mechanism to
+  snapshots (#34). Lean: yes.
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -703,6 +874,11 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Adapter:** backend code that turns domain data into data that matches the schema.
 - **Code component:** a hand-written component with declared props and events, used where design can't
   express behavior.
+- **Component:** any view used inside another view (D16). The outer view is its parent.
+- **Prop:** a top-level `data` field of a component, bound by its parent to a subtree of the parent's
+  data or to a literal (D18).
+- **Type registry:** the project-wide set of named types, one per view plus their `$defs`, that schemas
+  refer to with `$ref` (D17).
 
 ## Changelog
 
@@ -719,3 +895,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-16: D14–D15 (events declared in the schema; unhandled events caught by static analysis). Added
   §9.4, complications #54–#55 and Q11.
 - 2026-10-16: added POC.md as step zero before the first build battle (§11).
+- 2026-10-16: D16–D19 (every view is a component; flat types, nested data; props are whole subtrees;
+  encapsulated children). Added §9.5, complications #56–#59 and Q12.

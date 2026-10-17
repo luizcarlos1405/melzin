@@ -397,6 +397,7 @@ reuses the binding table, the shared parser and the host API.
 | Event payloads, any DOM event in `m-on`, and modifiers | D13, D14 |
 | `m-model` and forms | #20 |
 | Stable IDs and schema diffs | #13, #3, §9.3, §9.4 |
+| Components: views inside views, schemas composed with `$ref` | D16–D19, #12, §9.5 |
 | A custom element that dispatches DOM events | D7, §7 |
 | The standalone host | D11, #51 |
 | Events linked to snapshots in the shell | P6, #43 |
