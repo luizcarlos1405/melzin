@@ -25,6 +25,9 @@ import {
   viewFileUrl,
   zoomLabel,
 } from './state.ts'
+// Zin, the Melzin bee. Bun's bundler turns these imports into asset URLs.
+import zinOps from './zin-ops.svg'
+import zinSoneca from './zin-soneca.svg'
 
 type ViewEntry = { name: string; file: string; url: string; title: string }
 
@@ -196,6 +199,7 @@ document.addEventListener('keydown', (event) => {
 
 function notice(kind: 'error' | 'warning' | 'info', title: string, lines: string[] = [], action?: { text: string; changes: Partial<ShellState> }): HTMLElement {
   const el = h('div', { class: `notice notice-${kind}` }, h('strong', { text: title }))
+  if (kind === 'error') el.prepend(h('img', { class: 'notice-zin', attrs: { src: zinOps, alt: '' } }))
   if (lines.length > 0) el.append(h('ul', {}, ...lines.map((line) => h('li', { text: line }))))
   if (action !== undefined) el.append(stateLink({ class: 'notice-action', text: action.text }, action.changes))
   return el
@@ -475,10 +479,12 @@ function renderCards(view: LoadedView): HTMLElement[] {
   return extra
 }
 
-function emptyState(title: string, text: string): void {
+/** `nap` when there's simply nothing to show yet, `oops` when something went wrong. */
+function emptyState(title: string, text: string, mood: 'nap' | 'oops' = 'oops'): void {
   current = null
   cards = []
-  canvas.replaceChildren(h('div', { class: 'empty-state' }, h('h2', { text: title }), h('p', { text })))
+  const zin = h('img', { class: 'empty-zin', attrs: { src: mood === 'nap' ? zinSoneca : zinOps, alt: '' } })
+  canvas.replaceChildren(h('div', { class: 'empty-state' }, zin, h('h2', { text: title }), h('p', { text })))
   viewMeta.textContent = ''
 }
 
@@ -497,7 +503,7 @@ async function loadCurrentView(): Promise<void> {
   const pageNotices: HTMLElement[] = urlNotices()
   if (entry === undefined) {
     // Keep the requested name in the URL: once the file exists, a refresh shows it (D3).
-    if (views.length === 0) emptyState('No views yet', 'Add a *.melzin.html file to the views folder, then reload.')
+    if (views.length === 0) emptyState('No views yet', 'Add a *.melzin.html file to the views folder, then reload.', 'nap')
     else emptyState(`No view named '${state.view}'`, `Available: ${views.map((view) => view.name).join(', ')}. Pick one above, or add the file and reload.`)
     viewPicker.value = ''
     notices.replaceChildren(...pageNotices)

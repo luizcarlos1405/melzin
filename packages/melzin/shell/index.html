@@ -4,14 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Melzin shell</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="stylesheet" href="./shell.css">
   <script type="module" src="./shell.ts"></script>
 </head>
 <body>
   <header class="topbar" id="topbar">
     <div class="brand" aria-label="Melzin shell">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">melzin</span>
+      <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true">
+        <defs>
+          <linearGradient id="brand-drop" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#FDE68A"/><stop offset=".4" stop-color="#FBBF24"/><stop offset=".75" stop-color="#F59E0B"/><stop offset="1" stop-color="#D97706"/>
+          </linearGradient>
+        </defs>
+        <g fill="none" stroke="#6B3410" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M36 15.4 H30 L10 50 L30 84.6 H36"/><path d="M64 15.4 H70 L90 50 L70 84.6 H64"/>
+        </g>
+        <path d="M50 31 C50 31 37 46 37 55 A13 13 0 0 0 63 55 C63 46 50 31 50 31 Z" fill="url(#brand-drop)"/>
+      </svg>
+      <svg class="brand-name" viewBox="0 0 200 72" aria-hidden="true">
+        <g fill="none" stroke="#6B3410" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 35.5 V60 M10 45.5 A10 10 0 0 1 30 45.5 V60 M30 45.5 A10 10 0 0 1 50 45.5 V60"/>
+          <path d="M65.5 47.5 H89.5 A12 12 0 1 0 86 56"/><path d="M105 18 V60"/><path d="M120 35.5 H138 L120 60 H138"/>
+          <path d="M153 36 V60"/><path d="M168 35.5 V60 M168 45.5 A10 10 0 0 1 188 45.5 V60"/>
+        </g>
+        <path d="M153 10 C153 10 147.5 17.5 147.5 21 A5.5 5.5 0 0 0 158.5 21 C158.5 17.5 153 10 153 10 Z" fill="url(#brand-drop)"/>
+      </svg>
       <span class="brand-sub">shell</span>
     </div>
     <label class="control">

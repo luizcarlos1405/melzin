@@ -78,16 +78,17 @@ textarea {
 }
 
 .brand-mark {
-  width: 18px;
-  height: 20px;
-  background: linear-gradient(160deg, #fbbf24, var(--accent));
-  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+  flex: none;
+  width: 22px;
+  height: 22px;
 }
 
 .brand-name {
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: -0.01em;
+  flex: none;
+  width: 58px;
+  height: 21px;
+  /* The wordmark's baseline sits above the bottom of its box; this lines it up with "shell". */
+  margin-top: 3px;
 }
 
 .brand-sub {
@@ -239,6 +240,24 @@ a:focus-visible {
 .notice-action {
   color: var(--accent-strong);
   font-weight: 600;
+}
+
+/* Long titles share the first line with Zin and the action instead of wrapping below them. */
+.notice > strong {
+  flex: 1 1 0;
+  min-width: 12em;
+}
+
+/* Zin, surprised, at the start of error notices. */
+.notice-zin {
+  flex: none;
+  align-self: center;
+  width: 24px;
+  height: 28px;
+}
+
+.notice-zin ~ ul {
+  margin-left: 36px;
 }
 
 /* Canvas and cards ------------------------------------------------------------------------------- */
@@ -581,6 +600,13 @@ a:focus-visible {
   margin: 0 0 6px;
   color: var(--text);
   font-size: 16px;
+}
+
+.empty-zin {
+  display: block;
+  width: 96px;
+  height: 112px;
+  margin: 0 auto 14px;
 }
 
 /* Clean mode (?chrome=0): only the frames, for screenshots ---------------------------------------- */
