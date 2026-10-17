@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" width="120" height="140" color="#6B3410">
+  <title>Zin surprised</title>
+  <defs>
+    <linearGradient id="zin-body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FDE68A"/><stop offset=".35" stop-color="#FBBF24"/><stop offset="1" stop-color="#F59E0B"/></linearGradient>
+    <linearGradient id="zin-drop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FDE68A"/><stop offset=".4" stop-color="#FBBF24"/><stop offset=".75" stop-color="#F59E0B"/><stop offset="1" stop-color="#D97706"/></linearGradient>
+    <clipPath id="zin-clip"><ellipse cx="60" cy="82" rx="33" ry="36"/></clipPath>
+  </defs>
+  <g transform="rotate(0 60 80)">
+  <polygon points="27,44 40.9,52 40.9,68 27,76 13.1,68 13.1,52" transform="rotate(-38 27 60)" fill="#fff" fill-opacity=".85" stroke="#E7C873" stroke-width="2" stroke-linejoin="round"/><polygon points="93,44 106.9,52 106.9,68 93,76 79.1,68 79.1,52" transform="rotate(38 93 60)" fill="#fff" fill-opacity=".85" stroke="#E7C873" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M50 50 C48 38 43 31 37 27 M70 50 C72 38 77 31 83 27" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="36" cy="26" r="4.6" fill="#FBBF24" stroke="currentColor" stroke-width="2"/><circle cx="84" cy="26" r="4.6" fill="#FBBF24" stroke="currentColor" stroke-width="2"/>
+  <path d="M52 115 L50 125 M68 115 L70 125" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M32 88 L21 71" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M88 88 L99 71" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><circle cx="21" cy="71" r="3.6" fill="currentColor"/><circle cx="99" cy="71" r="3.6" fill="currentColor"/>
+  <ellipse cx="60" cy="82" rx="33" ry="36" fill="url(#zin-body)"/>
+  <g clip-path="url(#zin-clip)" fill="#6B3410"><rect x="20" y="92" width="80" height="9"/><rect x="20" y="106" width="80" height="8"/></g>
+  <ellipse cx="45" cy="60" rx="5.5" ry="9" fill="#fff" opacity=".4" transform="rotate(-30 45 60)"/>
+  <ellipse cx="41" cy="78" rx="4.6" ry="2.7" fill="#F7A1A1" opacity=".75"/><ellipse cx="79" cy="78" rx="4.6" ry="2.7" fill="#F7A1A1" opacity=".75"/><circle cx="49" cy="68" r="5.6" fill="#3B1F0B"/><circle cx="50.8" cy="65.8" r="1.9" fill="#fff"/><circle cx="71" cy="68" r="5.6" fill="#3B1F0B"/><circle cx="72.8" cy="65.8" r="1.9" fill="#fff"/><path d="M44 59 L53 56 M76 59 L67 56" stroke="#3B1F0B" stroke-width="2.2" stroke-linecap="round"/><ellipse cx="60" cy="79" rx="3.4" ry="4.2" fill="#5C1F0A"/>
+  
+  <path d="M92 44 C92 44 88 49 88 51.5 A4 4 0 0 0 96 51.5 C96 49 92 44 92 44 Z" fill="#FDE68A" stroke="#F59E0B" stroke-width="1.4"/>
+  </g>
+</svg>
