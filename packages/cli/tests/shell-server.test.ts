@@ -172,3 +172,36 @@ describe('resolveViewFile', () => {
     expect(entries.find((entry) => entry.name === 'untitled')?.title).toBe('untitled')
   })
 })
+
+describe('routes api', () => {
+  test('lists no routes for a project without routes.json', async () => {
+    const response = await fetch(`${base}/__melzin/api/routes`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ present: false, routes: [], problems: [] })
+  })
+
+  test('lists the routes, or the problems in routes.json', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'melzin-shell-routes-'))
+    mkdirSync(join(project, 'views'))
+    writeFileSync(join(project, 'views', 'counter.mel.html'), COUNTER)
+    writeFileSync(join(project, 'routes.json'), JSON.stringify({ routes: { home: { path: '/', view: 'counter' } } }))
+    const routed = createShellServer({ project: resolveProject({ cwd: project }), port: 0, development: false })
+    try {
+      const url = `${routed.url.href.replace(/\/$/, '')}/__melzin/api/routes`
+      expect(await (await fetch(url)).json()).toEqual({
+        present: true,
+        routes: [{ name: 'home', path: '/', view: 'counter', params: [], query: [], code: 'prefetch', data: 'stale-while-revalidate' }],
+        problems: [],
+      })
+      writeFileSync(join(project, 'routes.json'), '{ "routes": { "home": { "path": "/", "view": "nope" } } }')
+      expect(await (await fetch(url)).json()).toEqual({
+        present: true,
+        routes: [],
+        problems: ["routes.json:1:38: error: routes.home.view: there's no view named 'nope' (nope.mel.html in the views folder)"],
+      })
+    } finally {
+      await routed.stop(true)
+      rmSync(project, { recursive: true, force: true })
+    }
+  })
+})

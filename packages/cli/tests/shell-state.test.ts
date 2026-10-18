@@ -8,6 +8,7 @@ import {
   isFrameMessage,
   isShellMessage,
   setDataMessage,
+  setRouteMessage,
 } from '../shell/protocol.ts'
 import {
   DEFAULT_DEVICE,
@@ -25,6 +26,7 @@ import {
   parseDevice,
   parseShellState,
   parseZoom,
+  routeCardUrl,
   serializeShellState,
   stepZoom,
   viewFileUrl,
@@ -93,11 +95,12 @@ describe('zoom', () => {
 describe('URL state', () => {
   test('defaults: first view, phone, 100%, every snapshot, chrome on', () => {
     expect(parseShellState('')).toEqual(defaultShellState())
-    expect(defaultShellState()).toEqual({ view: null, device: { width: 375, height: 812 }, zoom: 1, snapshot: null, chrome: true })
+    expect(defaultShellState()).toEqual({ route: null, view: null, device: { width: 375, height: 812 }, zoom: 1, snapshot: null, chrome: true })
   })
 
   test('reads every parameter', () => {
     expect(parseShellState('?view=counter&device=768x1024&zoom=0.5&snapshot=a+few+clicks&chrome=0')).toEqual({
+      route: null,
       view: 'counter',
       device: { width: 768, height: 1024 },
       zoom: 0.5,
@@ -114,12 +117,18 @@ describe('URL state', () => {
   })
 
   test('serializes in a stable order and round-trips', () => {
-    const state = { view: 'counter', device: { width: 375, height: 812 }, zoom: 1, snapshot: null, chrome: true }
+    const state = { route: null, view: 'counter', device: { width: 375, height: 812 }, zoom: 1, snapshot: null, chrome: true }
     expect(serializeShellState(state)).toBe('?view=counter&device=375x812&zoom=1')
     const solo = { ...state, snapshot: 'a few clicks', chrome: false, zoom: 0.67 }
     expect(serializeShellState(solo)).toBe('?view=counter&device=375x812&zoom=0.67&snapshot=a+few+clicks&chrome=0')
     expect(parseShellState(serializeShellState(solo))).toEqual(solo)
     expect(serializeShellState(defaultShellState())).toBe('?device=375x812&zoom=1')
+  })
+
+  test('a route wins over a view', () => {
+    expect(parseShellState('?route=profile&view=counter&snapshot=s')).toEqual({ ...defaultShellState(), route: 'profile', snapshot: 's' })
+    const state = { ...defaultShellState(), route: 'profile', view: 'profile' }
+    expect(serializeShellState(state)).toBe('?route=profile&device=375x812&zoom=1')
   })
 
   test('frame and view file URLs', () => {
@@ -130,6 +139,7 @@ describe('URL state', () => {
     expect(viewFileName('')).toBe('')
     expect(frameUrl('counter.mel.html', 'a few clicks')).toBe('/frame?view=counter.mel.html&snapshot=a+few+clicks')
     expect(frameUrl('hello.mel.html', null)).toBe('/frame?view=hello.mel.html')
+    expect(frameUrl('profile.mel.html', 'me', 'profile')).toBe('/frame?view=profile.mel.html&snapshot=me&route=profile')
     expect(new URLSearchParams(frameUrl('x.mel.html', 'a&b=c').split('?')[1]).get('snapshot')).toBe('a&b=c')
     expect(viewFileUrl('my view.mel.html')).toBe('/views/my%20view.mel.html')
   })
@@ -166,6 +176,8 @@ describe('frame protocol', () => {
     expect(isFrameMessage(frameMessage({ type: 'warning', message: 'w', update: true }))).toBe(true)
     expect(isFrameMessage(frameMessage({ type: 'error', message: 'e' }))).toBe(true)
     expect(isShellMessage(setDataMessage({ count: 1 }))).toBe(true)
+    expect(isShellMessage(setRouteMessage({ name: 'profile', params: { handle: 'ana' } }))).toBe(true)
+    expect(isShellMessage({ source: SHELL_SOURCE, type: 'set-route', route: 'x' })).toBe(false)
     expect(setDataMessage({ count: 1 })).toEqual({ source: SHELL_SOURCE, type: 'set-data', data: { count: 1 } })
   })
 
@@ -185,5 +197,13 @@ describe('frame protocol', () => {
     expect(isShellMessage({ source: SHELL_SOURCE, type: 'set-data', data: [] })).toBe(false)
     expect(isShellMessage({ source: SHELL_SOURCE, type: 'set-data' })).toBe(false)
     expect(isShellMessage(frameMessage({ type: 'ready', title: '' }))).toBe(false)
+  })
+})
+
+describe('route card URLs', () => {
+  test('the path with the snapshot\'s params and declared query', () => {
+    expect(routeCardUrl('/u/:handle', { handle: 'ana b' }, { as: 'bruno', other: 'x' }, ['as'])).toBe('/u/ana%20b?as=bruno')
+    expect(routeCardUrl('/u/:handle/posts/:id', { handle: 'ana' })).toBe('/u/ana/posts/:id')
+    expect(routeCardUrl('/')).toBe('/')
   })
 })

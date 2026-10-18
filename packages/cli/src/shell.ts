@@ -7,8 +7,8 @@ import { basename, relative } from 'node:path'
 import { parseArgs } from 'node:util'
 import framePage from '../shell/frame.html'
 import shellPage from '../shell/index.html'
-import { VIEW_FILE_SUFFIX } from 'melzin/core'
-import { loadViewFile } from './check.ts'
+import { type Route, VIEW_FILE_SUFFIX } from 'melzin/core'
+import { checkRoutesSource, formatDiagnostic, loadViewFile } from './check.ts'
 import { buildCss } from './css.ts'
 import { type Project, UsageError, VIEW_FILE_HEADERS, resolveProject, resolveViewFile } from './project.ts'
 
@@ -18,6 +18,7 @@ export const DEFAULT_PORT = 4321
 export const DEFAULT_HOSTNAME = '127.0.0.1'
 
 export const VIEWS_API_PATH = '/__melzin/api/views'
+export const ROUTES_API_PATH = '/__melzin/api/routes'
 export const STYLES_PATH = '/__melzin/styles.css'
 export const VIEWS_PATH_PREFIX = '/views/'
 
@@ -32,6 +33,12 @@ export type ViewEntry = {
   /** The view's `<title>`, or its name when the title is missing or the file can't be read. */
   title: string
 }
+
+/**
+ * `/__melzin/api/routes`: the project's routes (SPEC D26). `routes` is empty when routes.json is missing
+ * or has errors; `problems` lists the errors, formatted like melzin check's output.
+ */
+export type RoutesEntry = { present: boolean; routes: Route[]; problems: string[] }
 
 export type ShellServerOptions = {
   /** The project to serve; defaults to resolveProject() for the current directory. */
@@ -67,6 +74,20 @@ export async function listViewEntries(project: Project): Promise<ViewEntry[]> {
   )
 }
 
+/** The route table the shell lists as pages, with its problems. */
+export async function readRoutesEntry(project: Project): Promise<RoutesEntry> {
+  let source: string
+  try {
+    source = await Bun.file(project.routesFile).text()
+  } catch {
+    return { present: false, routes: [], problems: [] }
+  }
+  const views = project.listViews().map((path) => basename(path).slice(0, -VIEW_FILE_SUFFIX.length))
+  const { diagnostics, table } = checkRoutesSource(source, views)
+  const file = basename(project.routesFile)
+  return { present: true, routes: table?.routes ?? [], problems: diagnostics.map((diagnostic) => formatDiagnostic(file, diagnostic)) }
+}
+
 /** Host names the shell answers to; anything else (a DNS-rebinding page, say) gets 403. */
 function allowedHosts(hostname: string): Set<string> {
   return new Set(['localhost', '127.0.0.1', '[::1]', hostname.includes(':') ? `[${hostname}]` : hostname])
@@ -93,6 +114,7 @@ export function createShellServer(options: ShellServerOptions = {}): Bun.Server<
       // Answered here so browsers' automatic favicon requests don't log a 404 on every load.
       '/favicon.ico': new Response(null, { status: 204 }),
       [VIEWS_API_PATH]: guard(async () => Response.json(await listViewEntries(project), { headers: NO_STORE })),
+      [ROUTES_API_PATH]: guard(async () => Response.json(await readRoutesEntry(project), { headers: NO_STORE })),
       [STYLES_PATH]: guard(async () => {
         try {
           const css = await buildCss({ projectDir: project.root, viewsDir: project.viewsDir, themeFile: project.themeFile })
@@ -172,8 +194,9 @@ export async function runShell(args: string[]): Promise<number> {
   const rel = (path: string) => relative(process.cwd(), path) || '.'
   const theme = existsSync(project.themeFile) ? rel(project.themeFile) : 'none'
   const count = project.listViews().length
+  const routes = existsSync(project.routesFile) ? rel(project.routesFile) : 'none'
   console.log(`Melzin shell: ${server.url.href}`)
-  console.log(`  views: ${rel(project.viewsDir)}/ (${count} ${count === 1 ? 'view' : 'views'}), theme: ${theme}`)
+  console.log(`  views: ${rel(project.viewsDir)}/ (${count} ${count === 1 ? 'view' : 'views'}), theme: ${theme}, routes: ${routes}`)
   console.log('  Refresh the page to reload views and CSS. Ctrl+C to stop.')
 
   return new Promise<number>((resolve) => {

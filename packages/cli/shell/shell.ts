@@ -1,9 +1,11 @@
-// The preview shell: lists the project's views, renders one frame per snapshot at a device size and
-// zoom, and plays the mock host's UI for each frame (state editor, event log, warnings). All state
-// worth sharing lives in the URL (see state.ts), so a refresh reloads everything from the files (D3).
+// The preview shell: lists the project's routes (as pages, SPEC D26) and views, renders one frame per
+// snapshot at a device size and zoom, and plays the mock host's UI for each frame (state editor, URL,
+// event log, warnings). All state worth sharing lives in the URL (see state.ts), so a refresh reloads
+// everything from the files (D3).
 
-import { type Issue, type Snapshot, parseViewHtml } from 'melzin'
-import { type FrameMessage, isFrameMessage, setDataMessage } from './protocol.ts'
+import { type Issue, type Route, type Snapshot, parseViewHtml } from 'melzin'
+import { matchPath, matchRoute } from 'melzin/core'
+import { type FrameMessage, isFrameMessage, setDataMessage, setRouteMessage } from './protocol.ts'
 import {
   DEVICE_MAX,
   DEVICE_MIN,
@@ -20,6 +22,7 @@ import {
   parseDataJson,
   parseDevice,
   parseShellState,
+  routeCardUrl,
   serializeShellState,
   stepZoom,
   viewFileUrl,
@@ -30,8 +33,10 @@ import zinOps from './zin-ops.svg'
 import zinSoneca from './zin-soneca.svg'
 
 type ViewEntry = { name: string; file: string; url: string; title: string }
+type RoutesEntry = { present: boolean; routes: Route[]; problems: string[] }
 
-type LoadedView = { entry: ViewEntry; title: string; snapshots: Snapshot[]; issues: Issue[] }
+/** `route` is set when the view shows as that route's page. */
+type LoadedView = { entry: ViewEntry; route: Route | null; title: string; snapshots: Snapshot[]; issues: Issue[] }
 
 type WarningEntry = { count: number; badge: HTMLElement; item: HTMLLIElement; update: boolean }
 
@@ -48,6 +53,9 @@ type Card = {
   editor: HTMLTextAreaElement
   editorError: HTMLElement
   editedBadge: HTMLElement
+  /** The address bar of a route card (null for views shown on their own). */
+  urlInput: HTMLInputElement | null
+  urlError: HTMLElement | null
   log: HTMLOListElement
   logEmpty: HTMLElement
   eventCount: HTMLElement
@@ -95,6 +103,7 @@ const canvas = byId<HTMLElement>('canvas')
 
 let state: ShellState = parseShellState(location.search)
 let views: ViewEntry[] = []
+let routesEntry: RoutesEntry = { present: false, routes: [], problems: [] }
 let current: LoadedView | null = null
 let cards: Card[] = []
 let loadToken = 0
@@ -137,6 +146,15 @@ function renderZoomPicker(): void {
   zoomIn.disabled = state.zoom >= steps[steps.length - 1]!
 }
 
+// Picker values say what they pick: `route:profile` or `view:profile-card`.
+const pickerValue = (kind: 'route' | 'view', name: string): string => `${kind}:${name}`
+
+function currentPickerValue(): string {
+  if (state.route !== null) return routesEntry.routes.some((route) => route.name === state.route) ? pickerValue('route', state.route) : ''
+  const view = current?.entry.name ?? pickView()?.entry.name
+  return view === undefined ? '' : pickerValue('view', view)
+}
+
 function renderViewPicker(): void {
   if (views.length === 0) {
     viewPicker.replaceChildren(h('option', { text: 'No views', attrs: { value: '' } }))
@@ -146,14 +164,19 @@ function renderViewPicker(): void {
   viewPicker.disabled = false
   const titles = new Map<string, number>()
   for (const view of views) titles.set(view.title, (titles.get(view.title) ?? 0) + 1)
-  viewPicker.replaceChildren(
-    ...views.map((view) => {
-      const label = (titles.get(view.title) ?? 0) > 1 ? `${view.title} (${view.file})` : view.title
-      return h('option', { text: label, title: view.file, attrs: { value: view.name } })
-    }),
-  )
-  // The requested view even when its file failed to load; blank for a name that matches no view.
-  viewPicker.value = current?.entry.name ?? pickView()?.name ?? ''
+  const viewOptions = views.map((view) => {
+    const label = (titles.get(view.title) ?? 0) > 1 ? `${view.title} (${view.file})` : view.title
+    return h('option', { text: label, title: view.file, attrs: { value: pickerValue('view', view.name) } })
+  })
+  const { routes } = routesEntry
+  if (routes.length === 0) {
+    viewPicker.replaceChildren(...viewOptions)
+  } else {
+    const routeOptions = routes.map((route) => h('option', { text: `${route.path}  (${route.name})`, title: `${route.view}.mel.html`, attrs: { value: pickerValue('route', route.name) } }))
+    viewPicker.replaceChildren(h('optgroup', { attrs: { label: 'Pages' } }, ...routeOptions), h('optgroup', { attrs: { label: 'Views' } }, ...viewOptions))
+  }
+  // The requested view even when its file failed to load; blank for a name that matches nothing.
+  viewPicker.value = currentPickerValue()
 }
 
 function setDevice(device: Device): void {
@@ -178,7 +201,10 @@ zoomPicker.addEventListener('change', () => setZoom(Number(zoomPicker.value)))
 zoomIn.addEventListener('click', () => setZoom(stepZoom(state.zoom, 1)))
 zoomOut.addEventListener('click', () => setZoom(stepZoom(state.zoom, -1)))
 viewPicker.addEventListener('change', () => {
-  state.view = viewPicker.value
+  const [kind, ...rest] = viewPicker.value.split(':')
+  const name = rest.join(':')
+  state.route = kind === 'route' ? name : null
+  state.view = kind === 'view' ? name : null
   state.snapshot = null
   updateUrl()
   void loadCurrentView()
@@ -258,11 +284,16 @@ function clearUpdateWarnings(card: Card): void {
   renderWarningCount(card)
 }
 
-function addEvent(card: Card, name: string, time: number, kind: 'event' | 'link' = 'event'): void {
+function addEvent(card: Card, name: string, time: number, kind: 'event' | 'link' | 'navigate' = 'event'): void {
   card.events += 1
   card.eventCount.textContent = String(card.events)
   card.logEmpty.hidden = true
-  const label = kind === 'link' ? h('span', { class: 'event-link', text: `link not followed: ${name}` }) : h('code', { text: name })
+  const label =
+    kind === 'link'
+      ? h('span', { class: 'event-link', text: `link not followed: ${name}` })
+      : kind === 'navigate'
+        ? h('span', { class: 'event-navigate' }, h('code', { text: 'navigate' }), h('span', { class: 'event-link', text: ` → ${name}` }))
+        : h('code', { text: name })
   const item = h('li', { class: 'event' }, h('time', { text: formatTime(new Date(time)) }), label)
   card.log.prepend(item)
   item.classList.add('event-new')
@@ -297,8 +328,60 @@ function onEditorInput(card: Card): void {
   }, 150)
 }
 
+/** The URL input a card's snapshot starts with (SPEC D27); `name` is the route the card previews. */
+function initialRoute(card: Card): { name?: string; params: Record<string, string>; query: Record<string, string> } {
+  const route = current?.route ?? null
+  const input = { params: { ...card.snapshot?.route?.params }, query: { ...card.snapshot?.route?.query } }
+  return route === null ? input : { name: route.name, ...input }
+}
+
+function initialUrl(card: Card): string {
+  const route = current?.route
+  if (route == null) return ''
+  const { params, query } = initialRoute(card)
+  return routeCardUrl(route.path, params, query, route.query)
+}
+
+/** Applies the URL typed in a route card's address bar: it must be a URL of the card's route. */
+function onUrlChange(card: Card): void {
+  const route = current?.route
+  if (route == null || card.urlInput === null || card.urlError === null) return
+  let url: URL
+  try {
+    url = new URL(card.urlInput.value.trim() || '/', location.origin)
+  } catch {
+    url = new URL('/', location.origin)
+  }
+  const params = matchPath(route, url.pathname)
+  const edited = card.urlInput.value !== initialUrl(card)
+  card.editedBadge.hidden = !edited && card.editor.value === formatData(initialData(card))
+  if (params === null) {
+    card.urlInput.classList.add('invalid')
+    card.urlInput.setAttribute('aria-invalid', 'true')
+    card.urlError.textContent = `Not applied: not a URL of route '${route.name}' (${route.path})`
+    card.urlError.hidden = false
+    return
+  }
+  card.urlInput.classList.remove('invalid')
+  card.urlInput.removeAttribute('aria-invalid')
+  card.urlError.hidden = true
+  const query: Record<string, string> = {}
+  for (const name of route.query) {
+    const value = url.searchParams.get(name)
+    if (value !== null) query[name] = value
+  }
+  card.iframe.contentWindow?.postMessage(setRouteMessage({ name: route.name, params, query }), location.origin)
+}
+
 function resetCard(card: Card): void {
   clearTimeout(card.debounce)
+  if (card.urlInput !== null && card.urlError !== null) {
+    card.urlInput.value = initialUrl(card)
+    card.urlInput.classList.remove('invalid')
+    card.urlInput.removeAttribute('aria-invalid')
+    card.urlError.hidden = true
+    card.iframe.contentWindow?.postMessage(setRouteMessage(initialRoute(card)), location.origin)
+  }
   card.editor.value = formatData(initialData(card))
   card.editor.classList.remove('invalid')
   card.editor.removeAttribute('aria-invalid')
@@ -317,9 +400,20 @@ function panel(title: string, count: HTMLElement | null, ...body: Node[]): HTMLD
 function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
   const iframe = h('iframe', {
     title: `${view.title}: ${snapshot === null ? 'no data' : snapshot.name}`,
-    attrs: { src: frameUrl(view.entry.file, snapshot?.name ?? null) },
+    attrs: { src: frameUrl(view.entry.file, snapshot?.name ?? null, view.route?.name ?? null) },
   })
   const wrap = h('div', { class: 'frame-wrap' }, iframe)
+  // A route card has an address bar: the URL the snapshot shows, editable like the view's data.
+  let urlInput: HTMLInputElement | null = null
+  let urlError: HTMLElement | null = null
+  let urlBar: HTMLElement | null = null
+  if (view.route !== null) {
+    urlInput = h('input', { class: 'url-input', attrs: { type: 'text', spellcheck: 'false', autocomplete: 'off', 'aria-label': `URL for ${snapshot?.name ?? 'no data'}` } })
+    urlError = h('p', { class: 'editor-error url-error', attrs: { id: `url-error-${++editorIds}` } })
+    urlError.hidden = true
+    urlInput.setAttribute('aria-describedby', urlError.id)
+    urlBar = h('div', { class: 'url-bar', title: `Route '${view.route.name}': ${view.route.path}` }, h('span', { class: 'url-label', text: 'URL' }), urlInput)
+  }
   const statusBadge = h('span', { class: 'status status-loading', text: 'loading' })
   const editedBadge = h('span', { class: 'edited', text: 'edited' })
   editedBadge.hidden = true
@@ -358,7 +452,7 @@ function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
   const warningsPanel = panel('Warnings', warningCount, warningEmpty, warningList)
   const panels = h('aside', { class: 'panels' }, statePanel, eventsPanel, warningsPanel)
 
-  const root = h('section', { class: 'card' }, head, h('div', { class: 'card-body' }, wrap, panels))
+  const root = h('section', { class: 'card' }, head, ...(urlBar === null || urlError === null ? [] : [urlBar, urlError]), h('div', { class: 'card-body' }, wrap, panels))
   const card: Card = {
     snapshot,
     root,
@@ -369,6 +463,8 @@ function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
     editor,
     editorError,
     editedBadge,
+    urlInput,
+    urlError,
     log,
     logEmpty,
     eventCount,
@@ -380,6 +476,13 @@ function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
     debounce: undefined,
   }
   editor.addEventListener('input', () => onEditorInput(card))
+  if (urlInput !== null) {
+    urlInput.value = initialUrl(card)
+    urlInput.addEventListener('change', () => onUrlChange(card))
+    urlInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') onUrlChange(card)
+    })
+  }
   resetButton.addEventListener('click', () => resetCard(card))
   clearLog.addEventListener('click', () => {
     card.log.replaceChildren()
@@ -419,9 +522,14 @@ function onFrameMessage(card: Card, message: FrameMessage): void {
     case 'event':
       addEvent(card, message.name, message.time)
       break
-    case 'link':
-      addEvent(card, message.href, message.time, 'link')
+    case 'link': {
+      // A link to one of the app's routes is a navigation (SPEC D25): logged, not followed.
+      const internal = message.href.startsWith('/') && !message.href.startsWith('//')
+      const match = internal ? matchRoute({ routes: routesEntry.routes }, message.href) : null
+      if (match === null) addEvent(card, message.href, message.time, 'link')
+      else addEvent(card, `${match.route.name} ${match.url}`, message.time, 'navigate')
       break
+    }
     case 'warning':
       addWarning(card, message.message, { update: message.update })
       break
@@ -441,17 +549,36 @@ window.addEventListener('message', (event) => {
 // ---------------------------------------------------------------------------------------------------
 // Loading
 
+async function fetchRoutes(): Promise<RoutesEntry> {
+  const response = await fetch('/__melzin/api/routes', { cache: 'no-store' })
+  if (!response.ok) throw new Error(`couldn't list routes: HTTP ${response.status}`)
+  return (await response.json()) as RoutesEntry
+}
+
 async function fetchViews(): Promise<ViewEntry[]> {
   const response = await fetch('/__melzin/api/views', { cache: 'no-store' })
   if (!response.ok) throw new Error(`couldn't list views: HTTP ${response.status}`)
   return (await response.json()) as ViewEntry[]
 }
 
-/** The view the URL asks for (the first one when it asks for none); undefined when it names a missing view. */
-function pickView(): ViewEntry | undefined {
-  const wanted = state.view
-  if (wanted === null) return views[0]
-  return views.find((view) => view.name === wanted || view.file === wanted)
+/**
+ * What the URL asks for: a route's page or a view. When it asks for neither, the first route, else the
+ * first view. Undefined when it names a route or view that doesn't exist.
+ */
+function pickView(): { entry: ViewEntry; route: Route | null } | undefined {
+  const viewEntry = (name: string): ViewEntry | undefined => views.find((view) => view.name === name || view.file === name)
+  const routeEntry = (route: Route | undefined): { entry: ViewEntry; route: Route } | undefined => {
+    const entry = route === undefined ? undefined : viewEntry(route.view)
+    return route === undefined || entry === undefined ? undefined : { entry, route }
+  }
+  if (state.route !== null) return routeEntry(routesEntry.routes.find((route) => route.name === state.route))
+  if (state.view !== null) {
+    const entry = viewEntry(state.view)
+    return entry === undefined ? undefined : { entry, route: null }
+  }
+  const first = routeEntry(routesEntry.routes[0])
+  if (first !== undefined) return first
+  return views[0] === undefined ? undefined : { entry: views[0], route: null }
 }
 
 function renderCards(view: LoadedView): HTMLElement[] {
@@ -499,20 +626,34 @@ async function loadCurrentView(): Promise<void> {
   const token = ++loadToken
   delete document.body.dataset.melzinReady
   stateLinks = []
-  const entry = pickView()
+  const picked = pickView()
   const pageNotices: HTMLElement[] = urlNotices()
-  if (entry === undefined) {
+  if (routesEntry.problems.length > 0) {
+    const count = `${routesEntry.problems.length} problem${routesEntry.problems.length === 1 ? '' : 's'}`
+    pageNotices.push(notice('error', `routes.json: ${count}, so the shell lists no pages (run melzin check)`, routesEntry.problems))
+  }
+  if (picked === undefined) {
     // Keep the requested name in the URL: once the file exists, a refresh shows it (D3).
-    if (views.length === 0) emptyState('No views yet', 'Add a *.mel.html file to the views folder, then reload.', 'nap')
-    else emptyState(`No view named '${state.view}'`, `Available: ${views.map((view) => view.name).join(', ')}. Pick one above, or add the file and reload.`)
+    if (views.length === 0) {
+      emptyState('No views yet', 'Add a *.mel.html file to the views folder, then reload.', 'nap')
+    } else if (state.route !== null) {
+      const route = routesEntry.routes.find((item) => item.name === state.route)
+      const pages = routesEntry.routes.map((item) => item.name).join(', ') || 'none'
+      if (route === undefined) emptyState(`No route named '${state.route}'`, `Routes: ${pages}. Pick a page or a view above.`)
+      else emptyState(`Route '${route.name}' shows '${route.view}', which isn't in the views folder`, 'Add the view, or fix routes.json, then reload.')
+    } else {
+      emptyState(`No view named '${state.view}'`, `Available: ${views.map((view) => view.name).join(', ')}. Pick one above, or add the file and reload.`)
+    }
     viewPicker.value = ''
     notices.replaceChildren(...pageNotices)
     document.body.dataset.melzinReady = 'true'
     return
   }
-  state.view = entry.name
+  const { entry, route } = picked
+  state.route = route?.name ?? null
+  state.view = route === null ? entry.name : null
   updateUrl()
-  viewPicker.value = entry.name
+  viewPicker.value = currentPickerValue()
 
   let html: string
   try {
@@ -529,11 +670,12 @@ async function loadCurrentView(): Promise<void> {
   if (token !== loadToken) return
 
   const parsed = parseViewHtml(html)
-  current = { entry, title: parsed.title || entry.name, snapshots: parsed.snapshots, issues: parsed.issues }
-  document.title = `${current.title} · Melzin shell`
-  viewPicker.value = entry.name
+  current = { entry, route, title: parsed.title || entry.name, snapshots: parsed.snapshots, issues: parsed.issues }
+  document.title = `${route === null ? current.title : route.path} · Melzin shell`
+  viewPicker.value = currentPickerValue()
   const count = parsed.snapshots.length
-  viewMeta.textContent = `${entry.file} · ${count === 0 ? 'no snapshots' : `${count} snapshot${count === 1 ? '' : 's'}`}`
+  const page = route === null ? '' : `${route.path} (route '${route.name}') · `
+  viewMeta.textContent = `${page}${entry.file} · ${count === 0 ? 'no snapshots' : `${count} snapshot${count === 1 ? '' : 's'}`}`
   // Shown even with chrome=0: a screenshot of a view with a broken schema or snapshots would mislead.
   if (parsed.issues.length > 0) {
     const count = `${parsed.issues.length} problem${parsed.issues.length === 1 ? '' : 's'}`
@@ -545,9 +687,10 @@ async function loadCurrentView(): Promise<void> {
 
 async function reloadAll(): Promise<void> {
   try {
-    views = await fetchViews()
+    ;[views, routesEntry] = await Promise.all([fetchViews(), fetchRoutes()])
   } catch (error) {
     views = []
+    routesEntry = { present: false, routes: [], problems: [] }
     notices.replaceChildren(notice('error', 'The shell server is unreachable', [error instanceof Error ? error.message : String(error)]))
     emptyState('No connection', 'Start melzin shell again, then reload.')
     renderViewPicker()

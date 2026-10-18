@@ -3,7 +3,7 @@
 // handler for every declared event, and reports events and warnings to the shell. The shell sends
 // new data with a "set-data" message, applied with `view.update`.
 
-import { VIEW_FILE_SUFFIX } from 'melzin/core'
+import { type RouteInput, VIEW_FILE_SUFFIX } from 'melzin/core'
 import { DATA_WARNING_PREFIX, type MelzinView, mountSource, parseViewHtml } from 'melzin'
 import { type FrameMessageBody, frameMessage, isShellMessage } from './protocol.ts'
 import { viewFileName, viewFileUrl } from './state.ts'
@@ -13,6 +13,7 @@ const STYLES_URL = '/__melzin/styles.css'
 const embedded = window.parent !== window
 let view: MelzinView<Record<string, unknown>> | null = null
 let pendingData: Record<string, unknown> | null = null
+let pendingRoute: RouteInput | null = null
 let unloading = false
 addEventListener('pagehide', () => {
   unloading = true
@@ -99,9 +100,16 @@ function interceptNavigation(): void {
 
 function onMessage(event: MessageEvent): void {
   if (event.origin !== location.origin || event.source !== window.parent) return
-  if (!isShellMessage(event.data)) return
-  if (view === null) pendingData = event.data.data
-  else applyData(event.data.data)
+  const message = event.data
+  if (!isShellMessage(message)) return
+  if (message.type === 'set-route') {
+    if (view === null) pendingRoute = message.route
+    else view.setRoute(message.route)
+  } else if (view === null) {
+    pendingData = message.data
+  } else {
+    applyData(message.data)
+  }
 }
 
 async function start(): Promise<void> {
@@ -111,6 +119,8 @@ async function start(): Promise<void> {
   // The file name or, as in the shell's URL, the bare name.
   const file = viewFileName(params.get('view')?.trim() ?? '')
   const snapshotName = params.get('snapshot')
+  // The route this frame previews (SPEC D26): its name is part of the view's URL input.
+  const routeName = params.get('route')
   if (!file.endsWith(VIEW_FILE_SUFFIX) || file.includes('/') || file.includes('\\')) {
     fail(`melzin: expected ?view=<name> or ?view=<name>${VIEW_FILE_SUFFIX}, got '${params.get('view') ?? ''}'`)
     return
@@ -128,6 +138,7 @@ async function start(): Promise<void> {
 
   const parsed = parseViewHtml(html)
   let data: Record<string, unknown> = {}
+  let route: RouteInput = routeName === null ? {} : { name: routeName }
   if (snapshotName !== null) {
     const snapshot = parsed.snapshots.find((item) => item.name === snapshotName)
     if (snapshot === undefined) {
@@ -141,6 +152,7 @@ async function start(): Promise<void> {
       return
     }
     data = structuredClone(snapshot.data)
+    route = { ...route, params: { ...snapshot.route?.params }, query: { ...snapshot.route?.query } }
   }
 
   // A handler for every declared event: the shell logs it, nothing else happens (#43).
@@ -158,6 +170,7 @@ async function start(): Promise<void> {
     view = mountSource(root, html, {
       data,
       on,
+      route,
       onWarning: (message) => {
         console.warn(`[melzin] ${message}`)
         // Data warnings (from mount or later updates) go stale as soon as the shell sends new data.
@@ -172,6 +185,10 @@ async function start(): Promise<void> {
   if (pendingData !== null) {
     applyData(pendingData)
     pendingData = null
+  }
+  if (pendingRoute !== null) {
+    view.setRoute(pendingRoute)
+    pendingRoute = null
   }
   post({ type: 'ready', title: parsed.title })
   markReady('true')

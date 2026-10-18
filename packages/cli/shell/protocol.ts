@@ -2,7 +2,7 @@
 // acts as the view's host: it mounts the view and reports everything to the shell, which plays the
 // mock host's UI (state editor, event log, warnings).
 
-import { isPlainObject } from 'melzin/core'
+import { type RouteInput, isPlainObject } from 'melzin/core'
 
 export const FRAME_SOURCE = 'melzin-frame'
 export const SHELL_SOURCE = 'melzin-shell'
@@ -18,8 +18,13 @@ export type FrameMessage = { source: typeof FRAME_SOURCE } & (
   | { type: 'error'; message: string }
 )
 
-/** Shell → frame: replace the view's data (applied with `view.update`). */
-export type ShellMessage = { source: typeof SHELL_SOURCE; type: 'set-data'; data: Record<string, unknown> }
+/**
+ * Shell → frame: replace the view's data (applied with `view.update`), or its URL input (applied with
+ * `view.setRoute`, SPEC D27).
+ */
+export type ShellMessage =
+  | { source: typeof SHELL_SOURCE; type: 'set-data'; data: Record<string, unknown> }
+  | { source: typeof SHELL_SOURCE; type: 'set-route'; route: RouteInput }
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 export type FrameMessageBody = DistributiveOmit<FrameMessage, 'source'>
@@ -30,6 +35,10 @@ export function frameMessage(body: FrameMessageBody): FrameMessage {
 
 export function setDataMessage(data: Record<string, unknown>): ShellMessage {
   return { source: SHELL_SOURCE, type: 'set-data', data }
+}
+
+export function setRouteMessage(route: RouteInput): ShellMessage {
+  return { source: SHELL_SOURCE, type: 'set-route', route }
 }
 
 export function isFrameMessage(value: unknown): value is FrameMessage {
@@ -51,5 +60,7 @@ export function isFrameMessage(value: unknown): value is FrameMessage {
 }
 
 export function isShellMessage(value: unknown): value is ShellMessage {
-  return isPlainObject(value) && value.source === SHELL_SOURCE && value.type === 'set-data' && isPlainObject(value.data)
+  if (!isPlainObject(value) || value.source !== SHELL_SOURCE) return false
+  if (value.type === 'set-data') return isPlainObject(value.data)
+  return value.type === 'set-route' && isPlainObject(value.route)
 }

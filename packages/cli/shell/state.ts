@@ -82,7 +82,9 @@ export function stepZoom(zoom: number, direction: 1 | -1): number {
 
 /** Everything the shell keeps in its URL. */
 export type ShellState = {
-  /** View name (file name minus `.mel.html`); null picks the first view. */
+  /** Route name: the shell shows that route's view as a page (SPEC D26). Wins over `view`. */
+  route: string | null
+  /** View name (file name minus `.mel.html`); with no route or view, the shell picks the first route, or the first view. */
   view: string | null
   device: Device
   zoom: number
@@ -93,15 +95,20 @@ export type ShellState = {
 }
 
 export function defaultShellState(): ShellState {
-  return { view: null, device: { width: DEFAULT_DEVICE.width, height: DEFAULT_DEVICE.height }, zoom: DEFAULT_ZOOM, snapshot: null, chrome: true }
+  return { route: null, view: null, device: { width: DEFAULT_DEVICE.width, height: DEFAULT_DEVICE.height }, zoom: DEFAULT_ZOOM, snapshot: null, chrome: true }
 }
 
-/** Reads `?view=counter&device=375x812&zoom=1&snapshot=zero&chrome=0`; bad values fall back to defaults. */
+/**
+ * Reads `?view=counter&device=375x812&zoom=1&snapshot=zero&chrome=0`, or `?route=profile&…`; bad values
+ * fall back to defaults.
+ */
 export function parseShellState(search: string): ShellState {
   const params = new URLSearchParams(search)
   const state = defaultShellState()
+  const route = params.get('route')?.trim()
   const view = params.get('view')?.trim()
-  if (view) state.view = viewName(view)
+  if (route) state.route = route
+  else if (view) state.view = viewName(view)
   state.device = parseDevice(params.get('device')) ?? state.device
   state.zoom = parseZoom(params.get('zoom')) ?? state.zoom
   const snapshot = params.get('snapshot')
@@ -111,10 +118,11 @@ export function parseShellState(search: string): ShellState {
   return state
 }
 
-/** The query string for a state, always with view (when known), device and zoom: `?view=…&device=…&zoom=…`. */
+/** The query string for a state, always with the route or view (when known), device and zoom: `?view=…&device=…&zoom=…`. */
 export function serializeShellState(state: ShellState): string {
   const params = new URLSearchParams()
-  if (state.view !== null) params.set('view', state.view)
+  if (state.route !== null) params.set('route', state.route)
+  else if (state.view !== null) params.set('view', state.view)
   params.set('device', formatDevice(state.device))
   params.set('zoom', String(Math.round(state.zoom * 100) / 100))
   if (state.snapshot !== null) params.set('snapshot', state.snapshot)
@@ -132,11 +140,23 @@ export function viewFileName(nameOrFile: string): string {
   return nameOrFile === '' || nameOrFile.endsWith(VIEW_FILE_SUFFIX) ? nameOrFile : `${nameOrFile}${VIEW_FILE_SUFFIX}`
 }
 
-/** The frame page for one render: `/frame?view=counter.mel.html&snapshot=zero`. */
-export function frameUrl(file: string, snapshot: string | null): string {
+/** The frame page for one render: `/frame?view=counter.mel.html&snapshot=zero`, plus `&route=profile` for a route. */
+export function frameUrl(file: string, snapshot: string | null, route: string | null = null): string {
   const params = new URLSearchParams({ view: file })
   if (snapshot !== null) params.set('snapshot', snapshot)
+  if (route !== null) params.set('route', route)
   return `/frame?${params.toString()}`
+}
+
+/** The URL a route card shows: the route's path with the snapshot's params, `:name` where one is missing. */
+export function routeCardUrl(path: string, params: Readonly<Record<string, string>> = {}, query: Readonly<Record<string, string>> = {}, queryNames: readonly string[] = []): string {
+  const pathname = path.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, (whole, name: string) =>
+    Object.hasOwn(params, name) && params[name] !== '' ? encodeURIComponent(params[name]!) : whole,
+  )
+  const search = new URLSearchParams()
+  for (const name of queryNames) if (Object.hasOwn(query, name)) search.set(name, query[name]!)
+  const text = search.toString()
+  return text === '' ? pathname : `${pathname}?${text}`
 }
 
 /** The view file's URL on the shell server. */
