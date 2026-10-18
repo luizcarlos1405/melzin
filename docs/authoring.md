@@ -263,8 +263,8 @@ path names a list field of the schema (§4), or a list inside the item of an `m-
 `m-if="members.length"` and follow it with an `m-else`, as above. A missing optional list shows like an
 empty one. When the list is its container's only content (the rest is whitespace or comments), the
 container's whitespace goes, so the container is `:empty` while the list is empty and `empty:hidden`
-hides it, like the tags above. Two lists in one container are each other's content, so that container
-keeps its whitespace and is never `:empty`: give each list its own container. A list with
+hides it, like the tags above. Two lists in one container are each other's content, so the whitespace
+in that container stays: give each list its own container to hide it with `empty:hidden`. A list with
 `"minItems": 1` is never empty and needs no empty state (§4).
 
 **Nested lists.** An `m-for` inside a row can go over a list of the row's item, as `tag in member.tags`
