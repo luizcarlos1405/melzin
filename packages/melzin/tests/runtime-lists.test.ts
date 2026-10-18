@@ -374,6 +374,30 @@ describe('empty states', () => {
     expect(children($('ul'))).toEqual(['#m-for', 'li', 'li'])
   })
 
+  test('comments next to the list still leave the container :empty', () => {
+    mountBody('<ul>\n  <!-- one row per member -->\n  <li m-for="member in members" m-text="member.name"></li>\n  <!-- end -->\n</ul>', { members: [] })
+    expect(children($('ul'))).toEqual(['# one row per member ', '#m-for', '# end '])
+    expect($('ul').matches(':empty')).toBe(true)
+  })
+
+  test('a list in running text keeps the spaces around it', () => {
+    const v = mountBody('<p><b>Tags:</b> <span m-for="tag in tags" m-text="tag"></span> <i>end</i></p>', { members: [], tags: ['design', 'code'] })
+    expect($('p').textContent).toBe('Tags: designcode end')
+    expect(children($('p'))).toEqual(['b', '#text', '#m-for', 'span', 'span', '#text', 'i'])
+    v.update({ members: [], tags: [] })
+    expect($('p').textContent).toBe('Tags:  end')
+    expect(warnings).toEqual([])
+  })
+
+  test('two lists in one container keep the whitespace between them, whichever comes first', () => {
+    mountBody('<div>\n<b m-for="tag in tags" m-text="tag"></b>\n<i m-for="score in scores" m-text="score"></i>\n</div>', {
+      members: [],
+      tags: ['a'],
+      scores: [1],
+    })
+    expect(children($('div'))).toEqual(['#text', '#m-for', 'b', '#text', '#m-for', 'i', '#text'])
+  })
+
   test('a missing optional list renders like an empty one', () => {
     const v = mountBody('<ul><li m-for="tag in tags" m-text="tag"></li></ul>', { members: [] })
     expect(children($('ul'))).toEqual(['#m-for'])

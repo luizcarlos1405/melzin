@@ -474,17 +474,26 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       return branches
     }
 
-    // An m-for element leaves the template for an anchor comment that its rows will follow, and
-    // whitespace on either side goes too, so a container that only holds the list is :empty while the
-    // list is. A broken m-for warns and shows no rows: hiding beats showing the wrong thing.
+    // The anchors compileList left, which stand for their lists: content, unlike other comments.
+    const listAnchors = new Set<Node>()
+    const isBlank = (node: Node): boolean =>
+      node.nodeType === TEXT_NODE ? isInterElementWhitespace(node.textContent ?? '') : node.nodeType === COMMENT_NODE && !listAnchors.has(node)
+
+    // An m-for element leaves the template for an anchor comment that its rows will follow. A list
+    // that is its container's only content (the rest is whitespace and comments) takes the container's
+    // whitespace with it, so the container is :empty while the list is; anywhere else the whitespace
+    // stays, so a list in running text keeps the spaces around it. A broken m-for warns and shows no
+    // rows: hiding beats showing the wrong thing.
     const compileList = (el: Element): void => {
       const value = el.getAttribute(FOR_DIRECTIVE) ?? ''
       const skip = (message: string): void => warn(`${describeElement(el, FOR_DIRECTIVE, value)}: ${message}; shows no rows`)
       const anchor = target.createComment(FOR_DIRECTIVE)
-      for (const side of [el.previousSibling, el.nextSibling]) {
-        if (side !== null && side.nodeType === TEXT_NODE && isInterElementWhitespace(side.textContent ?? '')) side.remove()
+      const siblings = [...el.parentNode!.childNodes]
+      if (siblings.every((node) => node === el || isBlank(node))) {
+        for (const node of siblings) if (node.nodeType === TEXT_NODE) node.remove()
       }
       el.replaceWith(anchor)
+      listAnchors.add(anchor)
       el.removeAttribute(FOR_DIRECTIVE)
       const parsed = parseForDirective(value)
       if (!parsed.ok) return skip(`${parsed.message} (at column ${parsed.offset + 1})`)
