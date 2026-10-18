@@ -896,9 +896,11 @@ payload rules (`core/payload.ts`), so the runtime and the checker still agree (Â
   indexes. Each directive is parsed and resolved once, so a bad one warns once, not once per row. A
   row is a clone of its template, bound from the plan.
 - **Rows.** Each `m-for` element is replaced by a comment anchor, `<!--m-for-->`, and its rows (without
-  the `m-for` attribute) follow it back to back, in data order. Whitespace-only text right before and
-  after the `m-for` element goes, so a container that holds only the list is `:empty` while it has no
-  rows.
+  the `m-for` attribute) follow it back to back, in data order. When the `m-for` element is its
+  container's only content (the rest is whitespace-only text or comments), the container's
+  whitespace-only text goes, so it's `:empty` while the list has no rows. Anywhere else the source's
+  whitespace stays, so a list in running text keeps the spaces before its first row and after its
+  last. Another list's anchor counts as content.
 - **A scope per row.** Every row has its own bindings, and its alias reads the row's current item at
   render time, so a kept row shows its item's new values in the same elements.
 - **Keyed rows.** On every render, rows match items in a `Map` by key: the key field, or the value in a

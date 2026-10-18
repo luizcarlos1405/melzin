@@ -248,6 +248,10 @@ path names a list field of the schema (§4), or a list inside the item of an `m-
   its container (like the `<ul>` above) when you use them. To tell rows apart, use the list's key.
 - Rows sit back to back, with no whitespace between them: space them from the container
   (`divide-y`, `space-y-3`, or `gap-3` on a flex or grid container), not with spaces in the source.
+  The spaces around the list stay as written, so in running text
+  `<b>Tags:</b> <span m-for="tag in tags" m-text="tag"></span> <i>more</i>` reads "Tags: designcode
+  more". Put a separator inside the row, or give the rows a container of their own with
+  `inline-flex gap-1`. Only a list alone in its container loses the whitespace around it (below).
 - `<template m-for>` isn't supported: put `m-for` on the element to repeat. When an item needs several
   elements, wrap them in one: a `<div>` around each `<dt>` and `<dd>` pair of a `<dl>`, a `<tbody>` per
   item of a table.
@@ -257,9 +261,11 @@ path names a list field of the schema (§4), or a list inside the item of an `m-
 
 **Empty states.** Every list that can be empty needs a design for it. Wrap the list in an element with
 `m-if="members.length"` and follow it with an `m-else`, as above. A missing optional list shows like an
-empty one. A container that holds only the list (whitespace aside) has no children while the list is
-empty, so `empty:hidden` hides it, like the tags above. A list with `"minItems": 1` is never empty and
-needs no empty state (§4).
+empty one. When the list is its container's only content (the rest is whitespace or comments), the
+container's whitespace goes, so the container is `:empty` while the list is empty and `empty:hidden`
+hides it, like the tags above. Two lists in one container are each other's content, so that container
+keeps its whitespace and is never `:empty`: give each list its own container. A list with
+`"minItems": 1` is never empty and needs no empty state (§4).
 
 **Nested lists.** An `m-for` inside a row can go over a list of the row's item, as `tag in member.tags`
 does. Each list has its own keys: two members may both have the tag `design`.
@@ -598,7 +604,7 @@ and keeps the fields around it. For members with a handle and a name:
   `isFeatured`, and a condition inside the row.
 - Rows of a list (§3): style them by position with `first:`, `last:`, `odd:`, `even:`, `only:` and
   `nth-*`, space them from the container with `divide-y`, `space-y-*` or `gap-*`, and hide a container
-  whose list is empty with `empty:hidden`.
+  that holds only the list, while it's empty, with `empty:hidden`.
 - Plan for long values: `wrap-anywhere`, `truncate`, `min-w-0` and `text-balance` keep layouts intact.
   A grid of cards with `truncate` text needs `grid-cols-1` (or another `grid-cols-*`), or each card
   grows to its longest text and runs off a phone's screen. In a row with a long label and parts of
