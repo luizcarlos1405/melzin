@@ -167,13 +167,53 @@ describe('emits that do not match the payload', () => {
       pollId: 1,
       options: options('pizza', 'tacos'),
     })
-    expect(warnings).toEqual([
-      `<button m-on:click="emit('vote', { optionId: option.note })">: 'option.note' may be missing, but the payload requires 'optionId'`,
-    ])
+    const where = `<button m-on:click="emit('vote', { optionId: option.note })">`
+    expect(warnings).toEqual([`${where}: 'option.note' may be missing, but the payload requires 'optionId'`])
     buttons()[0]!.click()
+    buttons()[1]!.click()
     v.update({ pollId: 1, options: [{ id: 'pizza', label: 'Pizza', note: 'p' }, ...options('tacos')] })
     buttons()[0]!.click()
-    expect(calls).toEqual([['vote', {}], ['vote', { optionId: 'p' }]])
+    expect(calls).toEqual([['vote', {}], ['vote', {}], ['vote', { optionId: 'p' }]])
+    // The click that sends it without the field says so, once for the emit, not once per row.
+    expect(warnings.slice(1)).toEqual([
+      `${where}: payload field 'optionId' is required but option.note is missing; make 'option.note' required in the schema, or 'optionId' optional in the payload; sent without it`,
+    ])
+  })
+
+  test('a required field the route input leaves out warns at the click, once per emit', () => {
+    const body =
+      `<button id="name" m-on:click="emit('vote', { optionId: route.name })"></button>` +
+      `<button id="param" m-on:click="emit('vote', { optionId: route.params.option })"></button>`
+    const v = mountBody(body, { pollId: 1, options: options('a', 'b') })
+    expect(warnings).toEqual([])
+    for (const id of ['name', 'param', 'name', 'param']) (root.querySelector(`#${id}`) as HTMLButtonElement).click()
+    expect(calls).toEqual([['vote', {}], ['vote', {}], ['vote', {}], ['vote', {}]])
+    expect(warnings).toEqual([
+      `<button m-on:click="emit('vote', { optionId: route.name })">: payload field 'optionId' is required but route.name is missing; pass route to mount, with the route's name; sent without it`,
+      `<button m-on:click="emit('vote', { optionId: route.params.option })">: payload field 'optionId' is required but route.params.option is missing; pass route to mount, with params.option; sent without it`,
+    ])
+    v.setRoute({ name: 'poll', params: { option: 'sushi' }, query: {} })
+    ;(root.querySelector('#param') as HTMLButtonElement).click()
+    expect(calls.at(-1)).toEqual(['vote', { optionId: 'sushi' }])
+    expect(warnings).toHaveLength(2)
+  })
+
+  test('a required field from a query parameter, or from data that breaks the schema, warns with its fix', () => {
+    mountBody(
+      `<button m-for="option in options" m-on:click="emit('vote', { optionId: option.id, pollId: pollId, tab: route.query.tab })"></button>` +
+        `<button m-on:click="emit('vote', { optionId: route.query.tab })"></button>`,
+      { options: [{ label: 'No id' }, ...options('b')] } as never,
+    )
+    const [first, second, third] = buttons()
+    first!.click()
+    second!.click()
+    third!.click()
+    expect(calls).toEqual([['vote', {}], ['vote', { optionId: 'b' }], ['vote', {}]])
+    expect(warnings.filter((warning) => !warning.startsWith("data doesn't match"))).toEqual([
+      `<button m-on:click="emit('vote', { optionId: route.query.tab })">: 'route.query.tab' may be missing, but the payload requires 'optionId'`,
+      `<button m-on:click="emit('vote', { optionId: option.id, pollId: pollId, tab: route.query.tab })">: payload field 'optionId' is required but option.id is missing; the data doesn't match the schema, which requires it; sent without it`,
+      `<button m-on:click="emit('vote', { optionId: route.query.tab })">: payload field 'optionId' is required but route.query.tab is missing; a URL may leave its query out, so make 'optionId' optional in the payload; sent without it`,
+    ])
   })
 
   test("a payload in a form emit doesn't take warns with the event's fields and the row's alias", () => {

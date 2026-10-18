@@ -12,6 +12,7 @@ import {
   type Issue,
   type ListSchema,
   type MelzinSchema,
+  type PayloadField,
   type RouteInput,
   SHOW_DIRECTIVE,
   type Scope,
@@ -85,8 +86,12 @@ export type MelzinView<D> = {
 type Test = (scope: Scope | undefined) => boolean
 /** Where a node sits in a template: child indexes from the template's root, the same in every clone. */
 type NodePath = readonly number[]
-/** What an m-on:click sends: the event, and the payload's fields when the handler gets an object. */
-type Send = { event: string; payload: EmitPayload | undefined }
+/**
+ * What an m-on:click sends: the event, and the payload's fields when the handler gets an object. For
+ * warnings at the click, the emit as written, the payload's required fields and those already warned
+ * about there (once per emit, not once per row or click).
+ */
+type Send = { event: string; payload: EmitPayload | undefined; where: string; required: readonly string[]; warned: Set<string> }
 
 /**
  * What a template binds, worked out once. The view's body is one template and each element an m-for
@@ -315,6 +320,23 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   let destroyed = false
   const undeclaredWarned = new Set<string>()
 
+  // Why a required payload field came out missing at a click, with the fix. The checker can't see it
+  // coming when the value is there in every snapshot: the host left the route out, or sent data that
+  // doesn't match the schema.
+  const missingFieldMessage = (field: PayloadField, scope: Scope | undefined): string => {
+    const path = field.path.join('.')
+    const missing = `payload field '${field.name}' is required but ${path} is missing`
+    const ref = parseRouteRef(field.path)
+    if (ref?.ok) {
+      if (ref.ref.kind === 'name') return `${missing}; pass route to mount, with the route's name`
+      if (ref.ref.kind === 'param') return `${missing}; pass route to mount, with params.${ref.ref.name}`
+      return `${missing}; a URL may leave its query out, so make '${field.name}' optional in the payload`
+    }
+    const value = resolvePayloadValue(schema, field.path, scope)
+    if (value.ok && !value.required) return `${missing}; make '${path}' required in the schema, or '${field.name}' optional in the payload`
+    return `${missing}; the data doesn't match the schema, which requires it`
+  }
+
   const emit = (send: Send, scope: Scope | undefined): void => {
     if (destroyed) return
     const handler = handlerFor(send.event)
@@ -322,7 +344,17 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       warn(`no handler for event '${send.event}'; add on.${send.event}`)
       return
     }
-    handler.call(on, send.payload === undefined ? undefined : buildPayload(schema, data, route, send.payload, scope))
+    if (send.payload === undefined) {
+      handler.call(on, undefined)
+      return
+    }
+    const payload = buildPayload(schema, data, route, send.payload, scope)
+    for (const field of send.payload.fields) {
+      if (Object.hasOwn(payload, field.name) || !send.required.includes(field.name) || send.warned.has(field.name)) continue
+      send.warned.add(field.name)
+      warn(`${send.where}: ${missingFieldMessage(field, scope)}; sent without it`)
+    }
+    handler.call(on, payload)
   }
 
   // --- compiling: each template's directives are parsed and resolved once, warning about problems.
@@ -371,13 +403,14 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     for (const issue of payloadIssues(schema, name, parsed.payload, 0, scope)) warn(`${where}: ${issue.message}`)
     const expected = declared?.payload
     const sendsObject = declared === undefined ? parsed.payload !== undefined : expected !== undefined
-    if (!sendsObject) return { event: name, payload: undefined }
+    const send = { event: name, where, required: expected?.required ?? [], warned: new Set<string>() }
+    if (!sendsObject) return { ...send, payload: undefined }
     const fields = (parsed.payload?.fields ?? []).filter((field) => {
       const resolved = resolvePayloadValue(schema, field.path, scope)
       if (!resolved.ok || expected === undefined) return resolved.ok
       return Object.hasOwn(expected.properties, field.name) && expected.properties[field.name]!.type === resolved.type
     })
-    return { event: name, payload: { fields, start: parsed.payload?.start ?? 0, end: parsed.payload?.end ?? 0 } }
+    return { ...send, payload: { fields, start: parsed.payload?.start ?? 0, end: parsed.payload?.end ?? 0 } }
   }
 
   // A condition that can't be used (a parse error, an unknown field) warns and counts as false, so a
