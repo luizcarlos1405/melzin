@@ -284,14 +284,17 @@ export function formatTime(date: Date): string {
 /** The longest payload the event log shows whole, in characters; longer ones are cut. */
 export const PAYLOAD_MAX = 80
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+
 /**
  * An event's payload for the event log: compact JSON, such as `{"optionId":"pizza"}`. Past `max`
- * characters it's cut with an ellipsis, and `full` holds the whole JSON (for a title). Cut by code
- * points, so an emoji in a label never shows as half a surrogate pair.
+ * characters it's cut with an ellipsis, and `full` holds the whole JSON (for a title). A character
+ * is a grapheme, what a reader sees as one, so the cut never splits an emoji: not a surrogate pair,
+ * a flag, a ZWJ sequence or a skin tone, nor a letter from its accent.
  */
 export function formatPayload(payload: Readonly<Record<string, unknown>>, max: number = PAYLOAD_MAX): { text: string; full?: string } {
   const json = JSON.stringify(payload)
-  const chars = Array.from(json)
+  const chars = Array.from(graphemes.segment(json), (part) => part.segment)
   return chars.length <= max ? { text: json } : { text: `${chars.slice(0, Math.max(0, max - 1)).join('')}…`, full: json }
 }
 

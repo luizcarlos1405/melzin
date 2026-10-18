@@ -272,6 +272,43 @@ describe('formatters', () => {
     expect(shown.text).toBe('{"emoji":"🍕…')
     expect(shown.text.isWellFormed()).toBe(true)
   })
+
+  test('formatPayload cuts between graphemes, never inside a flag, a ZWJ sequence or a skin tone', () => {
+    // '{"a":"' is 6 characters, so with max 9 the text keeps 2 graphemes of the value before the '…'.
+    const cases: [string, string][] = [
+      ['🇧🇷🇧🇷🇧🇷', '🇧🇷🇧🇷'],
+      ['👨‍👩‍👧👨‍👩‍👧👨‍👩‍👧', '👨‍👩‍👧👨‍👩‍👧'],
+      ['👍🏽👍🏽👍🏽', '👍🏽👍🏽'],
+      ['é'.normalize('NFD').repeat(3), 'é'.normalize('NFD').repeat(2)],
+    ]
+    for (const [value, kept] of cases) {
+      expect(formatPayload({ a: value }, 9)).toEqual({ text: `{"a":"${kept}…`, full: JSON.stringify({ a: value }) })
+    }
+    // Every offset of the reviewer's case: the text before the '…' ends on a whole flag, family or thumb.
+    for (const tail of ['🇧🇷🇧🇷🇧🇷', '👨‍👩‍👧👨‍👩‍👧', '👍🏽👍🏽👍🏽']) {
+      const unit = Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(tail), (part) => part.segment)[0]!
+      let cutInTail = 0
+      for (let pad = 60; pad <= 80; pad++) {
+        const payload = { a: 'x'.repeat(pad) + tail }
+        const { text, full } = formatPayload(payload)
+        if (full === undefined) {
+          expect(text).toBe(JSON.stringify(payload))
+          continue
+        }
+        const before = text.slice(0, -1)
+        expect(text.endsWith('…')).toBe(true)
+        expect(before.endsWith('x') || before.endsWith(unit)).toBe(true)
+        if (before.endsWith(unit)) cutInTail++
+      }
+      expect(cutInTail).toBeGreaterThan(1)
+    }
+  })
+
+  test('formatPayload counts a multi-code-point emoji as one character', () => {
+    // 6 + 2 graphemes + 2 = 10 characters, though it's 8 code points longer.
+    const flags = { a: '🇧🇷👨‍👩‍👧' }
+    expect(formatPayload(flags, 10)).toEqual({ text: JSON.stringify(flags) })
+  })
 })
 
 describe('frame protocol', () => {
