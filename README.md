@@ -100,8 +100,9 @@ The view never changes its own data. It emits `increment`, the host decides what
    single state for screenshots, so an AI can review its own work.
 4. **Generate types** with `melzin types` and wire the host or backend to them.
 5. **Ship** the same file. In the browser, `mount` parses the view, strips anything unsafe, binds the `m-`
-   directives once, and from then on touches only what changed: the text whose value changed and the
-   elements whose condition flipped.
+   directives once, and from then on touches only what changed: the text whose value changed, the
+   elements whose condition flipped and the rows of a list whose items came, went or moved, matched by
+   the key the schema declares.
 
 A whole app adds `routes.json`, a route table that maps URLs to views, and calls `startApp` with a
 *source*: the code that loads each page's data and handles its events, whether it asks a server or reads
@@ -162,7 +163,7 @@ packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, previ
   explore/            a demo exploration: two directions for a plans page
   examples/counter/   a production page that mounts the counter
 examples/             apps that use Melzin as a package; each folder is its own workspace
-  poll/               a poll with a small Bun backend, contract tests and API tests
+  poll/               a poll with a small Bun backend, contract, view and API tests
   profile/            a routed app: members and profiles, a remote and a local source, view and app tests
 docs/authoring.md     the view format and its rules, for whoever writes views
 SPEC.md               the design record: decisions, principles and a numbered list of hard problems
@@ -199,20 +200,25 @@ Since then:
   states or contracts) read from its file
 - [x] Snapshots that extend another and set only what differs, merged like JSON Merge Patch, so states
   share their common data
+- [x] Lists and event payloads: `m-for` over a list the schema keys, so an update keeps each row's
+  elements, empty states with `.length`, and events that carry named fields built from paths, such as
+  `emit('vote', { optionId: option.id })`. The checker asks for empty and several-item snapshots, the
+  generated types cover both, and the members page and the poll use them
 
 ## Roadmap
 
 Roughly in order. [SPEC.md](SPEC.md) explains the reasoning, and POC.md §11 maps each step to the spec.
 
-**Next: the binding language, on paper.** What an expression can contain, list syntax and keys, internal
-state operations, event payloads and forms. It shapes the file format, so it gets designed before it gets
-built. Conditionals came first, with a provisional syntax: a path, optionally negated with `!`.
+**Next: the binding language, on paper.** What an expression can contain, internal state operations,
+what payloads can carry besides paths, and forms. It shapes the file format, so it gets designed before
+it gets built. Conditionals, lists and event payloads came first, with a provisional syntax: a path,
+optionally negated with `!`; `m-for="item in list"`; and `emit('name', { field: path })`.
 
 **First real prototype: a profile page**, growing from [examples/profile](examples/profile/).
 - [x] `m-show`, `m-if`, `m-else-if` and `m-else`
 - [x] Snapshots that extend a base snapshot and override only what differs
 - [ ] `m-bind` for attributes, including `m-bind:class` with literal Tailwind classes
-- [ ] `m-for` with keys and empty states
+- [x] `m-for` with keys and empty states
 - [ ] Internal UI state (open menus, selected tabs, drafts) and state operations in handlers
 - [ ] Formatters for numbers, dates and plurals, built on `Intl`
 
@@ -226,7 +232,8 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 - [ ] Schemas that refer to other views' types with `$ref`, and one generated contract per screen
 
 **Interactive apps, with a chat screen as the stress test.**
-- [ ] Event payloads, any DOM event in `m-on`, and modifiers
+- [x] Event payloads built from paths
+- [ ] Literals in payloads, any DOM event in `m-on`, and modifiers
 - [ ] `m-model` and forms
 - [ ] Partial updates and streaming
 

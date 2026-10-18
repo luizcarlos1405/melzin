@@ -14,8 +14,8 @@ front end that runs in production. A host (a web page, or the preview shell) mou
 checker rejects anything that would (§2), and the runtime drops it before the view reaches the page.
 
 - The view shows data through `m-text`, shows elements only when a condition holds through `m-if`,
-  `m-else-if`, `m-else` and `m-show`, sends events through `m-on:click` and links to other pages
-  through `m-bind:href`.
+  `m-else-if`, `m-else` and `m-show`, repeats an element once per item of a list through `m-for`,
+  sends events through `m-on:click` and links to other pages through `m-bind:href`.
 - In an app, a view can also read the URL it's shown at as `route` (§3, §12).
 - The schema in the file declares the data the view needs and the events it sends.
 - Snapshots in the file are named sample states. The shell renders one frame per snapshot.
@@ -83,7 +83,7 @@ The children of `<body>` are the view. Several top-level elements are fine.
 - `<body>` takes no attributes. Put backgrounds and layout on a wrapper such as
   `<main class="min-h-screen ...">`.
 - Static HTML is fine: headings, lists, links, images, inline SVG (with its `<title>`). Only `m-text`
-  content and the elements behind conditions change.
+  content, the elements behind conditions and the rows of `m-for` change.
 - Relative URLs in `href` and `src` resolve against the host page, not the view file, so prefer
   absolute ones (`/images/logo.svg`).
 
@@ -100,7 +100,7 @@ reaches the page, except the last two rows, which it keeps with a warning:
 | `<style>` (also inside `<svg>`) and `<link>` | they would restyle the whole host page; use Tailwind classes |
 | `<base>` | it would change how every relative URL in the host page resolves |
 | `<meta>` and `<title>` | they belong in `<head>` |
-| `<template>` | its content would never be bound; write the markup directly |
+| `<template>` | its content would never be bound; write the markup directly, and put `m-for` on the element to repeat |
 | SVG `<set>` or `<animate>` that targets `href` | links are static |
 | `style="..."` attributes | styling is Tailwind classes only (§6) |
 | `<form>` | forms aren't supported yet; use `<button type="button">` |
@@ -109,10 +109,10 @@ A literal `{{ name }}` in the text gets a warning: it isn't Melzin syntax and wo
 
 ## 3. Directives
 
-There are seven: `m-text` shows a value, `m-if`, `m-else-if`, `m-else` and `m-show` show an element
-only when a condition holds, `m-on:click` sends an event, and `m-bind:href` sets a link's URL from a
-link field. Values are parsed, never evaluated: no JavaScript, no operators, no `{{ }}`. Attribute names
-are case-insensitive; values are case-sensitive.
+There are eight: `m-text` shows a value, `m-if`, `m-else-if`, `m-else` and `m-show` show an element
+only when a condition holds, `m-for` repeats an element once per item of a list, `m-on:click` sends an
+event, and `m-bind:href` sets a link's URL from a link field. Values are parsed, never evaluated: no
+JavaScript, no operators, no `{{ }}`. Attribute names are case-insensitive; values are case-sensitive.
 
 An *identifier* is a letter or `_`, then letters, digits or `_` (`[A-Za-z_][A-Za-z0-9_]*`). So `count`,
 `itemsLabel` and `total_2` are identifiers; `2nd`, `go-now` and `$emit` are not.
@@ -127,7 +127,9 @@ Grammar: `path := ident ('.' ident)*`. Spaces around the value are allowed.
 <p>Order #<span m-text="order.number"></span></p>
 ```
 
-- The path must name a `string`, `number` or `boolean` field in the schema, not an object.
+- The path must name a `string`, `number` or `boolean` field in the schema, not an object or a list.
+  A list's items show through `m-for`, and inside its rows a path can start with the item's name
+  (`m-text="member.name"`, below).
 - The element must be empty in the source: no text and no child elements. Sample values go in
   snapshots (P4). To mix fixed text with a value, bind an empty `<span>`, as in the last line above.
 - The runtime sets the element's `textContent` to `String(value)`. A missing value shows the field's
@@ -167,10 +169,15 @@ A condition holds when the value at its path is:
 | string | not `""` |
 | number | not `0` |
 | object | present |
+| list | present, even when it's empty: test `.length` instead |
 | missing | its field's `default` holds; with no default, never |
 
 That's JavaScript's truthiness, as in Vue. `!` flips it: `m-if="!viewer"` holds while `viewer` is
 missing.
+
+A path that ends in `.length` after a list counts its items: `m-if="members.length"` holds while the
+list has any, and `m-if="!members.length"` while it's empty or missing. `.length` only works in
+conditions; to show a count, have the host send it as a field (`"memberCount": "12 members"`).
 
 - `m-if` keeps its element in the document only while the condition holds.
 - `m-else-if` and `m-else` go on the elements right after an `m-if`, with only whitespace and comments
@@ -186,11 +193,12 @@ missing.
 - Give every optional field a designed fallback: an `m-else` with an empty state or a placeholder,
   rather than a hole in the layout.
 - A required object is always present, so `m-if="user"` always holds; the checker warns about it.
-  Test one of its fields, or make the object optional.
+  Test one of its fields, or make the object optional. A list holds even when it's empty, so the
+  checker warns about `m-if="members"` too: test `members.length`.
 - There's no `<template>` to group elements: wrap them in one element. The `contents` class makes the
   wrapper's box disappear from the layout: `<div m-if="x" class="contents">`.
-- Elements behind a condition stay bound while they're hidden, so they show current data as soon as
-  they appear.
+- Elements behind a condition stay bound while they're hidden, lists and their rows included, so they
+  show current data as soon as they appear.
 - Each element behind a condition should show in at least one snapshot, so its design can be reviewed.
   The checker warns about the ones no snapshot shows (§5).
 - The runtime treats a condition it can't use (an unknown field, say) as false, with a warning, so a
@@ -199,18 +207,109 @@ missing.
 - Conditions can test the URL too: `m-if="route.query.tab"` holds while the URL has a non-empty
   `?tab=` (§12).
 
+### `m-for="item in list"`
+
+Grammar: `loop := ident 'in' path`, and no other form. The identifier names one item (the *alias*); the
+path names a list field of the schema (§4), or a list inside the item of an `m-for` around this one
+(`tag in member.tags`).
+
+```html
+<ul class="divide-y divide-zinc-100" m-if="members.length">
+  <li class="flex items-center gap-3 py-3" m-for="member in members">
+    <a class="min-w-0 flex-1 truncate font-medium" m-bind:href="member.url" m-text="member.name"></a>
+    <span class="text-xs text-violet-700" m-show="member.isAdmin">Admin</span>
+    <ul class="flex gap-1 empty:hidden">
+      <li class="rounded bg-zinc-100 px-1.5 text-xs" m-for="tag in member.tags" m-text="tag"></li>
+    </ul>
+  </li>
+</ul>
+<p class="py-8 text-center text-zinc-500" m-else>No members yet</p>
+```
+
+- `m-for` goes on the element to repeat. The view shows one copy of it, a *row*, per item, in the
+  list's order, back to back where the element stands. Write the element once: the items, and so the
+  number of rows, come from the data and the snapshots.
+- Inside a row (the element and everything in it), a path that starts with the alias reads that row's
+  item: `member.name`. For a list of strings or numbers, the alias is the value itself:
+  `m-text="tag"`. Other paths read the data as usual, and `route.*` the URL.
+- The alias is a new name: not a top-level data field, not `route`, and not the alias of an `m-for`
+  around this one. The checker says so, usually with a name to use instead (`member` for `members`).
+- Directives on the `m-for` element itself apply to each row and see the alias: `m-text`, `m-show`,
+  `m-bind:href` and `m-on:click`, as on the inner `<li>` above.
+- `m-if`, `m-else-if` and `m-else` can't go on the `m-for` element. Wrap the list in an element with the
+  condition, as the `<ul>` above does, or put the condition inside the row. To show only some items,
+  have the host filter the list. An `m-for` element also ends a chain: an `m-else` after it doesn't
+  join an `m-if` before it.
+- Keys live in the schema (§4), never in the markup: there's no `:key`. Rows are matched to items by
+  key on every update, so a row keeps its elements while its item changes, new items get new rows,
+  rows of items that are gone are removed, and rows move when the order changes.
+- There's no index. Style rows by position with Tailwind's variants: `first:`, `last:`, `odd:`,
+  `even:`, `only:`, `nth-3:`. They count every element in the container, so keep the list alone in
+  its container (like the `<ul>` above) when you use them. To tell rows apart, use the list's key.
+- Rows sit back to back, with no whitespace between them: space them from the container
+  (`divide-y`, `space-y-3`, or `gap-3` on a flex or grid container), not with spaces in the source.
+- `<template m-for>` isn't supported: put `m-for` on the element to repeat. When an item needs several
+  elements, wrap them in one: a `<div>` around each `<dt>` and `<dd>` pair of a `<dl>`, a `<tbody>` per
+  item of a table.
+- A static `id` inside a row gets a warning, since every row would get the same one.
+- A broken `m-for` (an unknown list, a field that isn't a list, a value that doesn't parse) shows no
+  rows in the runtime, with a warning, like a broken condition.
+
+**Empty states.** Every list that can be empty needs a design for it. Wrap the list in an element with
+`m-if="members.length"` and follow it with an `m-else`, as above. A missing optional list shows like an
+empty one. A container that holds only the list (whitespace aside) has no children while the list is
+empty, so `empty:hidden` hides it, like the tags above. A list with `"minItems": 1` is never empty and
+needs no empty state (§4).
+
+**Nested lists.** An `m-for` inside a row can go over a list of the row's item, as `tag in member.tags`
+does. Each list has its own keys: two members may both have the tag `design`.
+
+**What the host does instead.** The view can't filter, sort or cut a list: `m-for` takes only a name
+and a path, so `members.slice(0, 3)`, `| filter`, `(member, index)` and `n in 5` are errors. The host
+sends the list as it should show (P3): filtered, sorted and cut to length, with a field for what's
+left out, such as `"moreLabel": "+12 more"`. For one particular item, such as the featured one, the
+host sends it as its own field (`featured.name`), since `members[0].name` and `members.0.name` aren't
+paths.
+
+**One template for every row** (SPEC §9.1). Changing a row's structure or style changes the element
+with `m-for`, so every row follows. Changing the text of one row changes that item in the snapshot.
+Text that isn't bound is the same in every row. A row that should look different needs data: a field
+such as `"isAdmin": true` with `m-show` or `m-if` inside the row, or a position variant for the first
+or last row.
+
 ### `m-on:click="emit('event')"`
 
-Grammar: exactly one call `emit('name')` with one string literal in single or double quotes. The name
-is an identifier and must be declared in the schema's `events`. Spaces between tokens are allowed.
+Grammar: exactly one call, `emit('name')` or `emit('name', payload)`, with the name as a string literal
+in single or double quotes. The name is an identifier and must be declared in the schema's `events`. A
+payload is an object of named fields, each filled from a path:
+`payload := '{' (ident ':' path (',' ident ':' path)* ','?)? '}'`. Spaces between tokens are allowed.
 
 ```html
 <button type="button" m-on:click="emit('increment')">Add one</button>
 <button type="button" m-on:click='emit("save")'>Save</button>
+<button type="button" m-on:click="emit('vote', { optionId: option.id })">Vote</button>
 ```
 
-- A click calls the host's handler for that event. There is no payload: the handler receives
-  `undefined`. `emit('like', post.id)` is an error; declare one event per action instead.
+- A click calls the host's handler for that event. An event without a payload calls it with
+  `undefined`.
+- An event that declares a payload in the schema (§4) is sent with one, and an event that declares
+  none is sent without. The checker matches every emit against the declaration: every required field
+  is set, no field is unknown, and each value's path leads to a field of the same type (a link field
+  counts as a string).
+- Values are paths: into the row's item through the alias (`option.id`), into the data (`pollId`) or
+  into the URL (`route.params.handle`). No literals, no `!`, no calls and no `.length`: have the host
+  send the value as data. `{ optionId }` is an error too; write `{ optionId: option.id }`.
+- A value whose path may be missing (an optional field on the way, or `route.query.<name>`) can only
+  fill an optional field of the payload. A field with a default, `route.name` and the route's
+  parameters are always there.
+- At the click, the runtime reads each value as it is then, with defaults, so a row's button sends
+  its item's current values after any update. A field whose value is missing is left out, so the
+  handler gets `{ optionId: 'pizza' }` or `{ optionId: 'pizza', note: '...' }`.
+- Send a key, not the item: payload fields are strings, numbers or booleans. Send `option.id` and let
+  the host look up the rest.
+- In a list, every row's button says the same thing. Give each one a name that says which item it's
+  for with text only screen readers get, since attributes such as `aria-label` can't be bound yet:
+  `Vote<span class="sr-only"> for <span m-text="option.label"></span></span>`.
 - `m-on:click="like()"` is an error too: the host's handlers aren't callable from the view. Write
   `emit('like')`.
 - Several elements may emit the same event. An element may have both `m-text` and `m-on:click`.
@@ -228,6 +327,8 @@ route it links to (§4).
 - Views never build URLs: the source sends each link ready-made, through the app's `href` helper
   (§12). So there's no `m-bind:href="'/u/' + handle"`, and no binding to a plain string field.
 - Only on `<a>` and `<area>`, and not together with a static `href` on the same link.
+- In a row, bind a link field of the item: `m-bind:href="member.url"`. A list of links is a list of
+  strings whose items name the route (§4): `<a m-for="link in related" m-bind:href="link">`.
 - While the field is missing, the link has no `href` at all. `javascript:`, `vbscript:` and `data:`
   URLs never reach the link.
 - Links to fixed pages need no field: write the URL, `<a href="/settings">`. The checker warns when
@@ -270,7 +371,10 @@ It's a strict subset of JSON Schema. Any other keyword is an error.
 | top level | `data`, `events`, `description` |
 | object (`data` itself and nested objects) | `type: "object"`, `properties` (required), `required`, `description` |
 | leaf | `type`: `"string"`, `"number"` or `"boolean"`; `default`; `description`; on strings, `route` |
-| each event | `{}` or `{ "description": "..." }` |
+| list | `type: "array"`, `items` (required), `key`, `uniqueItems`, `minItems`, `maxItems`, `description` |
+| list items | an object schema, or a `"string"` or `"number"` leaf without `default` |
+| each event | `{}`, `description`, `payload` |
+| payload | `type: "object"`, `properties` (required), `required`, `description`; each property a leaf with `type` and `description` only |
 
 - Property and event names are identifiers (`__proto__` is reserved). `route` is reserved at the top
   of `data`, since views read the URL under that name.
@@ -281,6 +385,79 @@ It's a strict subset of JSON Schema. Any other keyword is an error.
   not sample data (P4).
 - Shape the data for the screen, not for the database (P3): `"totalLabel": "12 votes"`, not raw
   records the view would have to compute from. The host's adapter does the formatting.
+
+### Lists
+
+A list is a field with `"type": "array"`, shown with `m-for` (§3). Its `items` is the schema every
+item matches: an object, or a string or number.
+
+```json
+"members": {
+  "type": "array",
+  "key": "handle",
+  "items": {
+    "type": "object",
+    "properties": {
+      "handle": { "type": "string" },
+      "name": { "type": "string" },
+      "url": { "type": "string", "route": "profile" },
+      "isAdmin": { "type": "boolean", "default": false },
+      "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+    },
+    "required": ["handle", "name", "url", "tags"]
+  },
+  "maxItems": 50
+},
+"related": { "type": "array", "uniqueItems": true, "items": { "type": "string", "route": "profile" } }
+```
+
+- A list of objects names its `key`: the field of its items that identifies each one. It must be a
+  string or number field of the items, listed in their `required`, and a field of the items
+  themselves, not a path (`"key": "user.id"` is an error: give the items a `userId`). Keys are unique
+  among the items of one list. The key is how rows keep their elements through updates (§3).
+- A list of strings or numbers is keyed by its values, so it needs `"uniqueItems": true` and takes
+  no `key`. Its items take no `default` (an item is never missing), but may have a `route`: a list of
+  links.
+- `uniqueItems` is only for lists of strings or numbers: on a list of objects, the key already makes
+  the items unique.
+- No lists of booleans (their values repeat, so they can't be keys), no lists of lists and no tuples.
+  For those, use object items with a key: `{ "id", "done" }`, `{ "id", "rows" }`.
+- `minItems` and `maxItems` are the design's limits, whole numbers 0 or more. They also tell the
+  checker which states to ask for (§5): a list with `"minItems": 1` or more needs no empty snapshot,
+  and one with `"maxItems": 1` none with several items.
+- A list has no `default`: a missing optional list shows like an empty one. Prefer a required list,
+  which the host sends as `[]` when there's nothing.
+- `data` itself stays an object: put the list in a field.
+- Declaring a key keeps the view at the states stage (§13); a link field inside the items, like any
+  link field, moves it to contracts.
+
+### Event payloads
+
+An event can carry a payload, an object of named fields the view fills from paths (§3):
+
+```json
+"events": {
+  "vote": {
+    "description": "One vote for an option",
+    "payload": {
+      "type": "object",
+      "properties": {
+        "optionId": { "type": "string", "description": "The id of the option voted for" },
+        "note": { "type": "string" }
+      },
+      "required": ["optionId"]
+    }
+  },
+  "refresh": {}
+}
+```
+
+- Payload fields are strings, numbers or booleans, with an optional `description`: no `default`, no
+  `route`, no objects or lists. Send a key, such as the item's id, and let the host look up the rest.
+- Fields in `required` must be filled by every emit, from a path that is always there. The others may
+  be left out, or filled from a path that may be missing.
+- Prefer one event with a payload over one event per item: `vote` with `optionId`, not `votePizza`
+  and `voteTacos`.
 
 ## 5. Snapshots
 
@@ -307,6 +484,15 @@ shows them. Names can be any text.
   breaks.
 - Cover every condition: each element behind `m-if`, `m-else-if`, `m-else` or `m-show` should show in
   at least one snapshot, or nobody sees its design. The checker names the condition that never holds.
+  An element inside a row counts as shown when it shows in any row of any snapshot.
+- Lists are JSON arrays, with the items in the order the view shows them. Each item must match the
+  list's `items`, with its key present and unique among the items of that list; an item can't be
+  `null` (leave it out), and `minItems` and `maxItems` apply. Problems point at the item, as in
+  `snapshots["typical"].data.members[2].handle`.
+- Cover every list state: empty, one item, several, more than the design holds, and items with long
+  values. The checker warns when no snapshot shows a row of a list, when none shows it empty (unless
+  `"minItems"` is 1 or more) and when none shows it with more than one item (unless `"maxItems"` is
+  1).
 - A view without snapshots renders once in the shell, with empty data.
 - Give snapshots names with words in them. A name that is a whole number (`"0"`, `"10"`) is listed
   before all the others, whatever its place in the file (a JavaScript rule), and the checker warns
@@ -344,7 +530,9 @@ a patch:
   `viewer`, and its URL has no `?as=`. A required field can't be removed, and a `null` that removes
   nothing gets a warning: a field the base doesn't have (often a typo), or any `null` in a snapshot that
   extends none.
-- Any other value replaces the base's whole, lists included.
+- Any other value replaces the base's whole, lists included. To change one item, restate the whole
+  list: `"members": []` for an empty state, or every item again with the one that changes. A `null`
+  inside a list never removes anything; it's an error.
 - A snapshot can extend one that extends another, defined before or after it. Extending itself, a name
   the block doesn't have, or a cycle is an error.
 - The checker checks each snapshot once merged. A problem in a value a snapshot inherits is reported
@@ -353,7 +541,28 @@ a patch:
 
 Extend a snapshot for states that differ in a few fields: the same profile seen by someone else, the
 same order once it's delayed, or a typical state with one very long value. Keep unrelated states, such
-as another person's profile, whole.
+as another person's profile, whole. With lists, a snapshot that extends another restates the list
+and keeps the fields around it. For members with a handle and a name:
+
+```json
+{
+  "three members": {
+    "data": {
+      "title": "Team",
+      "members": [
+        { "handle": "ana", "name": "Ana Souza" },
+        { "handle": "bruno", "name": "Bruno Lima" },
+        { "handle": "carla", "name": "Carla Dias" }
+      ]
+    }
+  },
+  "no members yet": { "extends": "three members", "data": { "members": [] } },
+  "one very long name": {
+    "extends": "three members",
+    "data": { "members": [{ "handle": "maria", "name": "Maria Aparecida dos Santos Albuquerque de Oliveira" }] }
+  }
+}
+```
 
 ## 6. Styling
 
@@ -385,8 +594,16 @@ as another person's profile, whole.
 - Classes can't change with data yet. For a state such as "liked", put both versions in the view and
   let a condition pick one: `<button m-if="post.liked" class="bg-rose-600 ...">` and
   `<button m-else class="bg-white ...">`. Variants that react to content, such as `empty:hidden`,
-  work too.
+  work too. In a list, the same goes for one row that looks different: a field of the item, such as
+  `isFeatured`, and a condition inside the row.
+- Rows of a list (§3): style them by position with `first:`, `last:`, `odd:`, `even:`, `only:` and
+  `nth-*`, space them from the container with `divide-y`, `space-y-*` or `gap-*`, and hide a container
+  whose list is empty with `empty:hidden`.
 - Plan for long values: `wrap-anywhere`, `truncate`, `min-w-0` and `text-balance` keep layouts intact.
+  A grid of cards with `truncate` text needs `grid-cols-1` (or another `grid-cols-*`), or each card
+  grows to its longest text and runs off a phone's screen. In a row with a long label and parts of
+  fixed width (a count, a button), stack the fixed parts on a phone (`flex-col sm:flex-row`), or the
+  label gets a column one word wide.
 
 ## 7. Not supported yet
 
@@ -394,17 +611,22 @@ Don't try these; the checker rejects them. POC.md §11 lists when each comes in.
 
 | Not yet | What to do now |
 |---|---|
-| Lists (`m-for`, `"type": "array"`) | A fixed number of fields: `first`, `second`, `third`, with `m-if` on the optional ones |
-| Attribute and class bindings other than links (`m-bind:class`, `:title`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else` |
+| Attribute and class bindings other than links (`m-bind:class`, `:title`, `:aria-label`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else`; for an accessible name from data, `sr-only` text with `m-text` |
 | Layouts shared by several pages, nested routes | Each route shows one whole view; repeat the shared part in each |
 | Route paths with wildcards, optional or partial segments (`*`, `:id?`, `/@:handle`) | Literal segments and whole-segment parameters: `/u/:handle` |
 | Comparisons and `&&`, `\|\|` in conditions | A boolean the host computes: `m-if="hasVotes"` |
-| Event payloads, `emit('x', ...)` | One event per action: `votePizza`, `voteTacos` |
+| An index in `m-for` (`(item, index) in items`), destructuring, `of`, ranges (`n in 5`) | `item in items`; position variants (`odd:`, `first:`) for styles, the list's key for identity, the items in snapshots |
+| Filtering, sorting or cutting a list in the view (`items.slice(0, 3)`, `\| filter`, `m-if` on the `m-for` element) | The host sends the list as it should show, and a field such as `"moreLabel": "+12 more"` |
+| An item by position (`members[0].name`), a count in `m-text` (`items.length`) | A field the host sends: `featured.name`, `"countLabel": "12 members"`; `.length` works in conditions |
+| `<template m-for>`, `<template>` to group elements | `m-for` on the element to repeat; one wrapper element for several |
+| Lists of booleans, lists of lists, a `default` on a list | Object items with a key: `{ "id", "done" }`, `{ "id", "rows" }`; a required list the host sends as `[]` |
+| Payload values that aren't paths (`{ optionId: 'pizza' }`, `!`, calls), payload fields that are objects or lists | Paths to strings, numbers or booleans: send the item's key and let the host look up the rest |
+| Snapshots that change one item of a base's list | Restate the whole list (§5) |
 | Events other than click, modifiers | Clicks only, on buttons |
 | Internal state (`ui`) | Let the host send the state as data |
 | Forms and inputs (`m-model`, `<form>`) | `<button type="button">` with `m-on:click` |
 | Formatters, expressions | The host sends preformatted strings |
-| `m-html`, components, `<template>` | Plain static HTML |
+| `m-html`, components | Plain static HTML |
 
 The checker's messages for these name the workaround from this table.
 
@@ -434,12 +656,28 @@ Line and column point at the problem, usually the exact character inside an attr
 JSON. The exit code is 1 when there are errors. Fix every error and every warning: a clean view
 prints `0 errors, 0 warnings`. Warnings flag a declared event nothing emits, a data field nothing
 displays or tests, text inside an `m-text` element, a view with data but no snapshots, an element
-behind a condition that no snapshot shows, a condition on a required object (it always holds), a
-snapshot named with a whole number, a `null` in a snapshot that removes nothing, a literal `{{ }}`, a
-missing `<title>`, attributes on `<body>` and a `<name>.types.ts` that no longer matches the schema. With a `routes.json`, the checker also checks it
-and each view against it (§12). "Nothing emits it" and "never used" wait until
-the broken bindings are fixed, since a broken binding is often the missing one, and "no snapshot shows
-this element" waits until the snapshots match the schema.
+behind a condition that no snapshot shows, a condition on a required object (it always holds) or on a
+list (it holds even when empty), a snapshot named with a whole number, a `null` in a snapshot that
+removes nothing, a literal `{{ }}`, a missing `<title>`, attributes on `<body>` and a `<name>.types.ts`
+that no longer matches the schema. With a `routes.json`, the checker also checks it and each view
+against it (§12). "Nothing emits it" and "never used" wait until the broken bindings are fixed, since a
+broken binding is often the missing one, and "no snapshot shows this element" waits until the
+snapshots match the schema.
+
+For lists and payloads, the checker also reports:
+
+- errors for every rule of §3 and §4: an `m-for` that doesn't parse (each Vue habit gets its fix), a
+  list that isn't one, an alias already taken, `m-if` on the `m-for` element, `:key`, `<template m-for>`,
+  an unknown field in a row (with names from the items), `.length` or a list where a value goes, an
+  item by position, a list schema without its key, and an emit whose payload doesn't match its event
+- errors for list data in snapshots: a missing or duplicate key, a `null` item, too few or too many
+  items, at the item's position (`data.members[2].handle`), and each item's link field checked against
+  its route (`data.members[1].url`)
+- warnings when no snapshot shows a row of a list, or none shows it empty or with more than one item
+  (§5), and for a static `id` inside a row
+- "never used" for item fields, named like `members[].name`. An `m-for` over a list or a `.length`
+  condition uses the list, an `m-for` also uses its key, reading the alias of a list of strings or
+  numbers uses its values, and a payload uses the fields its values read
 
 `melzin check --views <dir>` checks another folder.
 
@@ -455,6 +693,33 @@ changed. Run it again after every schema change; until you do, `melzin check` wa
 is out of date. In an app, `bunx melzin types routes.json` writes `routes.types.ts` and the types of
 every view a route shows (§12).
 
+Lists become arrays, and each handler takes its event's payload. For the list and the events of §4:
+
+```ts
+export type Data = {
+  members: {
+    handle: string
+    name: string
+    url: Href<'profile'>
+    isAdmin?: boolean
+    tags: string[]
+  }[]
+  related?: Href<'profile'>[]
+}
+export type Handlers = {
+  /** One vote for an option */
+  vote: (payload: {
+    /** The id of the option voted for */
+    optionId: string
+    note?: string
+  }) => void
+  refresh: (payload?: undefined) => void
+}
+```
+
+A payload whose fields have no descriptions fits on one line: `(payload: { optionId: string }) => void`.
+A handler that reads a field the payload doesn't have, or reads one as the wrong type, fails `tsc`.
+
 ### Preview
 
 ```
@@ -464,9 +729,11 @@ bunx melzin shell --port 4400 --views views --theme theme.css
 
 The shell lists the routes of `routes.json` as pages, and every view. It renders one card per snapshot
 through the production runtime and CSS, with a frame per device size, and shows for each card the data
-as editable JSON (not for a static view), an event log and the runtime's warnings. A view with
-alternatives in `explore/` shows every version side by side, one column each (§13). The top bar shows a
-view's stage. Clicking a link in a frame doesn't follow it; it shows up in the event log. Refresh the
+as editable JSON (not for a static view), an event log and the runtime's warnings. The event log shows
+each event's payload as JSON under its name (`{"optionId":"pizza"}`), cut at 80 characters with the
+whole JSON in its tooltip. Edits to a list in the JSON keep each row's elements, as in production. A
+view with alternatives in `explore/` shows every version side by side, one column each (§13). The top
+bar shows a view's stage. Clicking a link in a frame doesn't follow it; it shows up in the event log. Refresh the
 page after editing a file; edits in the shell are temporary. A red banner lists problems in the schema
 and snapshots blocks; directive problems only show as warnings under each frame, so `melzin check`
 remains the full list.
@@ -521,13 +788,29 @@ and desktop sizes, fix what looks wrong, repeat.
 | `@click="save"`, `v-on:click`, `x-on:click` | `m-on:click="emit('save')"` |
 | `m-on:click="$emit('save')"` | `m-on:click="emit('save')"` |
 | `m-on:click="save()"` | `m-on:click="emit('save')"` |
-| `m-on:click="emit('like', post.id)"` | one event per action, no payload: `emit('likePost')` |
+| `m-on:click="emit('vote', option.id)"` | named fields, declared as the event's payload: `emit('vote', { optionId: option.id })` |
+| `emit('vote', { optionId })`, `emit('vote', { optionId: 'pizza' })` | a path for every field: `{ optionId: option.id }`; the host sends other values as data |
+| `votePizza`, `voteTacos`, `voteSushi` | one event with a payload, emitted from a row: `vote` with `{ optionId }` |
 | `onclick="save()"` | `m-on:click="emit('save')"` |
 | `m-text="data.user.name"` | `m-text="user.name"` |
 | `<p m-text="user.name">Ana Souza</p>` | `<p m-text="user.name"></p>`, and Ana Souza in a snapshot |
 | `<p m-text="price">$<b>9</b></p>` | `<p>$<span m-text="price"></span></p>` |
 | `m-text="user"` (an object) | `m-text="user.name"` (a leaf) |
 | `m-text="count + 1"`, `m-text="items.length"` | a field the host computes: `m-text="countLabel"` |
+| `v-for="item in items"`, `x-for`, `<template v-for>` | `m-for="item in items"` on the element to repeat |
+| `:key="item.id"`, `m-bind:key` | `"key": "id"` on the list in the schema |
+| `m-for="(item, index) in items"` | `m-for="item in items"`; `odd:`, `first:` or `nth-*` for styles by position |
+| `m-for="item of items"` | `m-for="item in items"` |
+| `<li m-for="item in items" m-if="item.visible">` | the host filters the list; or the condition inside the row |
+| `m-for="item in items.slice(0, 3)"` | the host sends three items, and a `"moreLabel": "+12 more"` |
+| `m-if="items"` on a list | `m-if="items.length"`: a list holds even when it's empty |
+| `m-text="members[0].name"`, `m-text="members.name"` | rows with `m-for`; for one particular item, a field the host sends: `featured.name` |
+| fields `first`, `second`, `third` for repeated rows | one list and one row with `m-for`; the items in snapshots |
+| a list without an empty state | `m-if="items.length"` around it and an `m-else`, and a snapshot with `[]` |
+| `"type": "array"` with object items and no `"key"` | `"key": "id"`, a required string or number field of the items |
+| `"items": { "type": "string" }` without `"uniqueItems": true` | add `"uniqueItems": true`: the values are the keys |
+| `id="row"` inside a row | no `id` in a row: every row would get the same one |
+| a snapshot that extends another and sets one item of its list | the whole list again: lists replace whole (§5) |
 | `<body class="bg-zinc-50">` | `<body><main class="min-h-screen bg-zinc-50">` |
 | `<link rel="stylesheet">`, `<style>`, `style="..."` | Tailwind classes, tokens in `theme.css` |
 | `<template>`, `<form>` | plain markup, `<button type="button">` |
@@ -535,7 +818,7 @@ and desktop sizes, fix what looks wrong, repeat.
 | an event used in `m-on:click` but missing from `events` | declare it: `"events": { "save": {} }` |
 | a snapshot with `"nmae"` | the exact field name; the checker suggests it |
 | a snapshot that skips a level: `{ "title": "..." }` | the full shape: `{ "post": { "title": "..." } }` |
-| `"type": "integer"`, `"enum"`, `"minLength"` | `"type": "number"` or `"string"`, no constraints yet |
+| `"type": "integer"`, `"enum"`, `"minLength"` | `"type": "number"` or `"string"`, no constraints yet besides a list's `minItems` and `maxItems` |
 | `:href="url"`, `v-bind:href` | `m-bind:href="url"`, with `url` a link field |
 | `m-bind:href="profileUrl"` on a plain string field | give the field `"route": "profile"`; the source fills it with `href()` |
 | `<a href="/u/ana">` built for one person | a link field the source fills: `m-bind:href="author.url"` |
@@ -810,8 +1093,8 @@ A view reads the URL it's shown at as `route`, next to its data:
 <p m-else>Nobody is signed in</p>
 ```
 
-- `route.name`, `route.params.<name>` and `route.query.<name>`, in `m-text` and in conditions. It's
-  read-only, and needs no schema entry.
+- `route.name`, `route.params.<name>` and `route.query.<name>`, in `m-text`, in conditions and in
+  payloads. It's read-only, and needs no schema entry.
 - Every route that shows the view must have that parameter (`:handle`) or declare that query parameter;
   the checker says which route doesn't.
 - Prefer data for what the backend knows anyway (the user's handle); use `route` for what only the URL
@@ -825,11 +1108,18 @@ Link fields (`"route": "profile"` in the schema) hold URLs the source builds wit
 helper, and views bind them with `m-bind:href` (§3). Static links (`href="/"`) work as they are. Clicking
 a link to a route switches screens without reloading; other links behave as usual.
 
+A link field can sit in a list's items, `"url": { "type": "string", "route": "profile" }` in `items`,
+and each row binds its own: `<a m-for="member in members" m-bind:href="member.url">`. A list of
+strings can be a list of links too (§4). In snapshots, each item's URL must be a URL of the route, and
+the checker points at the item (`data.members[1].url`). The source builds every item's link with
+`href`, and the generated type, `url: Href<'profile'>` inside the array, rejects a hand-built one.
+
 ### Check, types and the shell
 
 - `melzin check` checks `routes.json` (its rules, and that each route's view exists) and each view
-  against it: `route.*` the routes have, link fields that name real routes, snapshot link values that
-  are URLs of their route, and static links that match no route (a warning).
+  against it: `route.*` the routes have, link fields that name real routes, snapshot link values
+  (each item's, in a list) that are URLs of their route, and static links that match no route (a
+  warning).
 - `melzin types routes.json` writes `routes.types.ts`, with each route's `params`, `query`, `data` and
   `handlers`, and the types of the views it shows. Link fields are typed `Href<'profile'>`: only the
   `href` helper makes those, so a hand-built URL fails `tsc`.
@@ -870,9 +1160,11 @@ await startApp<Routes>(document.querySelector('#app')!, {
   view's data. Where it gets it is up to the app: a server's API (a remote source), IndexedDB or any
   other local store (a local source, for offline-first apps), or constants. Melzin only types the
   contract.
-- **Handlers** get the payload (`undefined` for now) and the page: `page.route`, `page.data`,
-  `page.update(data)`, `page.navigate(url)` and `page.reload()`. A page the user has left ignores
-  `update`.
+- **Handlers** get the event's payload (`undefined` for an event without one) and the page:
+  `page.route`, `page.data`, `page.update(data)`, `page.navigate(url)` and `page.reload()`. A page the
+  user has left ignores `update`. The payload is typed from the generated types, so
+  `vote: async ({ optionId }, page) => page.update(await castVote(optionId))` gets `optionId` as a
+  string, and a handler that reads it as another type fails `tsc`.
 - **Navigation** (link clicks, back and forward, `page.navigate`, `app.navigate`) goes through the
   `navigate` hook. The first page doesn't. A URL that matches no route leaves the app with a normal
   page load.
@@ -896,7 +1188,8 @@ the checker never asks for something a later stage decides.
 | Contracts | events, link fields, routes and the source behind them | it ships as is |
 
 The shell shows each view's stage next to its file. It's read from the file (a schema or snapshots
-mean states; an event, a link field or `route.*` mean contracts), so there's nothing to declare.
+mean states; an event, a link field, also one inside a list's items, or `route.*` mean contracts), so
+there's nothing to declare. A list's key is states-stage data: declaring one doesn't change the stage.
 
 ### Exploration
 
@@ -950,8 +1243,26 @@ Make the parts that come from data dynamic, one at a time:
 
 Text that's the same for every user stays inline.
 
+Repeated content becomes a list. Exploration writes each row out by hand; states keep one:
+
+1. Add the list to the schema (§4), with its items' fields and a key: a field that identifies each
+   item, such as `handle` or `id`.
+2. Keep the first row as the template, put `m-for` on it and bind its content to the item
+   (`m-text="member.name"`). Delete the other rows.
+3. Move every row's content into the first snapshot's list, in order, so it still looks exactly like
+   the static design.
+4. Turn the differences between the hand-written rows into data. A row that was highlighted gets a
+   field such as `"isFeatured": true` and a condition in the row; a first or last row that looked
+   different gets a position variant (`first:`, `last:`). Production can't have hand-tweaked rows.
+5. Design the empty state (§3) and add the list's snapshots (§5): empty, one item, many, long values.
+
+From then on, a change to the rows' structure or style is a change to the template, so every row
+follows, while a change to one row's text is a change to its item in the snapshot. "Rename the second
+member" edits the snapshot; "make the rows taller" edits the element with `m-for`.
+
 ### Contracts
 
-Declare the events the view sends (§4) and send them from its buttons (§3), turn links to other pages
-into link fields (§12), add the view's route to `routes.json`, generate the types (§8), and write the
-host or source that loads the data and handles the events (§10, §12).
+Declare the events the view sends (§4) and send them from its buttons (§3), with a payload when the
+host needs to know which item a button is for, turn links to other pages into link fields (§12), add
+the view's route to `routes.json`, generate the types (§8), and write the host or source that loads the
+data and handles the events (§10, §12).

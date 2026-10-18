@@ -3,8 +3,8 @@
 > Design is implementation.
 
 **Status:** design record, started 2026-10-16. The proof of concept described in [POC.md](POC.md) is
-built, and so are conditionals, routing, design in stages and snapshots that extend a base (POC.md
-§14–§17); everything beyond them is still design.
+built, and so are conditionals, routing, design in stages, snapshots that extend a base, and lists and
+event payloads (POC.md §14–§18); everything beyond them is still design.
 
 Every numbered item keeps its number: decisions (D1, D2, ...), principles (P1, ...), complications
 (#1, ...) and open questions (Q1, ...). New items are appended; settled ones stay in place with a note.
@@ -622,7 +622,8 @@ with stable IDs holds types, not data (D17), and partial updates address data by
 `polls[id=7].options[id=3].votes` (#16). When the same entity shows up in several places, the payload
 repeats it. That costs bytes, not complexity.
 
-**Example.** The poll example repeats the same block for pizza, tacos and sushi. As a component,
+**Example.** The poll example repeated the same block for pizza, tacos and sushi before it had a list
+(POC.md §18). As a component,
 `option-row.mel.html` declares its own schema and renders on its own in the shell:
 
 ```json
@@ -664,9 +665,9 @@ and passes each subtree as the child's props, handling the child's event by emit
 <m-option-row m-bind="pizza" m-on:vote="emit('votePizza')"></m-option-row>
 ```
 
-With lists and event payloads, the three fields become `options`, a list of `option-row` keyed by an `id`
-field it gains (D34), with an `m-for`, and one `vote {optionId}` event (D35). The exact syntax inside
-directives waits for the language battle (§11).
+With lists and event payloads, as the example has now, the three fields become `options`, a list of
+`option-row` keyed by an `id` field it gains (D34), with an `m-for`, and one `vote {optionId}` event
+(D35). The exact syntax inside directives waits for the language battle (§11).
 
 **Names and references** (proposed)
 
@@ -742,8 +743,8 @@ place the type appears (#59).
 ### Data and contract
 
 1. ⚑ **Lists:** zero or more items that appear, disappear and change. Approach in §9.1. *Settled in
-   part by D34: lists are arrays in the schema, keyed by a field the list declares. The syntax in the
-   markup is provisional (§11).*
+   part by D34: lists are arrays in the schema, keyed by a field the list declares. Built in POC.md
+   §18, with a provisional syntax in the markup (§11).*
 2. ⚑ **Schema extraction:** getting a consistent schema out of the design as it changes. Approach in
    §9.2.
 3. **Schema change analysis:** when the design changes, know exactly how the schema changed and whether
@@ -751,7 +752,7 @@ place the type appears (#59).
 4. ⚑ **Events:** the contract goes both ways. Typed events (`follow {userId}`,
    `saveProfile {name, bio}`), and who handles them (P6). *Settled in part: events are declared in the
    schema (D14), unhandled ones are caught statically (D15), and payloads are objects of named fields
-   built from paths (D35). Approach in §9.4.*
+   built from paths (D35), built in POC.md §18 with a provisional syntax. Approach in §9.4.*
 5. ⚑ **UI state vs. data:** "menu open", "selected tab", unsaved input. Can be snapshotted, but isn't
    part of the backend contract (P6). *Ownership settled by D5: the view owns `ui` state. Still open:
    where the line falls. Rule of thumb: if the host needs it to load or save data, it's `data` or an
@@ -977,10 +978,10 @@ provisional subset: a condition is a path, optionally negated with `!`, tested f
 Snapshots that extend a base (D30) didn't depend on the language either, and are built, in the form
 D36 settles (POC.md §17).
 
-Lists and event payloads come next, also ahead of the battle. What the contract depends on is settled
-(D34, D35); the syntax inside the attributes is provisional, as it was for conditionals:
-`m-for="member in members"` and no other form, `.length` in conditions for empty states, and
-`emit('vote', { optionId: option.id })` with paths as values.
+Lists and event payloads came next, also ahead of the battle, and are built (POC.md §18). What the
+contract depends on is settled (D34, D35); the syntax inside the attributes is provisional, as it was
+for conditionals: `m-for="member in members"` and no other form, `.length` in conditions for empty
+states, and `emit('vote', { optionId: option.id })` with paths as values.
 
 **After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
 (#37).
@@ -1204,3 +1205,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   of named fields built from paths, and snapshot overrides as JSON Merge Patch, which settles Q14).
   Aligned §6, §9.1, §9.5, §10 and §11 with them; the markup for lists and payloads stays provisional.
 - 2026-10-18: Q15 (`<template>` for grouping elements), kept out until a real screen needs it.
+- 2026-10-18: lists and event payloads built ahead of the language battle (POC.md §18): `m-for` with
+  keyed rows, `.length` in conditions for empty states, and `emit` with a payload built from paths.
+  The members page and the poll use them.

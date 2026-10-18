@@ -7,8 +7,8 @@
 **Status:** built, and M3's AI authoring trial passed (§10). Since then, conditionals and a second
 example app have been added (§14), routing: the route table, links, the URL input, the standalone
 host and pages in the shell (§15), design in stages: alternatives in `explore/` side by side in the
-shell, several device sizes at once and each view's stage (§16), and snapshots that extend a base
-(§17). The code is a Bun workspace: the Melzin packages in
+shell, several device sizes at once and each view's stage (§16), snapshots that extend a base
+(§17), and lists and event payloads (§18). The code is a Bun workspace: the Melzin packages in
 `packages/melzin` and `packages/cli` and example apps in `examples/` (§7, §14). It follows
 [SPEC.md](SPEC.md); references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
@@ -41,7 +41,8 @@ It touches D1–D3, D6, D8–D10, D12–D15, P1 and P4–P6, each in its smalles
 
 **Out:** everything else, including lists, conditionals, attribute bindings, internal state, event
 payloads, components, the custom element, the standalone host and performance work. §11 lists when each
-one comes in.
+one comes in; conditionals (§14), the standalone host (§15), and lists and event payloads (§18) have
+been built since.
 
 ## 3. The view file
 
@@ -111,17 +112,19 @@ Rules:
 | `m-text` | a path, such as `count` or `user.name` | sets the element's text to that value from `data` |
 | `m-on:click` | `emit('increment')` | sends the declared event to the host |
 
-That was the whole language of the POC; conditions came after it (§14). Values are parsed into a small
-syntax tree and never evaluated (P1, #24). Paths and event names are identifiers (`[A-Za-z_][A-Za-z0-9_]*`); paths join them with dots. The
-event name is a string in single or double quotes. Vue's `$emit(...)` is an error with the hint
+That was the whole language of the POC; conditions came after it (§14), then lists and payloads
+(§18). Values are parsed into a small syntax tree and never evaluated (P1, #24). Paths and event names
+are identifiers (`[A-Za-z_][A-Za-z0-9_]*`); paths join them with dots. The event name is a string in
+single or double quotes. Vue's `$emit(...)` is an error with the hint
 "use emit('name') instead of Vue's $emit" (§13).
 
 ### Schema
 
 - `data` is a subset of JSON Schema: objects with `properties` and `required`, leaf types `string`,
   `number` and `boolean`, and `default` for missing values (P4). `description` is allowed anywhere; any
-  other keyword is an error.
-- `events` maps each event name to `{}`. The `payload` key is reserved for typed payloads (D14).
+  other keyword is an error. (Since §18, a field can also be a list.)
+- `events` maps each event name to `{}`. The `payload` key is reserved for typed payloads (D14), and
+  §18 fills it.
 - The `ui` key is reserved for internal state (D5) and rejected for now.
 - A view without a schema block has no data and no events: a fully static page.
 
@@ -174,7 +177,7 @@ view.destroy()       // removes the listeners and the view's elements
 - `update` replaces the data and rewrites only the elements whose value changed. Nothing re-renders, so
   the button and everything else keep their identity (#17).
 - A click calls `on[event](payload)`. The payload is always `undefined` for now, but handlers already
-  take it as their argument (D14).
+  take it as their argument (D14). (Since §18, an event can declare a payload, built from paths.)
 - The runtime warns about data that doesn't match the schema, declared events without a handler,
   handlers for events that don't exist, and invalid directives, which it skips (D15). Warnings go to the
   `onWarning` option, or to `console.warn` with a `[melzin]` prefix.
@@ -201,8 +204,8 @@ view.destroy()       // removes the listeners and the view's elements
 - Each frame shows:
   - a state editor with the current `data` as JSON; valid edits apply live through `update`, and
     invalid JSON shows the parse error (D3)
-  - an event log with each emitted event and its time. Nothing else happens, because the shell has no
-    host (#43)
+  - an event log with each emitted event and its time (and, since §18, its payload). Nothing else
+    happens, because the shell has no host (#43)
   - the runtime's warnings
 - A refresh, or the Reload button, reloads everything from the file and drops the edits (D3). Files
   aren't watched yet.
@@ -223,8 +226,8 @@ like a compiler's, `file:line:col: error: message`, followed by a summary such a
 Errors:
 
 - a file not named `*.mel.html`
-- invalid JSON or a duplicate data block, or a schema outside the subset above ("lists aren't supported
-  yet (SPEC #1)")
+- invalid JSON or a duplicate data block, or a schema outside the subset above (lists and payloads
+  joined the subset in §18)
 - an unknown directive, with a hint for Vue and Alpine spellings: `v-text` → `m-text`, `@click` →
   `m-on:click` (#38)
 - an `m-text` path that's missing from the schema or points at an object, an `m-text` element with
@@ -281,7 +284,7 @@ const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/view
 
 `examples/poll/` is a separate app, `melzin-example-poll`, that depends on Melzin as a workspace package. It's
 a quick poll, "What should we eat at the next team meetup?", with three fixed options: pizza, tacos and
-sushi.
+sushi. (Since §18, the options are a list and one `vote` event says which one was picked.)
 
 - `server.ts` is a tiny Bun backend on port 3000 that owns the votes in memory. Its adapter,
   `toViewModel`, shapes them for the screen (P3): votes and a percent string per option, and a total
@@ -399,10 +402,10 @@ reuses the binding table, the shared parser and the host API.
 | `m-show`, `m-if` and `m-else`: *built, with `m-else-if` (§14)* | #8, #9 |
 | Snapshots that extend a base snapshot and override what differs: *built (§17)* | D30, #34, Q14 |
 | `m-bind`, including `m-bind:class` with literal classes | #8, #11, #52 |
-| `m-for` with keys and empty states | #1, §9.1 |
+| `m-for` with keys and empty states: *built, with `.length` in conditions (§18)* | #1, §9.1, D34 |
 | Internal `ui` state and state operations in handlers | D5, #46 |
 | Formatters for numbers and dates, built on `Intl` | #6 |
-| Event payloads, any DOM event in `m-on`, and modifiers | D13, D14 |
+| Event payloads: *built from paths (§18)*; literals in payloads, any DOM event in `m-on`, and modifiers | D13, D14, D35 |
 | `m-model` and forms | #20 |
 | Stable IDs and schema diffs | #13, #3, §9.3, §9.4 |
 | Components: views inside views, schemas composed with `$ref` | D16–D19, #12, §9.5 |
@@ -426,6 +429,7 @@ What keeps the growth above cheap:
 - **Final shapes, early.** The schema keeps its full top level (`data`, `ui`, `events`) even though `ui`
   is rejected for now, and events keep a reserved `payload` key. Snapshots are `{ data }` objects, so
   `ui` and base-plus-overrides (#34, D30) can slot in. Handlers take a payload argument from day one.
+  (Payloads slotted into both in §18, with no change to the host API.)
 - **One host API.** `mount`, `update` and `destroy` are what the custom element (D7) and the standalone
   host (D11) will wrap.
 - **One renderer.** The shell only renders through the runtime (P5).
@@ -602,12 +606,12 @@ or the problems in routes.json.
 
 ### Profile example
 
-Now two pages: the members at `/` (three fixed slots, since lists aren't built; "Browsing as" from
-`route.query.as`; links that try each scenario) and the profile at `/u/:handle`, with a link back. The
-adapter moved to `model.ts`, with no server in it, so `source.ts` has two sources over one contract
-(D20): `remoteSource()` asks the server's API, and `localSource(network)` runs the adapter in the
-browser, as an offline-first app would over IndexedDB. The client uses the remote one; a new app test
-runs the whole app on the local one in happy-dom. Checked by hand in a real browser: the screens switch
+Now two pages: the members at `/` (three fixed slots, since lists weren't built yet, and a list since
+§18; "Browsing as" from `route.query.as`; links that try each scenario) and the profile at
+`/u/:handle`, with a link back. The adapter moved to `model.ts`, with no server in it, so `source.ts`
+has two sources over one contract (D20): `remoteSource()` asks the server's API, and
+`localSource(network)` runs the adapter in the browser, as an offline-first app would over IndexedDB.
+The client uses the remote one; a new app test runs the whole app on the local one in happy-dom. Checked by hand in a real browser: the screens switch
 without a reload, follow and unfollow update the page, back and forward work, and the shell lists the
 pages, logs navigations and applies edited URLs.
 
@@ -788,8 +792,9 @@ resolves them, so the runtime, the shell and the checker all see merged snapshot
 
 In the profile example, "signed out" and "very long everything" extend "follows you", and "your own
 profile" extends "following"; profile.mel.html is 26 lines shorter. The members page's "browsing as
-Ana" extends "nobody signed in" and changes only its links and URL, and the poll's "very long question"
-extends "close race" and sets only the question. The contract tests, which compare each snapshot with
+Ana" extends "nobody signed in" and changes only its links and URL (since §18 it restates the list,
+which replaces whole), and the poll's "very long question" extends "close race" and sets only the
+question. The contract tests, which compare each snapshot with
 what the adapter produces for its state, pass unchanged.
 
 ### Decisions
@@ -809,3 +814,217 @@ Made for this step; SPEC Q14 can still revisit them.
 - **Every snapshot shows.** There are no hidden bases; a base is a real state, like "follows you".
 - **A broken chain doesn't stop the preview.** The snapshot shows with what it sets itself, and its data
   waits to be checked, instead of piling up "missing field" errors that the broken `extends` explains.
+
+## 18. After the POC: lists and event payloads
+
+Built on 2026-10-18, from SPEC D34–D36, settled on paper the same day. Like conditionals, it comes ahead
+of the binding-language battle (SPEC §11): what the contract depends on is settled, and the syntax
+inside the attributes is provisional. It grows the existing pieces: the schema gained lists and
+payloads, the shared parser two forms, the binding table a block per row, and the core a module of
+payload rules (`core/payload.ts`), so the runtime and the checker still agree (§12).
+
+### Format
+
+```html
+<ul class="divide-y" m-if="options.length">
+  <li m-for="option in options">
+    <span m-text="option.label"></span>
+    <button type="button" m-on:click="emit('vote', { optionId: option.id })">Vote</button>
+  </li>
+</ul>
+<p m-else>No options yet</p>
+```
+
+```json
+{
+  "data": {
+    "type": "object",
+    "properties": {
+      "options": {
+        "type": "array",
+        "key": "id",
+        "items": {
+          "type": "object",
+          "properties": { "id": { "type": "string" }, "label": { "type": "string" } },
+          "required": ["id", "label"]
+        }
+      }
+    },
+    "required": ["options"]
+  },
+  "events": {
+    "vote": {
+      "payload": { "type": "object", "properties": { "optionId": { "type": "string" } }, "required": ["optionId"] }
+    }
+  }
+}
+```
+
+| Directive | Value | Effect |
+|---|---|---|
+| `m-for` | `alias in path` | repeats its element once per item of a list, keyed by the list's key |
+| `m-on:click` | `emit('name')` or `emit('name', { field: path, ... })` | sends the event, with a payload built from paths |
+
+- **Lists (D34).** A list field has `"type": "array"`, `items`, and optionally `key`, `uniqueItems`,
+  `minItems`, `maxItems` and `description`. It has no `default`: a missing optional list renders like
+  an empty one. Items are an object schema, whose `key` names a direct, required string or number
+  field, or a string or number leaf, keyed by its values, which says so with `"uniqueItems": true`
+  and may carry `route` (a list of links). Lists of lists, lists of booleans and tuples are errors
+  whose messages name the fix. `data` stays an object.
+- **Payloads (D35).** `events.<name>.payload` is an object schema of string, number and boolean
+  leaves, with `required` and descriptions. No defaults, links, objects or lists.
+- **Grammar.** `loop := ident 'in' path` for `m-for`, and for payloads
+  `call := ident '(' (string (',' arg)*)? ')'`, `arg := string | object`,
+  `object := '{' (field (',' field)* ','?)? '}'` and `field := ident ':' path`. An `m-for` path may
+  start with an outer alias (`tag in member.tags`). Every other form gets a message that names its
+  fix: `of`, an index, destructuring, ranges, and calls or filters after the list for `m-for`; a
+  positional payload, shorthand, literals, `!`, calls and repeated fields for `emit`.
+- **Scope.** Inside a row, a path may start with the alias, which stands for the row's item; for a
+  list of strings or numbers the alias is the value. A row's item always exists, so a path from the
+  alias starts out required. `<list>.length` counts the items, in conditions only (`m-if`,
+  `m-else-if`, `m-show`); a real field named `length` is still that field.
+- **Data.** `validateData` checks lists: arrays, every item, keys present and unique in each list
+  (two polls may reuse option ids), `minItems` and `maxItems`, and no `null` items. Issue paths show
+  indexes, `members[2].handle`. Keys compare in a `Map`, so `1` and `"1"` differ and `__proto__` is a
+  plain key.
+- **Stage (D33).** A link field inside items makes the view a contract; a key doesn't change the stage.
+
+### Runtime
+
+- **Compiled once per template.** The view's body is one template and every `m-for` element another,
+  with its own plan: where its texts, links, conditions, clicks, chains and nested lists sit, as child
+  indexes. Each directive is parsed and resolved once, so a bad one warns once, not once per row. A
+  row is a clone of its template, bound from the plan.
+- **Rows.** Each `m-for` element is replaced by a comment anchor, `<!--m-for-->`, and its rows (without
+  the `m-for` attribute) follow it back to back, in data order. Whitespace-only text right before and
+  after the `m-for` element goes, so a container that holds only the list is `:empty` while it has no
+  rows.
+- **A scope per row.** Every row has its own bindings, and its alias reads the row's current item at
+  render time, so a kept row shows its item's new values in the same elements.
+- **Keyed rows.** On every render, rows match items in a `Map` by key: the key field, or the value in a
+  list of strings or numbers. A kept key keeps its row; new keys get new rows; rows of keys that are
+  gone are removed, with their listeners and their nested rows' listeners. Rows in the longest run that
+  is already in order stay put, as in Vue 3, and the others move with `Element.prototype.moveBefore`
+  where the browser has it, which keeps their state, or `insertBefore` otherwise.
+- **Data that doesn't match.** Missing, mistyped or duplicate keys are data warnings (from
+  `validateData`, which already runs), and that list's rows follow its items by position for that
+  render. A value that isn't an array renders no rows.
+- **A broken `m-for`** (a parse error, an unknown list, a field that isn't a list, an alias already
+  taken, or `m-if`, `m-else-if` or `m-else` on the element) warns once ("...; shows no rows") and
+  renders nothing: as with a broken condition, hiding beats showing the wrong thing. Nothing inside it
+  is compiled.
+- An `m-for` element ends any chain before it. Lists inside hidden branches stay bound, rows included
+  (§14).
+- **Payloads.** A click builds the payload with `buildPayload` (`core/payload.ts`) from the row's
+  current item, the data and the URL, with defaults, leaves out fields whose value is missing, and
+  calls the handler with it. Events without a payload still get `undefined`. An emit that doesn't match
+  its event's payload warns once; one that leaves out a payload its event declares sends `{}`.
+- **Types.** `melzin` exports `Payload` (`Record<string, string | number | boolean>`), which `mount`'s
+  default handler type takes. `startApp`'s handlers get `(payload, page)`, with the payload typed from
+  the generated `Handlers`.
+- `destroy()` removes every row and its listeners, at every depth, top-level lists included.
+
+### Checker and types
+
+- **Errors** for every rule above, at its line and column: an `m-for` problem at the alias or the
+  path, a payload problem at the field or the value. Paths inside rows resolve through the alias, and
+  an unknown field suggests names from the items. Also errors: `m-if`, `m-else-if` or `m-else` on an
+  `m-for` element, `.length` outside conditions, a list in `m-text` or `m-bind:href` (pointed at
+  `m-for`), `:key` and its spellings ("keys live in the schema"), and a `<template>` with `m-for`,
+  `v-for` or `x-for`. A broken `m-for` skips the paths that may read its item, so it's the only error
+  until it's fixed.
+- **Payloads (D15),** with core's `payloadIssues`: a payload exactly when the event declares one,
+  every required field, no unknown field ("did you mean"), each value a leaf of the field's type (a
+  link field is a string), and a value that may be missing only in an optional field.
+  `route.params.<p>` is a present string where the route declares `:p`; `route.query.<q>` may be
+  missing.
+- **Snapshots.** List data problems (keys, duplicates, `minItems` and `maxItems`, nulls) are errors at
+  their JSON position, `data.members[2].handle`. A `null` inside a list is never a removal, so it gets
+  its own error instead of the "removes nothing" warning. A problem in an inherited list is reported at
+  the base (§17). Each item's link value is checked against its route, `data.members[1].url`.
+- **Coverage (P8),** with the runtime's rules: an element in a row shows when it shows in any row of
+  any snapshot. A list whose rows never show gets "no snapshot shows a row of 'members' (it's empty in
+  every snapshot)". Once per list field, at the first `m-for` over it: "no snapshot shows 'members'
+  empty; add one to design the empty state, or set "minItems": 1 if it's never empty" (skipped when
+  `minItems` is 1 or more), and "no snapshot shows 'members' with more than one item" (skipped when
+  `maxItems` is 1).
+- **Other warnings:** a condition on a list itself, which holds even when it's empty ("test
+  members.length"), and a static `id` inside a row.
+- **"Never used"** names item fields as `members[].name`. An `m-for` or a `.length` condition uses a
+  list, an `m-for` its key, reading the alias of a list of strings or numbers its values, and a payload
+  the fields it reads. A list that nothing uses gets one warning, not one per item field.
+- **Types.** Lists are inline arrays: `members: { handle: string; url: Href<'profile'> }[]`,
+  `members?:` when optional, `tags: string[]`. Handlers type their payload,
+  `vote: (payload: { optionId: string; note?: string }) => void`, with descriptions as comments;
+  events without one keep `(payload?: undefined) => void`, and `routes.types.ts` follows. The tsc
+  tests show a host whose handler takes the right payload passing, and one whose handler takes a wrong
+  payload type or a field the payload lacks, a wrong item or a list of the wrong values failing with
+  `mount`; with `startApp`, a wrong payload type and a hand-built link inside a list fail.
+- 35 new fixtures in `packages/cli/tests/fixtures/check/`: `good-lists.mel.html` with no diagnostics,
+  and one per rule with exactly one.
+
+### Shell
+
+- The frame passes each event's payload to the shell (`protocol.ts` accepts only an object of
+  strings, numbers and booleans). The event log shows it as compact JSON on its own line under the
+  event name, `{"optionId":"pizza"}`, set as text. Past 80 characters it's cut, never inside an
+  emoji, with the whole JSON in its title.
+- The state editor already edited lists as JSON; keyed rows keep their elements through edits.
+- Checked by hand in headless Chromium: rows, nested lists and empty states, payloads in the log, cut
+  and whole, and edits that reorder, change, add and remove items while the other rows keep their
+  nodes.
+
+### Examples
+
+- **Members** (`examples/profile`). The three fixed slots became `members`, a required list keyed by
+  `handle`. The `<ul>` shows with `m-if="members.length"`, and an `m-else` after it is a "No members
+  yet" design. `toMembersModel` returns everyone, sorted by handle. The snapshots restate the list:
+  "browsing as Ana" still extends "nobody signed in" and restates all three cards to change their
+  links (D36's cost), and "one member" and "no members yet" are new. View tests show that an update
+  keeps each member's `<li>` when someone new sorts first, and that a member who leaves takes only
+  their card. The "very long names" snapshot showed cards growing past a phone's width, which was
+  already true before lists, so the grid gained `grid-cols-1`.
+- **Poll** (`examples/poll`). The options became `options`, a required list keyed by `id` with
+  `"minItems": 2`, so `melzin check` asks for no empty state. One `vote` event with
+  `{ optionId: string }` replaced `votePizza`, `voteTacos` and `voteSushi`. The hand-drawn icons
+  couldn't follow into one template (attributes can't be bound yet), so each option has an `emoji`
+  shown with `m-text` in one brand-tinted square, and the button reads
+  `Vote<span class="sr-only"> for <span m-text="option.label"></span></span>`. The backend's poll is
+  data (`MEETUP_POLL`), `toViewModel` builds `options` in the poll's order, and
+  `POST /api/poll/votes` takes `{"optionId": "pizza"}`, the view's payload, so the client's handler is
+  `vote: ({ optionId }) => ...`. The snapshots became lists ("very long question" still extends
+  "close race" and keeps its list), and a new one, "six options with long labels", showed labels
+  squeezed to a word per line on a phone, so a row there stacks its percent above the button. New
+  view tests mount the real view.
+- Both were checked by hand in headless Chromium: every snapshot in the shell, and the poll's
+  production page, where votes update the counts and the rows keep their elements.
+- `packages/cli/views` and the `explore/` demo are unchanged: an exploration stays static (D28).
+
+### Decisions
+
+Made for this step; the binding-language battle (SPEC §11) can still change them.
+
+- **`m-for="item in list"`, and nothing else.** No index, destructuring, ranges or filters: position
+  variants style rows, the key identifies them, and the host sends the list as it should show (P3).
+  Each other form is an error that says so.
+- **The key lives in the schema** (D34), and `:key` is an error that points there. A list of objects
+  names one; a list of strings or numbers is keyed by its values.
+- **`.length` only in conditions.** It's what empty states need; a count to show is a field the host
+  formats.
+- **No `m-if` on an `m-for` element.** Vue's precedence between `v-if` and `v-for` changed from Vue 2
+  to Vue 3, so either reading surprises someone. A wrapper, a condition inside the row or a filtered
+  list each say what they mean.
+- **Rows follow a comment anchor, with nothing between them,** like a chain's branches, so the
+  container holds only what the author wrote, and `:empty` and position variants work.
+- **Bad keys fall back to positions** for that render, with the data warning: the rows still show, as
+  the data does. A broken `m-for` shows nothing, like a broken condition.
+- **Compile once, bind per row.** A template's directives are parsed and resolved once; rows are
+  clones bound from the plan.
+- **`moveBefore` where the browser has it,** so a moved row keeps its focus and animations, and
+  `insertBefore` elsewhere.
+- **Payload values are paths, payload fields leaves** (D35). Literals, `!`, `.length` and the DOM
+  event wait for the battle; a key such as `option.id` stands for the item.
+- **A missing value is left out of the payload,** and an emit without the payload its event declares
+  sends `{}` with a warning, so a handler that destructures doesn't throw.
+- **Lists replace whole in snapshots** (D36). The members page's restated list is the cost, and it's
+  small.
