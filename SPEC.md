@@ -129,6 +129,21 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 - **D24. Loading policies per route.** Code is `eager` (in the first bundle), `prefetch` (downloaded in
   the background after first paint; the default) or `lazy` (fetched on intent, such as hovering a
   link). Data is `network-only`, `stale-while-revalidate` (the default) or `offline` (§7).
+- **D25. Navigation is one built-in `navigate` event,** modeled on the Navigation API's `navigate`
+  event. Any `<a>` that points to a route fires it with `{route, params, url}`; views don't declare it.
+  By default the host navigates: it matches the route, runs its loader and shows its view. The app's
+  source can override that to add logic (analytics, unsaved-changes prompts), send the user elsewhere or
+  cancel, and event handlers can start a navigation too, such as after a save. The default counts as a
+  handler for D15. In the shell, nothing navigates: the event goes to the event log (§7, §8).
+- **D26. The shell shows routes as well as views.** It lists the routes from the table explicitly, as
+  pages, and renders each one in many snapshots, the same way it renders views. A route frame renders
+  its view with that view's snapshots (§8).
+- **D27. The URL is a third input, `route`,** next to `data` and `ui`: the route's name, its `params`
+  and its `query`. The host injects it, it's read-only, and any view can bind to it, including
+  components deep in the tree, a deliberate exception to D18. The checker makes sure a view that reads
+  `route.params.handle` is only used under routes whose path declares `:handle`. Snapshots can set it
+  (`"route": { "params": { "handle": "bruno" } }`), and the shell shows it in the frame and lets the
+  inspector edit it.
 
 ## 5. Principles
 
@@ -167,6 +182,8 @@ standalone host) feeds `data` in and handles events. The view owns its `ui` stat
 - `data`: the backend contract. Comes from the host.
 - `ui`: menu open, selected tab, unsaved input. Declared in the file with types and initial values, and
   changed only by the view's own interactions (#46).
+
+A third input, `route` (the URL's params and query), is injected by the host and read-only (D27).
 
 Both are visible to tools: snapshots can set them and the shell can inspect and edit them. Only `data`
 and events go into the backend contract. Every event is declared in the schema (D14), and its payload is
@@ -334,9 +351,19 @@ hash and is cached forever; data changes, so it gets a cache policy. The intende
 A route whose views have no events and no `ui` state needs no JavaScript at all, so a static site
 could ship none on most pages.
 
-**Not decided yet:** how navigation is intercepted and overridden, shared frames across routes (#60),
-not-found and error screens, `ui` state in the URL (`?tab=`), modals as routes, and the details of each
-source's protocol.
+**Navigation** (D25). Following a link, going back or forward, or a handler asking to navigate fires
+one built-in `navigate` event. The host handles it by default by swapping the whole screen; the app's
+source can override it. Keeping parts of the screen across navigation, such as an app shell, is #60.
+
+**The URL as input** (D27). The view reads the current route as `route`, next to `data` and `ui`:
+
+```html
+<a m-bind:href="followersUrl">Followers of @<span m-text="route.params.handle"></span></a>
+```
+
+**Not decided yet:** shared frames across routes (#60), not-found and error screens, `ui` state in the
+URL (`?tab=`), modals as routes, how embedded views (no route table) get `route`, and the details of
+each source's protocol.
 
 ## 8. Preview shell
 
@@ -347,8 +374,11 @@ The browser app where humans review and explore the design (D1–D3), and where 
 - Renders the Melzin file with the production runtime (P5).
 - A canvas with zoom and panning.
 - Many renders at once: a grid of snapshots × viewport sizes (later also × screens).
+- Routes listed as pages next to the views, each rendered in many snapshots (D26). A route frame shows
+  its URL, built from the snapshot's `route` params (D27). Link clicks fire `navigate` (D25), which
+  goes to the event log instead of navigating.
 - A state inspector for each render:
-  - shows the render's full state (`data` + `ui`)
+  - shows the render's full state (`data` + `ui`, plus `route` for routes)
   - controls generated from the schema: toggles, enum pickers, text and number inputs,
     adding/removing/reordering list items, setting an optional field to missing
   - a raw JSON view
@@ -377,6 +407,13 @@ The browser app where humans review and explore the design (D1–D3), and where 
 - Reload when the file changes, keeping manual edits that still fit the schema (#44).
 - Show the generated hostile states (P8) in the grid.
 - Click a schema field to highlight every element bound to it.
+- A follow mode for prototyping: clicking a link in a route frame shows the target route with a chosen
+  snapshot instead of logging the event.
+- An app map: routes as nodes and links as arrows, drawn from the link fields' target routes (D23)
+  without clicking anything.
+- Simulated loading, failed, offline and stale states per route frame (P4, D24).
+- Live frames that run against a real source (a dev server, or a local source with seeded data) instead
+  of snapshots (D20).
 
 ## 9. Approaches to key complications
 
@@ -698,10 +735,10 @@ place the type appears (#59).
     Tailwind's theme holds the tokens and `dark:` handles dark mode (D9), and there's one theme per
     project (D12).
 31. **Routing and multiple screens:** syncing URL and state, a shared app shell, navigation events, deep
-    links to specific UI states. Needed for standalone mode (D7, §7). *Settled in part by D20–D24:
-    pluggable sources, a declared route table, `URLPattern` paths, links as typed fields and loading
-    policies. Still open: navigation events, a shared app shell (#60), `ui` state in the URL, and
-    not-found and error screens.*
+    links to specific UI states. Needed for standalone mode (D7, §7). *Settled in part by D20–D27:
+    pluggable sources, a declared route table, `URLPattern` paths, links as typed fields, loading
+    policies, the `navigate` event, routes in the shell and the URL as the `route` input. Still open: a
+    shared app shell (#60), `ui` state in the URL, and not-found and error screens.*
 
 ### Tooling and workflow
 
@@ -954,6 +991,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Data (`data`):** state that comes from the host. The backend contract.
 - **Internal state (`ui`):** state the view owns, declared in the file and changed by the view's own
   interactions. Visible to tools, not part of the backend contract.
+- **URL input (`route`):** the current route's name, params and query, injected by the host and
+  read-only. Any view can bind to it (D27).
 - **Event:** a typed message the view sends to its host, declared in the schema (D14).
 - **Handler:** code that consumes an event: in the host for a screen, in the parent view for a component.
   Every declared event needs one (D15).
@@ -997,3 +1036,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-17: routing on paper. D20–D24 (pluggable sources, a declared route table, `URLPattern`
   paths, links as typed fields with no URL building in views, loading policies per route); D11 amended.
   Expanded §7 and added complication #60 (shared frames across routes, deferred).
+- 2026-10-17: D25–D27 (navigation as one built-in `navigate` event, routes shown in the shell like
+  views, the URL as a third input `route`). Added navigation and URL notes to §7 and routes to §8,
+  with a follow mode, an app map, simulated loading states and live frames under "Later".

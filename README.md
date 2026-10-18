@@ -212,6 +212,8 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
   (offline-first apps)
 - [ ] Per-route lazy loading, background prefetching and a generated service worker
 - [ ] Frames shared across routes, such as an app shell with navigation
+- [ ] Routes in the shell as pages, each shown in many snapshots, with the URL as a `route` input any
+  view can read
 - [ ] Server-side rendering and hydration
 - [ ] Production builds that strip snapshots
 
