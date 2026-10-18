@@ -62,6 +62,7 @@ import {
   parseRouteRef,
   parseSnapshots,
   parseTextDirective,
+  payloadFixMessage,
   payloadIssues,
   resolveField,
   resolveList,
@@ -781,7 +782,9 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     const parsed = parseClickDirective(value)
     if (!parsed.ok) {
       broken.click = true
-      error(at(parsed.offset), `${CLICK_DIRECTIVE}: ${parsed.message}`)
+      // A payload in a form emit doesn't take: the fix in the event's declared fields and the row's names.
+      const message = parsed.fix === undefined ? parsed.message : payloadFixMessage(checked, parsed.fix, context.scope)
+      error(at(parsed.offset), `${CLICK_DIRECTIVE}: ${message}`)
       return
     }
     emitted.add(parsed.event)

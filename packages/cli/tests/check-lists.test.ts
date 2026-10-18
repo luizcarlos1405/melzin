@@ -365,3 +365,67 @@ describe('lists and routes', () => {
     ])
   })
 })
+
+describe('payload fixes in the event\'s terms', () => {
+  const INBOX = {
+    data: {
+      type: 'object',
+      properties: {
+        filters: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+        notifications: {
+          type: 'array',
+          key: 'id',
+          items: { type: 'object', properties: { id: { type: 'string' }, title: { type: 'string' } }, required: ['id', 'title'] },
+        },
+      },
+      required: ['filters', 'notifications'],
+    },
+    events: {
+      selectFilter: { payload: { type: 'object', properties: { filter: { type: 'string' } }, required: ['filter'] } },
+      markRead: { payload: { type: 'object', properties: { notificationId: { type: 'string' } }, required: ['notificationId'] } },
+      refresh: {},
+    },
+  }
+  const INBOX_SNAPSHOTS = {
+    empty: { data: { filters: [], notifications: [] } },
+    full: { data: { filters: ['all', 'unread'], notifications: [{ id: '1', title: 'A' }, { id: '2', title: 'B' }] } },
+  }
+  const inbox = (filterClick: string, notificationClick: string): string[] =>
+    check(
+      `<button m-on:click="emit('refresh')">Refresh</button>` +
+        `<ul><li m-for="filter in filters"><button m-on:click="${filterClick}" m-text="filter"></button></li></ul>` +
+        `<ul><li m-for="notification in notifications"><button m-on:click="${notificationClick}" m-text="notification.title"></button></li></ul>`,
+      INBOX,
+      INBOX_SNAPSHOTS,
+    )
+  const FILTER = "emit('selectFilter', { filter: filter })"
+  const MARK = "emit('markRead', { notificationId: notification.id })"
+
+  test('the fixes, written as suggested, pass', () => {
+    expect(inbox(FILTER, MARK)).toEqual([])
+  })
+
+  test("a positional value goes in the event's only field", () => {
+    expect(inbox("emit('selectFilter', filter)", MARK)).toEqual([`error: m-on:click: a payload is an object of named fields: ${FILTER}`])
+    expect(inbox(FILTER, "emit('markRead', notification.id)")).toEqual([`error: m-on:click: a payload is an object of named fields: ${MARK}`])
+  })
+
+  test("a literal or $event gets the event's field, filled from the row's alias and key", () => {
+    expect(inbox(FILTER, "emit('markRead', $event)")).toEqual([`error: m-on:click: a payload is an object of named fields: ${MARK}`])
+    expect(inbox("emit('selectFilter', &#39;all&#39;)", MARK)).toEqual([`error: m-on:click: a payload is an object of named fields: ${FILTER}`])
+  })
+
+  test('shorthand and quoted names: the path from the row in scope', () => {
+    expect(inbox("emit('selectFilter', { filter })", MARK)).toEqual(["error: m-on:click: write the value's path too: { filter: filter }"])
+    expect(inbox(FILTER, "emit('markRead', { notificationId })")).toEqual(["error: m-on:click: write the value's path too: { notificationId: notification.id }"])
+    expect(inbox(FILTER, "emit('markRead', { &#39;notificationId&#39;: notification.id })")).toEqual([
+      'error: m-on:click: write field names without quotes: { notificationId: notification.id }',
+    ])
+  })
+
+  test('a payload for an event declared without one', () => {
+    expect(inbox(FILTER, "emit('refresh', notification.id)")).toEqual([
+      "error: m-on:click: event 'refresh' has no payload; send emit('refresh'), or declare its payload in the schema's events",
+    ])
+  })
+})

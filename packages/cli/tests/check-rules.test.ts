@@ -424,7 +424,7 @@ const errors: Case[] = [
   {
     file: 'payload-positional.mel.html',
     severity: 'error',
-    message: "m-on:click: a payload is an object of named fields: emit('follow', { memberHandle: member.handle })",
+    message: "m-on:click: a payload is an object of named fields: emit('follow', { handle: member.handle })",
     at: pos('payload-positional.mel.html', 'member.handle)'),
   },
   {

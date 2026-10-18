@@ -159,7 +159,7 @@ describe('markup', () => {
     const source = page(`<p m-text="count"></p><button m-on:click="save()">x</button><button m-on:click="emit('increment', 'x')">+</button>`)
     expect(messages(checkSource(source))).toEqual([
       "error: m-on:click: only emit('name') is supported for now; did you mean emit('save')?",
-      "error: m-on:click: a payload is an object of named fields: emit('increment', { <field>: <path> })",
+      "error: m-on:click: event 'increment' has no payload; send emit('increment'), or declare its payload in the schema's events",
     ])
   })
 
