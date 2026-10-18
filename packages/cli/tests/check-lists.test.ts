@@ -464,6 +464,21 @@ describe('lists and routes', () => {
     ])
   })
 
+  test("a script URL in a snapshot's link field is an error at the item's path, and only that", () => {
+    const snapshots = {
+      nobody: linked([]),
+      two: linked([{ handle: 'ana', url: '/u/ana' }, { handle: 'bo', url: ' JavaScript:alert(1)' }, { handle: 'cy', url: 'data:text/html,x' }]),
+    }
+    const source = page(BODY, LINKED, snapshots)
+    const expected = [
+      { ...at(source, '"url": " JavaScript'), severity: 'error', message: `snapshots["two"].data.members[1].url: javascript: URLs aren't allowed in links; the link has no href` },
+      { ...at(source, '"url": "data:'), severity: 'error', message: `snapshots["two"].data.members[2].url: data: URLs aren't allowed in links; the link has no href` },
+    ]
+    expect(checkSource(source)).toEqual(expected)
+    // With routes.json too: not also "isn't a URL of route 'profile'".
+    expect(checkSource(source, 'members.mel.html', ROUTES)).toEqual(expected)
+  })
+
   test('a link field inside items names a route of routes.json, and makes the view a contract', () => {
     const typo = { data: { ...LINKED.data, properties: { members: { ...LINKED.data.properties.members, items: { ...LINKED.data.properties.members.items, properties: { handle: { type: 'string' }, url: { type: 'string', route: 'profle' } } } } } } }
     expect(messages(checkSource(page(BODY, typo, { nobody: linked([]), two: linked([{ handle: 'a', url: '/u/a' }, { handle: 'b', url: '/u/b' }]) }), 'members.mel.html', ROUTES))).toEqual([
