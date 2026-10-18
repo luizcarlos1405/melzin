@@ -8,7 +8,7 @@ bun add melzin
 bun add -d @melzin/cli
 bunx melzin check      # check every *.mel.html view, compiler-style
 bunx melzin types views/counter.mel.html   # TypeScript types for a view's data and events
-bunx melzin shell      # the preview shell: every snapshot, every device size
+bunx melzin shell      # the preview shell: every snapshot, every device size, every alternative
 bunx melzin css        # the project's Tailwind CSS
 ```
 

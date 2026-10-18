@@ -3,7 +3,8 @@
 > Design is implementation.
 
 **Status:** design record, started 2026-10-16. The proof of concept described in [POC.md](POC.md) is
-built, and so are conditionals (POC.md §14); everything beyond them is still design.
+built, and so are conditionals, routing and design in stages (POC.md §14–§16); everything beyond them is
+still design.
 
 Every numbered item keeps its number: decisions (D1, D2, ...), principles (P1, ...), complications
 (#1, ...) and open questions (Q1, ...). New items are appended; settled ones stay in place with a note.
@@ -174,6 +175,22 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 - **D30. Snapshots extend other snapshots.** A snapshot can name a base snapshot and list only what
   differs, so states don't repeat their shared data, and a change to that data reaches every snapshot
   built on it (#34). The exact form is Q14.
+- **D31. Design alternatives live in `explore/`.** Each alternative is a folder, `explore/<name>/`, next
+  to `views/`, and its views stand in for the views with the same file name, so one folder can hold a
+  single screen or every screen of a direction. The shell shows every version of a view side by side,
+  the one in `views/` first, in every snapshot (§8). Nothing in `explore/` ships, so production builds
+  have nothing to strip (#37). Once a direction wins, its files move into `views/` and the folders go;
+  git keeps the rest. Plain files leave the format unchanged and let several agents explore at once,
+  unlike variants inside one file or a branch per alternative (#61).
+- **D32. An alternative can bring its own theme.** A `theme.css` in its folder loads after the
+  project's, so the tokens it sets win and the rest still applies (D12). Promoting the alternative merges
+  those tokens into the project theme, which restyles every screen, so the shell also shows the views it
+  doesn't redesign with its theme, next to their current version (#62).
+- **D33. A view's stage is inferred from its file.** No schema and no snapshots: exploration. A schema
+  or snapshots: states. An event, a link field or the URL input (`route`): contracts. There's nothing to
+  declare or keep current. A finished static page reads as stopped at exploration, which D28 allows, and
+  drafts are told apart by living in `explore/` (D31). The shell shows each view's stage, and checks
+  that only help from a given stage on, such as forgotten bindings (#33), will use it (Q13).
 
 ## 5. Principles
 
@@ -403,7 +420,9 @@ The browser app where humans review and explore the design (D1–D3), and where 
 
 - Renders the Melzin file with the production runtime (P5).
 - A canvas with zoom and panning.
-- Many renders at once: a grid of snapshots × viewport sizes (later also × screens).
+- Many renders at once: a grid of snapshots × viewport sizes (later also × screens). A view with
+  alternatives shows every version side by side, one column each, the one in `views/` first (D31, D32).
+- Shows each view's stage (D33).
 - Routes listed as pages next to the views, each rendered in many snapshots (D26). A route frame shows
   its URL, built from the snapshot's `route` params (D27). Link clicks fire `navigate` (D25), which
   goes to the event log instead of navigating.
@@ -444,7 +463,8 @@ The browser app where humans review and explore the design (D1–D3), and where 
 - Simulated loading, failed, offline and stale states per route frame (P4, D24).
 - Live frames that run against a real source (a dev server, or a local source with seeded data) instead
   of snapshots (D20).
-- Alternatives side by side for exploration (D28, #61), each with its own theme if it needs one (#62).
+- An overview of one alternative across every screen it changes (#61).
+- Alternatives from other git worktrees or branches, compared in the same columns (D31).
 
 ## 9. Approaches to key complications
 
@@ -884,10 +904,13 @@ place the type appears (#59).
     where alternatives live, whether as separate views, as variants in one file that production strips
     like other design-time content (#37), or as git branches; showing them side by side the way a design
     tool's canvas does (§8); a direction that spans several screens; and promoting the chosen one
-    without leaving the rest behind as clutter.
+    without leaving the rest behind as clutter. *Settled in part by D31: alternatives are folders in
+    `explore/`, shown side by side in the shell and promoted by moving their files into `views/`. Still
+    open: an overview of a direction across every screen it changes.*
 62. **Themes while exploring:** comparing design directions often means comparing colors, fonts and
     radii, but a project has one theme (D12). Alternatives need a way to bring their own theme while the
-    screens that ship keep sharing one.
+    screens that ship keep sharing one. *Settled by D32: a `theme.css` in the alternative's folder,
+    layered over the project's.*
 63. **Designs that ship as code** (D29): when a screen is written in regular code, its views and
     snapshots are its spec, and the design-tool problem comes back: the code can drift from the design.
     If the implementation can render the same `data`, rendering every snapshot with it and comparing
@@ -898,7 +921,8 @@ place the type appears (#59).
 The ⚑ items change what the file means, so getting one wrong means migrating every file later. The rest
 can be added without breaking anything. Settle the ⚑ items on paper first; put off animations,
 translation, server rendering, form polish and theming. Routing (D20–D27, §7) is built (POC.md §15);
-shared frames across routes (#60) wait.
+shared frames across routes (#60) wait. Design in stages is built too: alternatives in `explore/` side
+by side in the shell, and each view's stage (D28, D31–D33, POC.md §16).
 
 **Next on paper:** the language inside `m-` attributes. It's ⚑ and gates the first prototype. D29 bounds
 it: a need that would take programming gets code (P7), not a bigger language. To settle:
@@ -964,12 +988,7 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   `"pizza": { "$snapshot": "option-row#landslide winner" }`, instead of repeating its data. It keeps
   child states in sync and lets generated states compose (P8), but adds a reference mechanism to
   snapshots (#34). Lean: yes.
-- **Q13. How does a view show its stage?** It could be inferred from the file (no schema: exploration;
-  bindings and snapshots: states; events, links and routes: contracts), declared in it, or chosen per
-  check. It matters for checks that help at one stage and are noise at another, such as flagging text
-  that looks like data (#33) in a static draft. Inferring needs no ceremony but can't tell a draft from
-  a finished static page; a `<meta>` tag in `<head>` (P9) is explicit and travels with the file. No lean
-  yet (D28).
+- **Q13. How does a view show its stage?** *Settled by D33: inferred from what the file has.*
 - **Q14. How does a snapshot override its base?** Lean: JSON Merge Patch (RFC 7396), a known pattern
   (P9). Objects merge field by field, `null` removes a field, and lists and plain values replace whole.
   Melzin's types have no `null` so far, so that's how a snapshot makes an optional field missing:
@@ -1090,7 +1109,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Type registry:** the project-wide set of named types, one per view plus their `$defs`, that schemas
   refer to with `$ref` (D17).
 - **Stage:** exploration, states or contracts, the three passes a design goes through (D28). Each is a
-  valid place to stop.
+  valid place to stop. Inferred from the file (D33).
+- **Alternative:** a design direction in a folder of `explore/`, whose views stand in for the views with
+  the same file name, with its own theme if it needs one (D31, D32).
 
 ## Changelog
 
@@ -1126,3 +1147,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-17: D30 (snapshots extend other snapshots) and Q14 on its form; planned in POC.md §11.
 - 2026-10-17: §13 leads with the design that never goes stale and adds plain files on disk; the README's
   Why section follows.
+- 2026-10-17: D31–D33 (alternatives as folders in `explore/`, each with its own theme if it needs one,
+  and a view's stage inferred from its file), built in the shell with several device sizes at once
+  (POC.md §16). Settles Q13 and #62, and #61 in part.

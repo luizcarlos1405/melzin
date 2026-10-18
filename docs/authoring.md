@@ -1,8 +1,9 @@
 # Writing Melzin views
 
 This guide is everything you need to write a Melzin view: the file format, the directives, the schema
-and snapshots, the rules the checker enforces, how to check and preview your work, and how to set up a
-project that uses the view (§11). It describes what is built so far (see [POC.md](../POC.md)).
+and snapshots, the rules the checker enforces, how to check and preview your work, how to set up a
+project that uses the view (§11), and how to design a screen in stages, comparing directions first
+(§13). It describes what is built so far (see [POC.md](../POC.md)).
 References such as P4 or D14 point to [SPEC.md](../SPEC.md); you don't need to read it.
 
 ## 1. What a view is
@@ -61,7 +62,8 @@ Skeleton:
 ```
 
 A project keeps its views directly in `views/` (no subfolders) and its theme in `theme.css` at the
-project root. Commands run from the project root. §11 shows how to set up a new project.
+project root. Design alternatives wait in `explore/` while you compare them (§13). Commands run from the
+project root. §11 shows how to set up a new project.
 
 ## 2. Head and body
 
@@ -369,7 +371,7 @@ Run commands from the project root. In a project that depends on Melzin, use `bu
 ### Check
 
 ```
-bunx melzin check                          # every view in views/, and routes.json
+bunx melzin check                          # every view in views/ and explore/, and routes.json
 bunx melzin check views/order.mel.html  # some files
 ```
 
@@ -416,18 +418,21 @@ bunx melzin shell            # http://127.0.0.1:4321
 bunx melzin shell --port 4400 --views views --theme theme.css
 ```
 
-The shell lists the routes of `routes.json` as pages, and every view. It renders one frame per snapshot
-through the production runtime and CSS,
-and shows for each frame the data as editable JSON, an event log and the runtime's warnings. Clicking
-a link in a frame doesn't follow it; it shows up in the event log. Refresh the page after editing a
-file; edits in the shell are temporary. A red banner lists problems in the schema and snapshots
-blocks; directive problems only show as warnings under each frame, so `melzin check` remains the full
-list.
+The shell lists the routes of `routes.json` as pages, and every view. It renders one card per snapshot
+through the production runtime and CSS, with a frame per device size, and shows for each card the data
+as editable JSON (not for a static view), an event log and the runtime's warnings. A view with
+alternatives in `explore/` shows every version side by side, one column each (§13). The top bar shows a
+view's stage. Clicking a link in a frame doesn't follow it; it shows up in the event log. Refresh the
+page after editing a file; edits in the shell are temporary. A red banner lists problems in the schema
+and snapshots blocks; directive problems only show as warnings under each frame, so `melzin check`
+remains the full list.
 
 The shell's pages are built in the browser, so `curl` gets empty pages: use a browser, headless or
-not (for example `chromium --headless=new --screenshot=out.png --window-size=375,812 <url>`). Two
+not (for example `chromium --headless=new --screenshot=out.png --window-size=375,812 <url>`). Some
 plain URLs help without one: `/__melzin/api/views` returns the view list as JSON
-(`[{ "name", "file", "url", "title" }]`), and `/__melzin/styles.css` is the compiled CSS.
+(`[{ "name", "file", "url", "title", "description", "stage" }]`), `/__melzin/api/explore` the
+alternatives (`{ "alternatives": [{ "name", "theme", "views" }], "problems" }`), and
+`/__melzin/styles.css` is the compiled CSS.
 
 The URL holds the state, so you can open a precise render:
 
@@ -435,15 +440,17 @@ The URL holds the state, so you can open a precise render:
 |---|---|
 | `view` | the file name without `.mel.html`, `order` (or the whole file name). Not the `<title>` |
 | `route` | a route's name, `profile`: its view as that page, with a URL bar per frame (§12). Wins over `view` |
-| `device` | `WxH` with each side from 120 to 4096, such as `375x812`, or `phone`, `tablet`, `desktop` (375×812, 768×1024, 1280×800). Other values are ignored, with a notice |
+| `device` | `WxH` with each side from 120 to 4096, such as `375x812`, or `phone`, `tablet`, `desktop` (375×812, 768×1024, 1280×800). Several, separated by commas (`phone,desktop`), show every render at each size. Other values are ignored, with a notice |
 | `zoom` | 0.25 to 2 |
 | `snapshot` | show only this snapshot, URL-encoded: `a%20few%20clicks` |
+| `alt` | for a view with alternatives, show only one version: an alternative's name, or `current` for the one in `views/` (§13) |
 | `chrome` | `0` hides the top bar, card headers and panels |
 
 For a screenshot of one state, open
 `http://127.0.0.1:4321/?view=order&snapshot=typical&device=375x812&zoom=1&chrome=0`, wait until
 `<body>` has a `data-melzin-ready` attribute, and capture the frame, which sits at the top-left corner
-at exactly the device size. Alternatively, size the browser window to the device and open the frame
+at exactly the device size. With several devices or versions, the first frame sits there and the others
+follow to the right, 16 pixels apart. Alternatively, size the browser window to the device and open the frame
 alone: `/frame?view=order&snapshot=typical` (the name or the file name), which sets
 `data-melzin-ready` on `<html>`.
 
@@ -490,6 +497,9 @@ and desktop sizes, fix what looks wrong, repeat.
 | `<a href="/u/ana">` built for one person | a link field the source fills: `m-bind:href="author.url"` |
 | `m-text="route.handle"` | `m-text="route.params.handle"` (or `route.query.<name>`, `route.name`) |
 | a data field named `route` | another name: `route` is the URL |
+| `explore/plans.mel.html`, `explore/current/plans.mel.html` | a folder per alternative: `explore/calm/plans.mel.html` (§13) |
+| a schema and bindings in a first draft | static HTML with the sample content inline; bind it once a direction wins (§13) |
+| the losing alternatives left in `explore/` | move the winner into `views/` and delete the rest (§13) |
 
 ## 10. Worked example
 
@@ -827,3 +837,75 @@ await startApp<Routes>(document.querySelector('#app')!, {
 
 `examples/profile/` is a complete app: two routes, a remote and a local source, and tests that run the
 whole app without a server.
+
+## 13. Designing in stages
+
+A screen goes through three stages, and each one grows the same file. Each is a valid place to stop:
+the checker never asks for something a later stage decides.
+
+| Stage | What the file has | A good place to stop when |
+|---|---|---|
+| Exploration | static HTML and Tailwind, with the sample content inline; no schema | the page is static, or someone will build it in code and only needs the design |
+| States | bindings, the schema's `data` and snapshots, hostile ones included | the screen ships as hand-written code: the view and its snapshots are its spec |
+| Contracts | events, link fields, routes and the source behind them | it ships as is |
+
+The shell shows each view's stage next to its file. It's read from the file (a schema or snapshots
+mean states; an event, a link field or `route.*` mean contracts), so there's nothing to declare.
+
+### Exploration
+
+Write the screen as plain HTML with Tailwind classes, and put the sample content inline: real-looking
+names, numbers and text. Don't add a schema or bindings yet.
+
+To compare directions, give each one a folder in `explore/`, at the project root:
+
+```
+explore/
+  calm/
+    plans.mel.html
+  bold/
+    plans.mel.html
+    theme.css
+```
+
+- The folder's name is the alternative's. Each view in it stands in for the view with the same file
+  name, whether `views/` has it yet or not, so a folder can hold one screen or every screen of a
+  direction. Name the folder after the direction; `current` is taken (it's the shell's name for the
+  version in `views/`).
+- Say what each alternative tries in `<meta name="description" content="...">`. The shell shows it
+  above the alternative's column.
+- A `theme.css` in the folder changes tokens for that alternative only, such as `--color-brand-500` or
+  `--radius-2xl`, under the rules of §6. It loads after the project's theme, so the tokens it leaves out
+  keep their values. The shell also shows the project's other views with it, since promoting the
+  alternative would restyle them too.
+- `melzin check` checks alternatives like any view. Nothing in `explore/` ships.
+- `?view=plans&device=phone,desktop` shows every alternative side by side at both sizes, and `&alt=bold`
+  shows one of them, for screenshots.
+
+When a direction wins, promote it: move its files into `views/`, as in
+`git mv explore/bold/plans.mel.html views/`, copy the tokens from its `theme.css` into the project's,
+and delete the exploration's folders. Git keeps the alternatives that lost; don't leave them in
+`explore/`.
+
+To explore a screen that already ships, copy `views/<name>.mel.html` into `explore/<alternative>/` and
+change the copy. The shell shows it next to the current version, snapshot by snapshot; promoting it
+moves it back over the original.
+
+### States
+
+Make the parts that come from data dynamic, one at a time:
+
+1. Add the field to the schema (§4) and the binding to the element (§3).
+2. Move the element's inline content into the first snapshot: `<h1>Ada Lovelace</h1>` becomes
+   `<h1 m-text="user.name"></h1>`, and `"Ada Lovelace"` goes into the snapshot's data. The first
+   snapshot should look exactly like the static design.
+3. Add the snapshots that break it (§5): long text, zero, huge numbers, every optional field missing and
+   every branch of every condition.
+
+Text that's the same for every user stays inline.
+
+### Contracts
+
+Declare the events the view sends (§4) and send them from its buttons (§3), turn links to other pages
+into link fields (§12), add the view's route to `routes.json`, generate the types (§8), and write the
+host or source that loads the data and handles the events (§10, §12).

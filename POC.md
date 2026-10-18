@@ -5,8 +5,9 @@
 > working button.
 
 **Status:** built, and M3's AI authoring trial passed (§10). Since then, conditionals and a second
-example app have been added (§14), and routing: the route table, links, the URL input, the standalone
-host and pages in the shell (§15). The code is a Bun workspace: the Melzin packages in
+example app have been added (§14), routing: the route table, links, the URL input, the standalone
+host and pages in the shell (§15), and design in stages: alternatives in `explore/` side by side in the
+shell, several device sizes at once and each view's stage (§16). The code is a Bun workspace: the Melzin packages in
 `packages/melzin` and `packages/cli` and example apps in `examples/` (§7, §14). It follows
 [SPEC.md](SPEC.md); references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
@@ -339,6 +340,7 @@ packages/cli/           `@melzin/cli`, the CLI package (Bun)
   src/                  the melzin CLI and tools.ts
   shell/                preview shell
   views/                example views and their generated *.types.ts
+  explore/              a demo exploration: two directions for a plans page (§16)
   theme.css             project-wide Tailwind theme for the example views (D12)
   examples/counter/     production page
   tests/
@@ -404,7 +406,7 @@ reuses the binding table, the shared parser and the host API.
 | Components: views inside views, schemas composed with `$ref` | D16–D19, #12, §9.5 |
 | A custom element that dispatches DOM events | D7, §7 |
 | The standalone host: *built, with the route table, links and pages in the shell (§15)* | D11, D20–D27, #31, #51 |
-| Exploration: design alternatives side by side in the shell | D28, #61, #62 |
+| Exploration: design alternatives side by side in the shell: *built, with several device sizes at once (§16)* | D28, D31–D33, #61, #62 |
 | Events linked to snapshots in the shell | P6, #43 |
 | Generated hostile states and a screenshot CLI | P8, §8 |
 | Stripping snapshots from production builds | D8 |
@@ -628,3 +630,101 @@ Made for this step; SPEC's open items (§7) can still revisit them.
   transitions are still open.
 - **`offline` waits** for the generated service worker; the checker says so. So do server rendering
   and the static source's prerendering.
+
+## 16. After the POC: design stages
+
+Built on 2026-10-17, from SPEC D28 and D31–D33. The later stages already worked as places to stop: a
+static view, or one with a schema and snapshots but no events, renders and checks clean, and nothing
+asks for what a later stage decides. This step gives the first stage a home: alternatives sit side by
+side in the shell, each view shows its stage, and every render can show at several device sizes at once.
+As before, it grows the existing pieces: the core gained the stage rule, the project gained `explore/`,
+the shell server two endpoints, and the shell a second layout.
+
+### Format
+
+```
+views/                  what ships
+  profile.mel.html
+theme.css
+explore/                design alternatives (D31), never shipped
+  compact/
+    profile.mel.html    stands in for views/profile.mel.html
+  warm/
+    theme.css           layered over theme.css (D32)
+    welcome.mel.html    a screen that only exists here so far
+    signup.mel.html
+```
+
+- An alternative is a folder directly inside `explore/`, named after the alternative. Its `*.mel.html`
+  files stand in for the views with the same file name, whether `views/` has them yet or not.
+  `current` can't name one (it's the shell's name for the version in `views/`), and a view file
+  directly in `explore/` belongs to no alternative.
+- A `theme.css` in the folder follows the project theme's rules and loads after it, so the tokens it
+  sets win (D32).
+- `<meta name="description">` says what an alternative tries; the shell shows it above its column.
+- The stage (D33) is `exploration` with no schema block and no snapshots block, `states` with either,
+  and `contracts` once the schema declares an event or a link field, or a directive reads `route.*`.
+  `viewStage()` in the core holds the rule.
+
+### Shell
+
+- A view with alternatives shows as a comparison: a column per version, the one in `views/` first
+  (`current`) and then each alternative by name, and a row per snapshot, in order of first appearance.
+  A version without snapshots shows in a first row, `no data`; a version that lacks a row's snapshot
+  gets an empty cell that says so.
+- Column headers give the version, its file, its stage, a badge for a theme, and its description. In a
+  comparison the panels sit under the frames, closed, so each column is as wide as its frames.
+- An alternative with a theme also shows next to the views it doesn't redesign, marked `theme only`:
+  the file in `views/` with the alternative's CSS.
+- `?alt=<name>` (or `alt=current`) shows one version; so do the Version picker and "Open alone" on a
+  version's header. "Open alone" on a card keeps its version. The view picker counts each view's
+  alternatives and lists the screens that only exist in `explore/` under Exploring.
+- `?device=` takes a list, `phone,desktop` or `375x812,1280x800`: each card shows a frame per size,
+  sharing the card's state editor, URL bar and logs. Events say which frame they came from; warnings come
+  from the first frame, since every frame renders the same data. The device picker offers each preset
+  and two combinations (Phone + Desktop, and all three).
+- A static view has no state editor, and its event log waits for link clicks. The top bar shows a
+  view's stage with its file: `profile-card.mel.html · states · 4 snapshots`.
+- With `chrome=0`, the first frame still sits at the top-left corner at its exact size; the others
+  follow 16 pixels apart.
+- `/__melzin/api/explore` lists the alternatives (their views and whether they bring a theme) and the
+  view files `explore/` can't use. `/explore/<alternative>/<file>` serves an alternative's file like
+  `/views/`, and `/__melzin/styles.css?alt=<name>` is an alternative's CSS. Entries of
+  `/__melzin/api/views` gained `description` and `stage`.
+
+### Checker and CSS
+
+- `melzin check` checks every alternative by default, as the view it stands in for, so the route rules
+  apply to it. A view file directly in `explore/` or in `explore/current/` is an error.
+- `buildCss` takes an `alternative`: its folder is scanned too, and its theme comes after the project's.
+  Production builds (`melzin css`) and servers still read only `views/`.
+- `loadViewFile` also returns the view's description and stage.
+
+### Demo
+
+`packages/cli/explore/` explores a new screen, Plans, in two directions: `calm` (centered cards, the
+project theme) and `bold` (dark, plans as rows, its own theme with an indigo brand and tighter corners),
+so the shell also shows the other demo views with `bold`'s theme. Checked by hand in a real browser: the
+comparison at phone and desktop sizes, the theme-only columns, the version and device pickers, focused
+and broken URLs, `chrome=0` positions, events from each frame of a card, and a route page of the profile
+example compared with an alternative.
+
+### Decisions
+
+Made for this step; SPEC #61 keeps what's still open.
+
+- **Folders, not variants in one file or branches** (D31). Alternatives stay plain view files, so the
+  format doesn't change, several agents can explore at once, and a direction can span screens and bring
+  a theme. A comparison across git worktrees could reuse the same columns later.
+- **An alternative replaces whole files.** Nothing merges its markup with the current file.
+- **A theme reaches every screen** (D32). Promoting an alternative merges its tokens into the project
+  theme, which restyles screens it never touched, so the shell shows those too.
+- **`current` is reserved** for the version in `views/` instead of adding a URL parameter for it; a
+  folder with that name is an error.
+- **The stage is inferred** (D33), so it's never out of date. No check depends on it yet; forgotten
+  bindings (#33) would be the first.
+- **Promoting is a file move,** not a command: the authoring guide says how (move the files, merge the
+  theme, delete the folders), and git keeps the alternatives that lost.
+- **Device sizes share one card,** with one state editor, so an edit shows at every size at once.
+- **No CSS cache.** Each frame builds its CSS on request (about 14 ms; thirty at once take about 0.3 s),
+  so nothing can go stale.

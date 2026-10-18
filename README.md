@@ -91,11 +91,13 @@ The view never changes its own data. It emits `increment`, the host decides what
 ## How it works
 
 1. **Write** a `*.mel.html` view. [docs/authoring.md](docs/authoring.md) is the complete guide, written
-   so an AI can follow it with no other context.
+   so an AI can follow it with no other context. Start with static HTML, and compare directions as
+   alternatives in `explore/` before binding anything.
 2. **Check** it with `melzin check` until it's clean.
 3. **Preview** it with `melzin shell`: every snapshot in its own frame at phone, tablet or desktop size,
-   with zoom, a live state editor and an event log per frame. URL parameters open a single state for
-   screenshots, so an AI can review its own work.
+   or several at once, with zoom, a live state editor and an event log per frame. Alternatives show side
+   by side with the current version, each with its own theme if it brings one. URL parameters open a
+   single state for screenshots, so an AI can review its own work.
 4. **Generate types** with `melzin types` and wire the host or backend to them.
 5. **Ship** the same file. In the browser, `mount` parses the view, strips anything unsafe, binds the `m-`
    directives once, and from then on touches only what changed: the text whose value changed and the
@@ -157,6 +159,7 @@ see their usage.
 packages/melzin/      `melzin`: the runtime (mount, update, destroy, startApp) and the shared core
 packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, preview shell
   views/              example views (hello, profile card, counter)
+  explore/            a demo exploration: two directions for a plans page
   examples/counter/   a production page that mounts the counter
 examples/             apps that use Melzin as a package; each folder is its own workspace
   poll/               a poll with a small Bun backend, contract tests and API tests
@@ -191,6 +194,9 @@ Since then:
   a `route` input, and `startApp`, a standalone host with pluggable sources, one `navigate` hook and
   per-route loading policies. The checker, the generated types and the shell know the routes, and the
   profile example is now a routed app
+- [x] Design in stages: alternatives in `explore/` side by side in the shell, each with its own theme if
+  it needs one, every render at several device sizes at once, and each view's stage (exploration,
+  states or contracts) read from its file
 
 ## Roadmap
 
@@ -237,7 +243,7 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 - [ ] Production builds that strip snapshots
 
 **Tooling for AI authors.**
-- [ ] Exploration: design alternatives side by side in the shell, to pick a direction before anything is
+- [x] Exploration: design alternatives side by side in the shell, to pick a direction before anything is
   bound
 - [ ] Generated hostile states and a screenshot command
 - [ ] Events linked to snapshots in the shell, for prototyping flows
