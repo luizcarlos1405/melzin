@@ -2,7 +2,8 @@
 import type { Href } from 'melzin'
 
 export type Data = {
-  first: {
+  /** Everyone in the demo, in the order to show */
+  members: {
     name: string
     /** Without the @ */
     handle: string
@@ -12,28 +13,6 @@ export type Data = {
     followers: string
     /** Their profile, as the same viewer */
     url: Href<'profile'>
-  }
-  second: {
-    name: string
-    /** Without the @ */
-    handle: string
-    /** One or two letters for the avatar */
-    initials: string
-    /** Like "2,481 followers" or "1 follower" */
-    followers: string
-    /** Their profile, as the same viewer */
-    url: Href<'profile'>
-  }
-  third: {
-    name: string
-    /** Without the @ */
-    handle: string
-    /** One or two letters for the avatar */
-    initials: string
-    /** Like "2,481 followers" or "1 follower" */
-    followers: string
-    /** Their profile, as the same viewer */
-    url: Href<'profile'>
-  }
+  }[]
 }
 export type Handlers = Record<string, never>

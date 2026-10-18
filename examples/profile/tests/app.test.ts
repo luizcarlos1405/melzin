@@ -86,6 +86,26 @@ describe('the app on the local source', () => {
     expect(warnings).toEqual([])
   })
 
+  test('the members page lists everyone in the network, by handle', async () => {
+    network.people.set('abel', { name: 'Abel Costa', verified: false, joined: '2026-10', posts: 0, followersElsewhere: 0, followingElsewhere: 0 })
+    await start('/')
+    expect(text()).toContain('Abel Costa @abel 0 followers AS Ana Souza @ana')
+    expect(root.querySelectorAll('li')).toHaveLength(4)
+    clickLink('Abel Costa')
+    await settle()
+    expect(location.pathname).toBe('/u/abel')
+    expect(warnings).toEqual([])
+  })
+
+  test('with nobody in the network, the members page shows its empty state', async () => {
+    network.people.clear()
+    network.follows.clear()
+    await start('/')
+    expect(text()).toContain('No members yet')
+    expect(root.querySelector('ul')).toBeNull()
+    expect(warnings).toEqual([])
+  })
+
   test('following updates the page and the network', async () => {
     await start('/u/bruno?as=ana')
     expect(text()).toContain('Follow back')

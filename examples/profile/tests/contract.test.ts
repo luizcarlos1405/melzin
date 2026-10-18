@@ -86,13 +86,36 @@ describe('profile contract', () => {
   })
 })
 
+/** The demo with nobody in it, for the members page's empty state. */
+function emptyNetwork(): Network {
+  return { people: new Map(), follows: new Set() }
+}
+
+/** Only `handle` from the demo, with no follows inside it. */
+function networkOf(handle: string): Network {
+  const network = demoNetwork()
+  return { people: new Map([[handle, network.people.get(handle)!]]), follows: new Set() }
+}
+
 describe('members contract', () => {
   test('the page, seen by nobody and by everyone, matches the schema', async () => {
     const { schema } = await loadView(MEMBERS_VIEW)
-    const network = demoNetwork()
+    const network = longNetwork()
     for (const viewer of [null, ...network.people.keys()]) {
       expect({ viewer, issues: validateData(schema, toMembersModel(network, viewer)) }).toEqual({ viewer, issues: [] })
     }
+    expect(validateData(schema, toMembersModel(emptyNetwork(), null))).toEqual([])
+  })
+
+  test('the contract catches a drifted adapter', async () => {
+    const { schema } = await loadView(MEMBERS_VIEW)
+    const [ana, bruno] = toMembersModel(demoNetwork(), null).members
+    // A row without its key, the same key twice, a null row and a number where the view shows text.
+    const drifted = { members: [ana, { ...bruno, handle: undefined }, { ...bruno, handle: 'ana', followers: 2481 }, null] }
+    const issues = validateData(schema, drifted)
+    expect(issues.map((issue) => issue.path)).toEqual(['members[1].handle', 'members[2].followers', 'members[2].handle', 'members[3]'])
+    expect(issues).toContainEqual({ path: 'members[2].handle', message: 'duplicate key "ana": members[0] has it too; keys must be unique in a list' })
+    expect(validateData(schema, { members: { ana } }).map((issue) => issue.path)).toEqual(['members'])
   })
 
   test('the snapshots are states the adapter can produce', async () => {
@@ -106,6 +129,8 @@ describe('members contract', () => {
       'nobody signed in': [demoNetwork(), null],
       'browsing as Ana': [demoNetwork(), 'ana'],
       'very long names': [long, LONG_HANDLE],
+      'one member': [networkOf('ana'), 'ana'],
+      'no members yet': [emptyNetwork(), null],
     }
     expect(snapshots.map((snapshot) => snapshot.name)).toEqual(Object.keys(states))
     for (const { name, data, route } of snapshots) {
@@ -117,12 +142,25 @@ describe('members contract', () => {
 })
 
 describe('toMembersModel', () => {
-  test('the first three people by handle, with links that keep who is looking', () => {
-    const page = toMembersModel(demoNetwork(), 'bruno')
-    expect(page.first).toEqual({ name: 'Ana Souza', handle: 'ana', initials: 'AS', followers: '18.2K followers', url: '/u/ana?as=bruno' as never })
-    expect([page.second.handle, page.third.handle]).toEqual(['bruno', 'carla'])
-    expect(page.third.followers).toBe('0 followers')
-    expect(toMembersModel(demoNetwork(), null).second.url).toBe('/u/bruno' as never)
+  test('everyone by handle, with links that keep who is looking', () => {
+    const { members } = toMembersModel(demoNetwork(), 'bruno')
+    expect(members[0]).toEqual({ name: 'Ana Souza', handle: 'ana', initials: 'AS', followers: '18.2K followers', url: '/u/ana?as=bruno' as never })
+    expect(members.map((member) => member.handle)).toEqual(['ana', 'bruno', 'carla'])
+    expect(members[2]?.followers).toBe('0 followers')
+    expect(toMembersModel(demoNetwork(), null).members[1]?.url).toBe('/u/bruno' as never)
+  })
+
+  test('someone new shows up in handle order, whenever they joined', () => {
+    const network = demoNetwork()
+    network.people.set('abel', { name: 'Abel Costa', verified: false, joined: '2026-10', posts: 0, followersElsewhere: 0, followingElsewhere: 0 })
+    network.follows.add('abel>carla')
+    const { members } = toMembersModel(network, null)
+    expect(members.map((member) => member.handle)).toEqual(['abel', 'ana', 'bruno', 'carla'])
+    expect(members[3]?.followers).toBe('1 follower')
+  })
+
+  test('nobody in the network: an empty list, which the view shows as its empty state', () => {
+    expect(toMembersModel(emptyNetwork(), null)).toEqual({ members: [] })
   })
 })
 

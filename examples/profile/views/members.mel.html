@@ -9,41 +9,24 @@
       "data": {
         "type": "object",
         "properties": {
-          "first": {
-            "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "handle": { "type": "string", "description": "Without the @" },
-              "initials": { "type": "string", "description": "One or two letters for the avatar" },
-              "followers": { "type": "string", "description": "Like \"2,481 followers\" or \"1 follower\"" },
-              "url": { "type": "string", "route": "profile", "description": "Their profile, as the same viewer" }
-            },
-            "required": ["name", "handle", "initials", "followers", "url"]
-          },
-          "second": {
-            "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "handle": { "type": "string", "description": "Without the @" },
-              "initials": { "type": "string", "description": "One or two letters for the avatar" },
-              "followers": { "type": "string", "description": "Like \"2,481 followers\" or \"1 follower\"" },
-              "url": { "type": "string", "route": "profile", "description": "Their profile, as the same viewer" }
-            },
-            "required": ["name", "handle", "initials", "followers", "url"]
-          },
-          "third": {
-            "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "handle": { "type": "string", "description": "Without the @" },
-              "initials": { "type": "string", "description": "One or two letters for the avatar" },
-              "followers": { "type": "string", "description": "Like \"2,481 followers\" or \"1 follower\"" },
-              "url": { "type": "string", "route": "profile", "description": "Their profile, as the same viewer" }
-            },
-            "required": ["name", "handle", "initials", "followers", "url"]
+          "members": {
+            "type": "array",
+            "key": "handle",
+            "description": "Everyone in the demo, in the order to show",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "handle": { "type": "string", "description": "Without the @" },
+                "initials": { "type": "string", "description": "One or two letters for the avatar" },
+                "followers": { "type": "string", "description": "Like \"2,481 followers\" or \"1 follower\"" },
+                "url": { "type": "string", "route": "profile", "description": "Their profile, as the same viewer" }
+              },
+              "required": ["name", "handle", "initials", "followers", "url"]
+            }
           }
         },
-        "required": ["first", "second", "third"]
+        "required": ["members"]
       }
     }
   </script>
@@ -51,27 +34,45 @@
     {
       "nobody signed in": {
         "data": {
-          "first": { "name": "Ana Souza", "handle": "ana", "initials": "AS", "followers": "18.2K followers", "url": "/u/ana" },
-          "second": { "name": "Bruno Lima", "handle": "bruno", "initials": "BL", "followers": "2,481 followers", "url": "/u/bruno" },
-          "third": { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "followers": "0 followers", "url": "/u/carla" }
+          "members": [
+            { "name": "Ana Souza", "handle": "ana", "initials": "AS", "followers": "18.2K followers", "url": "/u/ana" },
+            { "name": "Bruno Lima", "handle": "bruno", "initials": "BL", "followers": "2,481 followers", "url": "/u/bruno" },
+            { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "followers": "0 followers", "url": "/u/carla" }
+          ]
         }
       },
       "browsing as Ana": {
         "extends": "nobody signed in",
         "data": {
-          "first": { "url": "/u/ana?as=ana" },
-          "second": { "url": "/u/bruno?as=ana" },
-          "third": { "url": "/u/carla?as=ana" }
+          "members": [
+            { "name": "Ana Souza", "handle": "ana", "initials": "AS", "followers": "18.2K followers", "url": "/u/ana?as=ana" },
+            { "name": "Bruno Lima", "handle": "bruno", "initials": "BL", "followers": "2,481 followers", "url": "/u/bruno?as=ana" },
+            { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "followers": "0 followers", "url": "/u/carla?as=ana" }
+          ]
         },
         "route": { "query": { "as": "ana" } }
       },
       "very long names": {
         "data": {
-          "first": { "name": "Bruno Lima", "handle": "bruno", "initials": "BL", "followers": "1 follower", "url": "/u/bruno?as=maria_aparecida_dos_santos_albuquerque_vasconcelos" },
-          "second": { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "followers": "0 followers", "url": "/u/carla?as=maria_aparecida_dos_santos_albuquerque_vasconcelos" },
-          "third": { "name": "Maria Aparecida dos Santos Albuquerque de Oliveira e Vasconcelos Bragança", "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos", "initials": "MB", "followers": "98.8M followers", "url": "/u/maria_aparecida_dos_santos_albuquerque_vasconcelos?as=maria_aparecida_dos_santos_albuquerque_vasconcelos" }
+          "members": [
+            { "name": "Bruno Lima", "handle": "bruno", "initials": "BL", "followers": "1 follower", "url": "/u/bruno?as=maria_aparecida_dos_santos_albuquerque_vasconcelos" },
+            { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "followers": "0 followers", "url": "/u/carla?as=maria_aparecida_dos_santos_albuquerque_vasconcelos" },
+            { "name": "Maria Aparecida dos Santos Albuquerque de Oliveira e Vasconcelos Bragança", "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos", "initials": "MB", "followers": "98.8M followers", "url": "/u/maria_aparecida_dos_santos_albuquerque_vasconcelos?as=maria_aparecida_dos_santos_albuquerque_vasconcelos" }
+          ]
         },
         "route": { "query": { "as": "maria_aparecida_dos_santos_albuquerque_vasconcelos" } }
+      },
+      "one member": {
+        "extends": "browsing as Ana",
+        "data": {
+          "members": [
+            { "name": "Ana Souza", "handle": "ana", "initials": "AS", "followers": "18.2K followers", "url": "/u/ana?as=ana" }
+          ]
+        }
+      },
+      "no members yet": {
+        "extends": "nobody signed in",
+        "data": { "members": [] }
       }
     }
   </script>
@@ -95,38 +96,30 @@
         </nav>
       </header>
 
-      <ul class="mt-6 grid gap-3">
-        <li>
-          <a class="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-900/5 transition hover:shadow-md hover:ring-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" m-bind:href="first.url">
-            <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-800" aria-hidden="true" m-text="first.initials"></span>
+      <!-- One card per member, in the order the host sends; the schema keys them by handle. -->
+      <ul class="mt-6 grid grid-cols-1 gap-3" m-if="members.length">
+        <li m-for="member in members">
+          <a class="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-900/5 transition hover:shadow-md hover:ring-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" m-bind:href="member.url">
+            <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-800" aria-hidden="true" m-text="member.initials"></span>
             <span class="min-w-0 flex-1">
-              <span class="block truncate font-semibold text-stone-900" m-text="first.name"></span>
-              <span class="block truncate text-sm text-stone-500">@<span m-text="first.handle"></span></span>
+              <span class="block truncate font-semibold text-stone-900" m-text="member.name"></span>
+              <span class="block truncate text-sm text-stone-500">@<span m-text="member.handle"></span></span>
             </span>
-            <span class="shrink-0 text-sm tabular-nums text-stone-500" m-text="first.followers"></span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-900/5 transition hover:shadow-md hover:ring-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" m-bind:href="second.url">
-            <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-800" aria-hidden="true" m-text="second.initials"></span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-semibold text-stone-900" m-text="second.name"></span>
-              <span class="block truncate text-sm text-stone-500">@<span m-text="second.handle"></span></span>
-            </span>
-            <span class="shrink-0 text-sm tabular-nums text-stone-500" m-text="second.followers"></span>
-          </a>
-        </li>
-        <li>
-          <a class="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-900/5 transition hover:shadow-md hover:ring-brand-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" m-bind:href="third.url">
-            <span class="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-100 text-lg font-semibold text-brand-800" aria-hidden="true" m-text="third.initials"></span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-semibold text-stone-900" m-text="third.name"></span>
-              <span class="block truncate text-sm text-stone-500">@<span m-text="third.handle"></span></span>
-            </span>
-            <span class="shrink-0 text-sm tabular-nums text-stone-500" m-text="third.followers"></span>
+            <span class="shrink-0 text-sm tabular-nums text-stone-500" m-text="member.followers"></span>
           </a>
         </li>
       </ul>
+      <div class="mt-6 flex flex-col items-center rounded-2xl border border-dashed border-stone-300 px-6 py-12 text-center" m-else>
+        <span class="flex size-12 items-center justify-center rounded-full bg-brand-100 text-brand-700" aria-hidden="true">
+          <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="8" r="3.5"></circle>
+            <path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"></path>
+            <path d="M15.5 4.7a3.5 3.5 0 0 1 0 6.6M18 14.4c2.1.8 3.5 2.8 3.5 5.6"></path>
+          </svg>
+        </span>
+        <p class="mt-4 font-semibold text-stone-900">No members yet</p>
+        <p class="mt-1 max-w-xs text-sm text-pretty text-stone-500">When people join, they show up here, each with a link to their profile.</p>
+      </div>
     </div>
   </main>
 </body>

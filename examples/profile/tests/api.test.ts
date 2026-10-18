@@ -97,10 +97,14 @@ describe('profile API', () => {
     expect((await profile('/api/profiles/bruno?as=ana')).viewer?.following).toBe(false)
   })
 
-  test('GET /api/members is the members page as someone sees it', async () => {
+  test('GET /api/members is the members page as someone sees it: everyone, by handle', async () => {
     const response = await fetch(`${base}/api/members?as=ana`)
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual(toMembersModel(demoNetwork(), 'ana') as never)
+    const body = await response.json()
+    expect(body).toEqual(toMembersModel(demoNetwork(), 'ana') as never)
+    expect((body as { members: { handle: string }[] }).members.map((member) => member.handle)).toEqual(['ana', 'bruno', 'carla'])
+    const { schema } = await loadViewFile(join(import.meta.dir, '..', 'views', 'members.mel.html'))
+    expect(validateData(schema, body)).toEqual([])
     expect(await (await fetch(`${base}/api/members`)).json()).toEqual(toMembersModel(demoNetwork(), null) as never)
     expect((await fetch(`${base}/api/members?as=nobody`)).status).toBe(400)
   })

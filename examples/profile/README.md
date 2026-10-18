@@ -3,9 +3,9 @@
 A small app with two pages: the members (`/`) and a member's profile with a follow button
 (`/u/:handle`). Who you are and who you're looking at decide what the profile shows. It's a separate app
 that uses Melzin as a workspace package (`"melzin": "workspace:*"`), with a tiny Bun backend that owns
-the people and who follows whom. It's where conditionals (`m-if`, `m-else-if`, `m-else`, `m-show`) and
-routing (routes.json, links, the standalone host) get a real screen, and the seed of the profile page
-that SPEC §11 plans as the first real prototype.
+the people and who follows whom. It's where conditionals (`m-if`, `m-else-if`, `m-else`, `m-show`),
+routing (routes.json, links, the standalone host) and lists (`m-for`) get a real screen, and the seed
+of the profile page that SPEC §11 plans as the first real prototype.
 
 ## Run it
 
@@ -57,6 +57,15 @@ tests/                    contract, API, view and app tests
   runs the same adapter (`model.ts`) in the browser, as an offline-first app would on top of IndexedDB.
   `client.ts` uses the remote one; `tests/app.test.ts` runs the whole app on the local one, with no
   server.
+- **A list keyed by the schema (SPEC D34).** The members page is one card repeated with
+  `m-for="member in members"`. `members` is a list in the schema, `"type": "array"` with
+  `"key": "handle"`, so an update keeps each member's card, and moves it when someone new sorts before
+  them; the markup never names the key. The adapter sends everyone, sorted by handle, so the order is
+  stable. A required list is never missing, only empty: the `<ul>` shows with `m-if="members.length"`,
+  and an `m-else` after it is the "No members yet" design. `melzin check` asks for snapshots of both
+  list states, so "one member" and "no members yet" sit next to the full page. Lists replace whole
+  when a snapshot extends another (D36): "browsing as Ana" restates all three cards to change their
+  links, and "one member" extends it with a one-item list.
 - **Navigation (D25).** Links between the pages switch screens without reloading, back and forward
   work, and "Sign in to follow" is a handler that navigates to the same profile as Ana. Hovering a
   card loads that profile ahead of the click (D24).
@@ -77,12 +86,14 @@ tests/                    contract, API, view and app tests
   `98.8M` instead of `98,765,432`.
 - **The adapter (P3).** `toViewModel` in `model.ts` turns stored people and follows into exactly the
   profile view's data: initials, a `Joined March 2021` label, counts formatted to fit, the viewer's
-  relationship to the profile and the link back. `toMembersModel` does the same for the members page.
+  relationship to the profile and the link back. `toMembersModel` does the same for the members page:
+  everyone, by handle, each with their follower count and a link that keeps who is looking.
   `tests/contract.test.ts` checks their output against the schemas for everyone seen by everyone, and
   that each snapshot is exactly what the adapter sends for some state, at the URL it sets.
 - **The view under test.** `tests/view.test.ts` mounts the real view file with the real runtime in
   happy-dom, fed by the adapter, and checks that each backend state shows the right controls and that
-  they send the right events.
+  they send the right events. For the members page it checks that an update keeps each card's element
+  when members join or leave, and that the empty state takes the list's place.
 - **Events out, typed (D14, D15).** The source's handlers are typed by the generated `Routes`, so a
   missing or misspelled handler fails `tsc`. `follow` and `unfollow` call the API, which answers with
   the profile as the viewer now sees it, and the handler passes that to `page.update`.
@@ -91,7 +102,7 @@ tests/                    contract, API, view and app tests
 
 | Route | Response |
 |---|---|
-| `GET /api/members` | the members page as nobody sees it; `?as=<viewer>` as that viewer sees it (400 for an unknown viewer) |
+| `GET /api/members` | the members page as nobody sees it, `{ "members": [...] }` with everyone by handle; `?as=<viewer>` as that viewer sees it (400 for an unknown viewer) |
 | `GET /api/profiles/<handle>` | the profile as nobody sees it (`Data` in `views/profile.types.ts`); 404 for an unknown handle |
 | `GET /api/profiles/<handle>?as=<viewer>` | the same, as `<viewer>` sees it; 400 for an unknown viewer |
 | `PUT /api/profiles/<handle>/followers/<viewer>` | `<viewer>` follows `<handle>`; returns the profile as `<viewer>` now sees it. 400 for following yourself, 404 for unknown people |

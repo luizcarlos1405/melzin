@@ -142,13 +142,16 @@ export function toViewModel(network: Network, handle: string, viewer: string | n
   return data
 }
 
+/** One row of the members page. */
+type MemberRow = MembersData['members'][number]
+
 /**
- * The members page as `viewer` sees it: the first three people by handle, each with a link to their
- * profile that keeps who is looking. Lists come later in Melzin, so the page has three fixed slots.
+ * The members page as `viewer` sees it: everyone, by handle, so the order is stable across loads, each
+ * with a link to their profile that keeps who is looking. The list is keyed by handle in the view's
+ * schema, so a row keeps its element when its follower count changes.
  */
 export function toMembersModel(network: Network, viewer: string | null): MembersData {
-  const member = (handle: string): MembersData['first'] => {
-    const person = network.people.get(handle)!
+  const member = (handle: string, person: Person): MemberRow => {
     const followers = followerCount(network, handle, person)
     return {
       name: person.name,
@@ -158,8 +161,8 @@ export function toMembersModel(network: Network, viewer: string | null): Members
       url: href('profile', { handle }, asQuery(viewer)),
     }
   }
-  const [first = '', second = '', third = ''] = [...network.people.keys()].sort()
-  return { first: member(first), second: member(second), third: member(third) }
+  const handles = [...network.people.keys()].sort()
+  return { members: handles.map((handle) => member(handle, network.people.get(handle)!)) }
 }
 
 export type FollowResult = { ok: true; data: ProfileData } | { ok: false; status: 400 | 404; error: string }
