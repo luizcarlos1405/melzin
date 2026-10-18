@@ -18,13 +18,17 @@ import {
   HREF_DIRECTIVE,
   IF_DIRECTIVE,
   type Issue,
+  LIST_ITEMS,
+  type ListSchema,
   type MelzinSchema,
   ROUTES_FILE,
+  ROUTE_INPUT,
   type RouteRef,
   type RouteTable,
   SCHEMA_BLOCK_TYPE,
   SHOW_DIRECTIVE,
   SNAPSHOTS_BLOCK_TYPE,
+  type Scope,
   type Snapshot,
   type SnapshotOwnPaths,
   type Stage,
@@ -37,21 +41,30 @@ import {
   dataBlockType,
   describeRouteRef,
   elementProblem,
+  fieldPathOf,
   findRoute,
+  forChainMessage,
   formatFieldPath,
+  hasField,
+  isChainDirective,
   isInterElementWhitespace,
   isPlainObject,
+  itemName,
   joinPath,
+  lengthMessage,
   linkFields,
   matchRoute,
   parseClickDirective,
   parseConditionDirective,
   parseExpression,
+  parseForDirective,
   parseHrefDirective,
   parseRouteRef,
   parseSnapshots,
   parseTextDirective,
+  payloadIssues,
   resolveField,
+  resolveList,
   resolvePath,
   routesForView,
   schemaFields,
@@ -61,7 +74,9 @@ import {
   validateRouteTable,
   validateSchema,
   valueAt,
+  valuesAt,
   viewStage,
+  withAlias,
 } from 'melzin/core'
 import { UsageError, misplacedViewProblem, misplacedViews, resolveProject } from './project.ts'
 import { generateRouteTypes, generateTypes, routeTypesPathFor, typesPathFor, viewTypesImport } from './typegen.ts'
@@ -634,14 +649,63 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
 
   const checked: MelzinSchema | null = schemaState === 'valid' ? schema : schemaState === 'none' ? {} : null
   const noSchemaHint = schemaState === 'none' ? ` (the view has no ${SCHEMA_BLOCK_TYPE} block)` : ''
-  // Leaves that something displays or tests.
+  // Fields that something displays, tests, repeats or sends, as formatFieldPath writes them: `user.name`,
+  // `members` (a list an m-for or a .length condition uses), `members[].name`, `tags[]`.
   const used = new Set<string>()
   const emitted = new Set<string>()
   // A broken binding would also show up as "never used" or "nothing emits it"; skip those then.
-  const broken = { text: false, click: false, condition: false }
+  const broken = { text: false, click: false, condition: false, loop: false, payload: false }
   // For the checks against the route table: what the view reads from the URL, and its static links.
   const routeRefs: { ref: RouteRef; offset: number }[] = []
   const staticLinks: { href: string; offset: number }[] = []
+
+  // For the snapshot coverage warnings: what decides whether an element shows. A condition is an
+  // element's m-if chain and m-show; a loop is an m-for, which shows its element once per item.
+  type Conditional = {
+    kind: 'condition'
+    /** The element's first condition directive, where the warning points. */
+    offset: number
+    /** Each condition with the result it needs; undefined when one of them is broken or constant. */
+    tests: { condition: Condition; holds: boolean }[] | undefined
+    /** What has to be true, for the message: `m-if="user.bio" holds`. */
+    clauses: string[]
+    parent: Gate | undefined
+  }
+  type Loop = {
+    kind: 'loop'
+    /** The m-for attribute, where its warnings point. */
+    offset: number
+    alias: string
+    /** The list's path as written (`poll.options`), and its field path (['polls', '[]', 'options']). */
+    segments: string[]
+    path: string[]
+    list: ListSchema
+    parent: Gate | undefined
+  }
+  type Gate = Conditional | Loop
+  // In document order.
+  const gates: Gate[] = []
+  const loops: Loop[] = []
+  /**
+   * Where an element sits: the nearest gate that decides whether it shows (its own, or an element's
+   * around it), the aliases of the rows around it, and whether an m-for repeats it. Inside an m-for that
+   * doesn't work, `lenient` has its alias, or `unknown` when the m-for didn't parse.
+   */
+  type Context = { gate: Gate | undefined; scope: Scope | undefined; inRow: boolean; lenient: { aliases: ReadonlySet<string>; unknown: boolean } | undefined }
+
+  // Inside a broken m-for, a path that may read its item isn't checked: the m-for's error explains it,
+  // and fixing the m-for brings the check back. Data fields, outer aliases and route.* still are.
+  const unchecked = (segments: readonly string[], context: Context): boolean => {
+    const { lenient } = context
+    const first = segments[0]
+    if (lenient === undefined || first === undefined) return false
+    if (lenient.aliases.has(first)) return true
+    if (!lenient.unknown || first === ROUTE_INPUT || context.scope?.has(first) === true) return false
+    return !(checked?.data !== undefined && Object.hasOwn(checked.data.properties, first))
+  }
+  const useField = (segments: readonly string[], scope: Scope | undefined): void => {
+    used.add(formatFieldPath(fieldPathOf(segments, scope)))
+  }
 
   // A `route.*` path: an error when it's malformed, else recorded. Undefined for data paths.
   const checkRouteRef = (directive: string, segments: readonly string[], offset: number): boolean | undefined => {
@@ -673,7 +737,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     return { start: location.startOffset + i, exact: rawValue === value }
   }
 
-  const checkTextDirective = (element: Element, value: string): void => {
+  const checkTextDirective = (element: Element, value: string, context: Context): void => {
     const { start, exact } = valueStart(element, TEXT_DIRECTIVE, value)
     const at = (offset: number): number => (exact ? start + offset : start)
     const parsed = parseTextDirective(value)
@@ -684,10 +748,10 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       error(at(parsed.offset), `${TEXT_DIRECTIVE}: ${parsed.message}`)
     } else if (checkRouteRef(TEXT_DIRECTIVE, parsed.path, at(pathStart)) !== undefined) {
       // the URL input: checked against the route table at the end
-    } else if (checked !== null) {
-      const resolved = resolvePath(checked, parsed.path)
+    } else if (checked !== null && !unchecked(parsed.path, context)) {
+      const resolved = resolvePath(checked, parsed.path, context.scope)
       if (resolved.ok) {
-        used.add(parsed.path.join('.'))
+        useField(parsed.path, context.scope)
       } else {
         broken.text = true
         error(at(pathStart), `${TEXT_DIRECTIVE}: ${resolved.message}${noSchemaHint}`)
@@ -711,7 +775,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     }
   }
 
-  const checkClickDirective = (element: Element, value: string): void => {
+  const checkClickDirective = (element: Element, value: string, context: Context): void => {
     const { start, exact } = valueStart(element, CLICK_DIRECTIVE, value)
     const at = (offset: number): number => (exact ? start + offset : start)
     const parsed = parseClickDirective(value)
@@ -723,18 +787,35 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     emitted.add(parsed.event)
     if (checked === null) return
     const events = checked.events ?? {}
-    if (Object.hasOwn(events, parsed.event)) return
     const expr = parseExpression(value)
     const arg = expr.ok && expr.expr.kind === 'call' ? expr.expr.args[0] : undefined
-    const hint = suggest(parsed.event, Object.keys(events)) || (schemaState === 'valid' ? ` (add "${parsed.event}": {} to the schema's events)` : '')
-    error(
-      at(arg === undefined ? 0 : arg.start + 1),
-      `${CLICK_DIRECTIVE}: event '${parsed.event}' isn't declared in the schema's events${hint}${noSchemaHint}`,
-    )
+    const eventAt = arg === undefined ? 0 : arg.start + 1
+    if (!Object.hasOwn(events, parsed.event)) {
+      const hint = suggest(parsed.event, Object.keys(events)) || (schemaState === 'valid' ? ` (add "${parsed.event}": {} to the schema's events)` : '')
+      error(at(eventAt), `${CLICK_DIRECTIVE}: event '${parsed.event}' isn't declared in the schema's events${hint}${noSchemaHint}`)
+      return
+    }
+    // The payload (D35): each value uses what it reads, and the whole must fit the event's payload.
+    const fields = parsed.payload?.fields ?? []
+    if (fields.some((field) => unchecked(field.path, context))) return
+    for (const field of fields) {
+      const ref = parseRouteRef(field.path)
+      if (ref !== undefined) {
+        if (ref.ok) routeRefs.push({ ref: ref.ref, offset: at(field.pathStart) })
+        continue
+      }
+      const resolved = resolveField(checked, field.path, context.scope)
+      if (resolved.ok && resolved.length === undefined && resolved.field.type !== 'object' && resolved.field.type !== 'array') {
+        useField(field.path, context.scope)
+      }
+    }
+    const issues = payloadIssues(checked, parsed.event, parsed.payload, eventAt, context.scope)
+    if (issues.length > 0) broken.payload = true
+    for (const issue of issues) error(at(issue.offset), `${CLICK_DIRECTIVE}: ${issue.message}`)
   }
 
   // m-bind:href: a link's URL, from a link field (SPEC D23).
-  const checkHrefDirective = (element: Element, value: string): void => {
+  const checkHrefDirective = (element: Element, value: string, context: Context): void => {
     const { start, exact } = valueStart(element, HREF_DIRECTIVE, value)
     const at = (offset: number): number => (exact ? start + offset : start)
     if (element.tagName !== 'a' && element.tagName !== 'area') {
@@ -757,25 +838,35 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       error(pathStart, `${HREF_DIRECTIVE} needs a link field; '${name}' isn't a URL (views never build URLs)`)
       return
     }
-    if (checked === null) return
-    const resolved = resolveField(checked, parsed.path)
+    if (checked === null || unchecked(parsed.path, context)) return
+    const resolved = resolveField(checked, parsed.path, context.scope)
     if (!resolved.ok) {
       broken.text = true
       error(pathStart, `${HREF_DIRECTIVE}: ${resolved.message}${noSchemaHint}`)
+      return
+    }
+    if (resolved.length !== undefined) {
+      error(pathStart, `${HREF_DIRECTIVE}: ${lengthMessage(name)}`)
       return
     }
     if (resolved.field.type === 'object') {
       error(pathStart, `${HREF_DIRECTIVE}: '${name}' is an object; it needs a link field`)
       return
     }
-    used.add(name)
+    if (resolved.field.type === 'array') {
+      const item = itemName(parsed.path.at(-1) ?? '')
+      const field = resolved.field.items.type === 'object' ? `${item}.<link field>` : item
+      error(pathStart, `${HREF_DIRECTIVE}: '${name}' is a list; repeat the link with ${FOR_DIRECTIVE}="${item} in ${name}", then ${HREF_DIRECTIVE}="${field}"`)
+      return
+    }
+    useField(parsed.path, context.scope)
     if (resolved.field.type !== 'string' || resolved.field.route === undefined) {
       error(pathStart, `${HREF_DIRECTIVE}: '${name}' isn't a link field; give it "route": "<route name>" in the schema and have the source fill it with href() (views never build URLs)`)
     }
   }
 
   // m-show, m-if and m-else-if: the condition, or undefined when it's broken or constant (already reported).
-  const checkConditionDirective = (element: Element, directive: string, value: string): Condition | undefined => {
+  const checkConditionDirective = (element: Element, directive: string, value: string, context: Context): Condition | undefined => {
     const { start, exact } = valueStart(element, directive, value)
     const at = (offset: number): number => (exact ? start + offset : start)
     const parsed = parseConditionDirective(directive, value)
@@ -787,16 +878,28 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     const { condition, pathStart } = parsed
     const isRoute = checkRouteRef(directive, condition.path, at(pathStart))
     if (isRoute !== undefined) return isRoute ? condition : undefined
-    if (checked === null) return undefined
-    const resolved = resolveField(checked, condition.path)
+    if (checked === null || unchecked(condition.path, context)) return undefined
+    const resolved = resolveField(checked, condition.path, context.scope)
     if (!resolved.ok) {
       broken.condition = true
       error(at(pathStart), `${directive}: ${resolved.message}${noSchemaHint}`)
       return undefined
     }
     const name = condition.path.join('.')
-    if (resolved.field.type !== 'object') {
-      used.add(name)
+    const { field } = resolved
+    if (resolved.length !== undefined) {
+      useField(condition.path.slice(0, -1), context.scope) // the list it counts
+    } else if (field.type === 'array') {
+      // A list holds whenever it's there, even empty; whether it has items is what its length says.
+      const test = `${condition.negated ? '!' : ''}${name}.length`
+      if (resolved.required) {
+        warning(at(pathStart), `${directive}: '${name}' is a required list, so the condition ${condition.negated ? 'never holds' : 'always holds'}, even when it's empty; test ${test}`)
+        return undefined // the snapshot coverage check would only repeat this
+      }
+      const when = condition.negated ? "doesn't hold when it's empty, only when it's missing" : "holds even when it's empty"
+      warning(at(pathStart), `${directive}: '${name}' is a list, so the condition ${when}; test ${test}`)
+    } else if (field.type !== 'object') {
+      useField(condition.path, context.scope)
     } else if (resolved.required) {
       warning(at(pathStart), `${directive}: '${name}' is a required object, so this condition is always ${condition.negated ? 'false' : 'true'}`)
       return undefined // the snapshot coverage check would only repeat this
@@ -804,18 +907,40 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     return condition
   }
 
-  // For the snapshot coverage warning: the conditions that decide whether an element shows (its m-if
-  // chain and its m-show), and the nearest element around it that has conditions of its own.
-  type Conditional = {
-    /** The element's first condition directive, where the warning points. */
-    offset: number
-    /** Each condition with the result it needs; undefined when one of them is broken or constant. */
-    tests: { condition: Condition; holds: boolean }[] | undefined
-    /** What has to be true, for the message: `m-if="user.bio" holds`. */
-    clauses: string[]
-    parent: Conditional | undefined
+  // m-for (D34): returns the context of the element's own directives and of everything inside it, the
+  // rows; `attributeAt` is where the attribute starts. A broken m-for shows no rows, so it has no loop
+  // gate. One with m-if, m-else-if or m-else is an error of its own (checkElement), and is checked as if
+  // the condition were around it, so the rows' paths still are.
+  const checkForDirective = (element: Element, value: string, attributeAt: number, context: Context): Context => {
+    const { start, exact } = valueStart(element, FOR_DIRECTIVE, value)
+    const at = (offset: number): number => (exact ? start + offset : start)
+    const row: Context = { ...context, inRow: true }
+    const parsed = parseForDirective(value)
+    if (!parsed.ok) {
+      broken.loop = true
+      error(at(parsed.offset), `${FOR_DIRECTIVE}: ${parsed.message}`)
+      return { ...row, lenient: { aliases: context.lenient?.aliases ?? new Set(), unknown: true } }
+    }
+    const lenient = { aliases: new Set([...(context.lenient?.aliases ?? []), parsed.alias]), unknown: context.lenient?.unknown ?? false }
+    if (checked === null) return row // nothing is checked against a schema with errors
+    if (unchecked(parsed.path, context)) return { ...row, lenient }
+    const resolved = resolveList(checked, parsed.alias, parsed.path, context.scope)
+    if (!resolved.ok) {
+      broken.loop = true
+      const where = resolved.at === 'alias' ? parsed.aliasStart : parsed.pathStart
+      error(at(where), `${FOR_DIRECTIVE}: ${resolved.message}${resolved.at === 'path' ? noSchemaHint : ''}`)
+      return { ...row, lenient }
+    }
+    const { list, path } = resolved
+    // The list is used, and so is its key, which tells its rows apart.
+    used.add(formatFieldPath(path))
+    if (list.key !== undefined) used.add(formatFieldPath([...path, LIST_ITEMS, list.key]))
+    const loop: Loop = { kind: 'loop', offset: attributeAt, alias: parsed.alias, segments: parsed.path, path, list, parent: context.gate }
+    gates.push(loop)
+    loops.push(loop)
+    return { gate: loop, scope: resolved.scope, inRow: true, lenient: context.lenient }
   }
-  const conditionals: Conditional[] = []
+
   // The m-if chain open among a run of siblings: its conditions so far (undefined: broken or constant).
   type Chain = { conditions: (Condition | undefined)[] }
 
@@ -828,31 +953,40 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     warning(at, `'${match[0]}' isn't Melzin syntax and would show as is; bind an empty element instead: <span ${TEXT_DIRECTIVE}="name"></span>`)
   }
 
-  // An element's directives and attributes. Returns the m-if chain that continues after it, if any.
-  const checkElement = (node: Element, scope: Conditional | undefined, chain: Chain | undefined): Chain | undefined => {
+  // An element's directives and attributes. Returns the m-if chain that continues after it, if any; an
+  // m-for element is never part of one, so it ends the chain before it.
+  const checkElement = (node: Element, context: Context, chain: Chain | undefined): Chain | undefined => {
     const offset = startOf(node) ?? 0
+    const nameOf = (attr: { prefix?: string; name: string }): string => (attr.prefix ? `${attr.prefix}:${attr.name}` : attr.name)
+    const attributeAt = (name: string): number => node.sourceCodeLocation?.attrs?.[name]?.startOffset ?? offset
+    // The m-for first, whatever the attribute order: the element's own directives apply per row.
+    const loop = node.attrs.find((attr) => nameOf(attr) === FOR_DIRECTIVE)
+    const row = loop === undefined ? context : checkForDirective(node, loop.value, attributeAt(FOR_DIRECTIVE), context)
     let role: { directive: ChainDirective; at: number; value: string; condition: Condition | undefined } | undefined
     let show: { at: number; value: string; condition: Condition | undefined } | undefined
     for (const attr of node.attrs) {
-      const name = attr.prefix ? `${attr.prefix}:${attr.name}` : attr.name
-      const at = node.sourceCodeLocation?.attrs?.[name]?.startOffset ?? offset
+      const name = nameOf(attr)
+      const at = attributeAt(name)
       const kind = classifyAttribute(name)
       if (kind.kind === 'plain') {
         const attribute = attributeProblem(name, attr.value)
         if (attribute !== undefined) error(at, attribute.message)
         else if (name === 'href' && (node.tagName === 'a' || node.tagName === 'area')) staticLinks.push({ href: attr.value, offset: at })
+        if (name === 'id' && row.inRow) warning(at, 'every row gets the same id; ids must be unique in a page')
       } else if (kind.kind === 'foreign' || kind.kind === 'unsupported') {
         error(at, kind.message)
       } else if (kind.name === TEXT_DIRECTIVE) {
-        checkTextDirective(node, attr.value)
+        checkTextDirective(node, attr.value, row)
       } else if (kind.name === CLICK_DIRECTIVE) {
-        checkClickDirective(node, attr.value)
+        checkClickDirective(node, attr.value, row)
       } else if (kind.name === HREF_DIRECTIVE) {
-        checkHrefDirective(node, attr.value)
+        checkHrefDirective(node, attr.value, row)
       } else if (kind.name === SHOW_DIRECTIVE) {
-        show = { at, value: attr.value, condition: checkConditionDirective(node, SHOW_DIRECTIVE, attr.value) }
+        show = { at, value: attr.value, condition: checkConditionDirective(node, SHOW_DIRECTIVE, attr.value, row) }
       } else if (kind.name === FOR_DIRECTIVE) {
-        // m-for and the rows it repeats aren't checked yet: the core has parseForDirective and resolveList.
+        // checked first, above
+      } else if (loop !== undefined && isChainDirective(kind.name)) {
+        error(at, forChainMessage(kind.name))
       } else if (role !== undefined) {
         error(at, `an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}`)
       } else if (kind.name === ELSE_DIRECTIVE) {
@@ -861,7 +995,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         }
         role = { directive: ELSE_DIRECTIVE, at, value: '', condition: undefined }
       } else {
-        role = { directive: kind.name, at, value: attr.value, condition: checkConditionDirective(node, kind.name, attr.value) }
+        role = { directive: kind.name, at, value: attr.value, condition: checkConditionDirective(node, kind.name, attr.value, row) }
       }
     }
 
@@ -897,20 +1031,21 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     if (tests.length > 0) {
       const complete = tests.every((test) => test.condition !== undefined)
       conditional = {
+        kind: 'condition',
         offset: Math.min(role?.at ?? Infinity, show?.at ?? Infinity),
         tests: complete ? (tests as { condition: Condition; holds: boolean }[]) : undefined,
         clauses,
-        parent: scope,
+        parent: row.gate,
       }
-      conditionals.push(conditional)
+      gates.push(conditional)
     }
-    walkNodes(node.childNodes, conditional ?? scope)
+    walkNodes(node.childNodes, conditional === undefined ? row : { ...row, gate: conditional })
     return next
   }
 
   // The same element and attribute rules the runtime applies (core/markup.ts), as errors. Siblings are
   // walked in order, so an m-else-if or m-else knows the chain it continues.
-  const walkNodes = (nodes: ChildNode[], scope: Conditional | undefined): void => {
+  const walkNodes = (nodes: ChildNode[], context: Context): void => {
     let chain: Chain | undefined
     for (const node of nodes) {
       if (isText(node)) {
@@ -928,10 +1063,10 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         error(offset, problem.message)
         if (problem.drop) continue // the runtime drops it, content included
       }
-      chain = checkElement(node, scope, chain)
+      chain = checkElement(node, context, chain)
     }
   }
-  walkNodes(bodyNodes, undefined)
+  walkNodes(bodyNodes, { gate: undefined, scope: undefined, inRow: false, lenient: undefined })
 
   // --- contract warnings (only against a schema we fully understood)
   if (schemaState === 'valid' && schema !== null && schemaBlock !== undefined) {
@@ -939,12 +1074,20 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     for (const event of Object.keys(schema.events ?? {})) {
       if (!emitted.has(event) && !broken.click) warning(at(joinPath('events', event)), `event '${event}' is declared but nothing emits it`)
     }
-    const leaves = schemaFields(schema).filter(({ field }) => field.type !== 'object' && field.type !== 'array')
-    for (const { path } of leaves) {
-      const leaf = formatFieldPath(path)
-      if (used.has(leaf) || broken.text || broken.condition) continue
-      warning(at(schemaPathOf(path)), `data field '${leaf}' is never used`)
+    // Leaves and lists, each one before the fields inside it. A list nothing uses is reported alone, not
+    // with each of its items' fields; objects only hold fields.
+    const fields = schemaFields(schema)
+    const silenced = broken.text || broken.condition || broken.loop || broken.payload
+    const unusedLists: string[][] = []
+    for (const { path, field } of fields) {
+      if (field.type === 'object' || silenced) continue
+      if (unusedLists.some((list) => list.every((segment, i) => path[i] === segment))) continue
+      const name = formatFieldPath(path)
+      if (used.has(name)) continue
+      warning(at(schemaPathOf(path)), `data field '${name}' is never used`)
+      if (field.type === 'array') unusedLists.push(path)
     }
+    const leaves = fields.filter(({ field }) => field.type !== 'object' && field.type !== 'array')
     if (leaves.length > 0 && snapshots.length === 0 && !snapshotsUnreadable) {
       warning(
         startOf(schemaBlock.element) ?? 0,
@@ -953,34 +1096,101 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     }
   }
 
-  // --- snapshot coverage: every element behind a condition shows in at least one snapshot, so its
-  // design can be reviewed. Waits until the snapshots match the schema.
+  // --- snapshot coverage (P8): every element behind a condition shows in at least one snapshot, every
+  // list shows a row, and each list shows empty and with several items, so every design can be reviewed.
+  // Snapshots are read with the runtime's rules (core/data.ts); an element inside a row shows when it
+  // shows in any row. Waits until the snapshots match the schema.
   if (checked !== null && snapshots.length > 0 && snapshotsValid) {
-    type Coverage = { own: boolean[]; shows: boolean[] } | undefined
-    const coverage = new Map<Conditional, Coverage>()
-    const cover = (conditional: Conditional): Coverage => {
-      if (coverage.has(conditional)) return coverage.get(conditional)
-      const parent = conditional.parent === undefined ? undefined : cover(conditional.parent)
-      let result: Coverage
-      if (conditional.tests !== undefined && (conditional.parent === undefined || parent !== undefined)) {
-        const { tests } = conditional
-        const own = snapshots.map(({ data, route }) => tests.every(({ condition, holds }) => conditionHolds(checked, data, condition, route) === holds))
-        result = { own, shows: own.map((value, i) => value && (parent?.shows[i] ?? true)) }
+    /** Per snapshot, the rows an element shows in, as the scope each one reads its items through. */
+    type Rows = (Scope | undefined)[][]
+    const top: Rows = snapshots.map(() => [undefined])
+    const any = (rows: Rows): boolean => rows.some((scopes) => scopes.length > 0)
+    // Each row an m-for shows in each of the rows around it: one per item, with the item in its scope.
+    const expand = (loop: Loop, rows: Rows): Rows =>
+      rows.map((scopes, i) =>
+        scopes.flatMap((scope) => {
+          const value = valueAt(snapshots[i]!.data, loop.segments, scope)
+          return Array.isArray(value) ? value.map((item) => withAlias(scope, loop.alias, { list: loop.list, path: loop.path, item })) : []
+        }),
+      )
+    const holds = (conditional: Conditional, i: number, scope: Scope | undefined): boolean => {
+      const { data, route } = snapshots[i]!
+      return conditional.tests!.every(({ condition, holds }) => conditionHolds(checked, data, condition, route, scope) === holds)
+    }
+    // Where a gate's element shows. Undefined when a condition on the way is broken or constant.
+    const shownMemo = new Map<Gate, Rows | undefined>()
+    const shown = (gate: Gate | undefined): Rows | undefined => {
+      if (gate === undefined) return top
+      if (shownMemo.has(gate)) return shownMemo.get(gate)
+      const parent = shown(gate.parent)
+      let result: Rows | undefined
+      if (parent !== undefined) {
+        if (gate.kind === 'loop') result = expand(gate, parent)
+        else if (gate.tests !== undefined) result = parent.map((scopes, i) => scopes.filter((scope) => holds(gate, i, scope)))
       }
-      coverage.set(conditional, result)
+      shownMemo.set(gate, result)
       return result
     }
-    for (const conditional of conditionals) {
-      const result = cover(conditional)
-      if (result === undefined || result.shows.some(Boolean)) continue
+    // The rows an element is in whatever the conditions around it: what its own conditions are tested in.
+    const reachMemo = new Map<Gate, Rows>()
+    const reach = (gate: Gate | undefined): Rows => {
+      if (gate === undefined) return top
+      const done = reachMemo.get(gate)
+      if (done !== undefined) return done
+      const parent = reach(gate.parent)
+      const result = gate.kind === 'loop' ? expand(gate, parent) : parent
+      reachMemo.set(gate, result)
+      return result
+    }
+
+    for (const gate of gates) {
+      const result = shown(gate)
+      if (result === undefined || any(result)) continue
       // Inside an element that never shows either, only that one gets the warning.
-      if (conditional.parent !== undefined && !cover(conditional.parent)!.shows.some(Boolean)) continue
-      warning(
-        conditional.offset,
-        result.own.some(Boolean)
-          ? 'no snapshot shows this element; its conditions only hold where an element around it is hidden'
-          : `no snapshot shows this element; add one where ${conditional.clauses.join(' and ')}`,
+      const parent = shown(gate.parent)!
+      if (!any(parent)) continue
+      if (gate.kind === 'condition') {
+        const own = reach(gate.parent).some((scopes, i) => scopes.some((scope) => holds(gate, i, scope)))
+        warning(
+          gate.offset,
+          own
+            ? 'no snapshot shows this element; its conditions only hold where an element around it is hidden'
+            : `no snapshot shows this element; add one where ${gate.clauses.join(' and ')}`,
+        )
+        continue
+      }
+      const name = gate.segments.join('.')
+      if (any(reach(gate))) {
+        warning(gate.offset, `no snapshot shows a row of '${name}'; it only has items where an element around it is hidden`)
+        continue
+      }
+      const values = parent.flatMap((scopes, i) => scopes.map((scope) => valueAt(snapshots[i]!.data, gate.segments, scope)))
+      const state = values.every(Array.isArray) ? 'empty' : values.some(Array.isArray) ? 'empty or missing' : 'missing'
+      warning(gate.offset, `no snapshot shows a row of '${name}' (it's ${state} in every snapshot${gate.parent === undefined ? '' : ' that shows it'})`)
+    }
+
+    // The states every list has (SPEC §9.1): empty, and several items. Once per list field, across all
+    // of its instances in every snapshot (each poll's options), at the first m-for over it; a list that
+    // never shows a row is reported above instead.
+    const byField = new Map<string, Loop[]>()
+    for (const loop of loops) {
+      const field = formatFieldPath(loop.path)
+      byField.set(field, [...(byField.get(field) ?? []), loop])
+    }
+    for (const over of byField.values()) {
+      if (!over.some((loop) => any(shown(loop) ?? []))) continue
+      const { list, path, segments, offset } = over[0]!
+      const name = segments.join('.')
+      const key = path.at(-1)!
+      const instances = snapshots.flatMap(({ data }) =>
+        valuesAt(data, path.slice(0, -1)).flatMap(({ value }) => (isPlainObject(value) ? [hasField(value, key) ? value[key] : undefined] : [])),
       )
+      if ((list.minItems ?? 0) < 1 && !instances.some((value) => !Array.isArray(value) || value.length === 0)) {
+        warning(offset, `no snapshot shows '${name}' empty; add one to design the empty state, or set "minItems": 1 if it's never empty`)
+      }
+      if ((list.maxItems ?? Infinity) > 1 && !instances.some((value) => Array.isArray(value) && value.length > 1)) {
+        warning(offset, `no snapshot shows '${name}' with more than one item`)
+      }
     }
   }
 
@@ -1110,16 +1320,19 @@ function checkAgainstRoutes(check: RouteCheck): void {
   type Finding = { relative: string; severity: Severity; text: string }
   const findingsOf = (snapshot: Snapshot): Finding[] => {
     const found: Finding[] = []
-    // Snapshots show real URLs: each link field's value must be a URL of its route.
+    // Snapshots show real URLs: each link field's value must be a URL of its route, in every item of a
+    // list for a link field inside its items (`data.members[1].url`).
     for (const link of links) {
-      const value = valueAt(snapshot.data, link.path)
       const route = findRoute(table, link.route)
-      if (typeof value !== 'string' || route === undefined) continue
-      const match = value.startsWith('/') && !value.startsWith('//') ? matchRoute(table, value) : null
-      if (match?.route.name === link.route) continue
-      const other = match === null ? '' : `; it's a URL of route '${match.route.name}'`
-      const relative = link.path.reduce((result, name) => joinPath(result, name), 'data')
-      found.push({ relative, severity: 'error', text: `: '${value}' isn't a URL of route '${route.name}' (${route.path})${other}` })
+      if (route === undefined) continue
+      for (const { path, value } of valuesAt(snapshot.data, link.path)) {
+        if (typeof value !== 'string') continue
+        const match = value.startsWith('/') && !value.startsWith('//') ? matchRoute(table, value) : null
+        if (match?.route.name === link.route) continue
+        const other = match === null ? '' : `; it's a URL of route '${match.route.name}'`
+        const relative = path.startsWith('[') ? `data${path}` : `data.${path}`
+        found.push({ relative, severity: 'error', text: `: '${value}' isn't a URL of route '${route.name}' (${route.path})${other}` })
+      }
     }
     if (shownBy.length === 0) return found
     const params = snapshot.route?.params ?? {}

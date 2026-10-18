@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Members</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": { "tags": { "type": "array", "items": { "type": "string" } } },
+        "required": ["tags"]
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    { "none": { "data": { "tags": [] } }, "two": { "data": { "tags": ["a", "b"] } } }
+  </script>
+</head>
+<body>
+  <ul>
+    <li m-for="tag in tags" m-text="tag"></li>
+  </ul>
+</body>
+</html>

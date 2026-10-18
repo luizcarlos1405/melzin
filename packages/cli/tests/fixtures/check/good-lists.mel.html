@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Members</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "members": {
+            "type": "array",
+            "key": "handle",
+            "description": "Everyone, in the order to show",
+            "items": {
+              "type": "object",
+              "properties": {
+                "handle": { "type": "string" },
+                "name": { "type": "string" },
+                "verified": { "type": "boolean" },
+                "note": { "type": "string" },
+                "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string" }, "maxItems": 3 }
+              },
+              "required": ["handle", "name", "tags"]
+            },
+            "maxItems": 50
+          },
+          "features": { "type": "array", "uniqueItems": true, "items": { "type": "string" }, "minItems": 1 }
+        },
+        "required": ["title", "members", "features"]
+      },
+      "events": {
+        "follow": {
+          "description": "Follows a member",
+          "payload": {
+            "type": "object",
+            "properties": { "handle": { "type": "string" }, "note": { "type": "string" } },
+            "required": ["handle"]
+          }
+        },
+        "refresh": {}
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "nobody": { "data": { "title": "Members", "members": [], "features": ["search"] } },
+      "two": {
+        "data": {
+          "title": "Members",
+          "members": [
+            { "handle": "ana", "name": "Ana", "verified": true, "note": "Admin", "tags": ["design", "code"] },
+            { "handle": "bo", "name": "Bo", "tags": [] }
+          ],
+          "features": ["search", "invite"]
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1 m-text="title"></h1>
+  <ul m-if="members.length" class="divide-y">
+    <li m-for="member in members" class="flex gap-2 odd:bg-zinc-50">
+      <span m-text="member.name"></span>
+      <b m-if="member.verified">Verified</b>
+      <i m-else>Not verified yet</i>
+      <ul class="flex gap-1 empty:hidden">
+        <li m-for="tag in member.tags" m-text="tag"></li>
+      </ul>
+      <button type="button" m-on:click="emit('follow', { handle: member.handle, note: member.note })">Follow</button>
+    </li>
+  </ul>
+  <p m-else>No members yet</p>
+  <p m-for="feature in features" m-text="feature" m-show="feature"></p>
+  <button type="button" m-on:click="emit('refresh')">Refresh</button>
+</body>
+</html>

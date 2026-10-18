@@ -275,6 +275,164 @@ const errors: Case[] = [
     message: 'an element can have only one of m-if, m-else-if and m-else',
     at: pos('chain-two-roles.mel.html', 'm-else'),
   },
+  // Lists (SPEC D34): the schema, m-for and paths inside rows.
+  {
+    file: 'schema-list-key.mel.html',
+    severity: 'error',
+    message: 'schema data.properties.members: a list of objects needs a "key": the field of its items that identifies each one, such as "key": "handle"',
+    at: pos('schema-list-key.mel.html', '"members"'),
+  },
+  {
+    file: 'schema-list-unique.mel.html',
+    severity: 'error',
+    message: 'schema data.properties.tags: a list of strings is keyed by its values: add "uniqueItems": true',
+    at: pos('schema-list-unique.mel.html', '"tags"'),
+  },
+  {
+    file: 'snapshot-duplicate-key.mel.html',
+    severity: 'error',
+    message: 'snapshots["two"].data.members[1].handle: duplicate key "ana": members[0] has it too; keys must be unique in a list',
+    at: pos('snapshot-duplicate-key.mel.html', '"handle": "ana", "name": "Ana again"'),
+  },
+  {
+    file: 'snapshot-min-items.mel.html',
+    severity: 'error',
+    message: 'snapshots["one"].data.options: has 1 item; the schema allows at least 2',
+    at: pos('snapshot-min-items.mel.html', '"options"', 0, 3),
+  },
+  {
+    file: 'snapshot-null-item.mel.html',
+    severity: 'error',
+    message: "snapshots[\"two\"].data.members[1]: a list item can't be null; leave it out of the list",
+    at: pos('snapshot-null-item.mel.html', 'null'),
+  },
+  {
+    file: 'for-parse-error.mel.html',
+    severity: 'error',
+    message: `m-for: use 'in': m-for="member in members"`,
+    at: pos('for-parse-error.mel.html', 'of members'),
+  },
+  {
+    file: 'for-index.mel.html',
+    severity: 'error',
+    message: "m-for: there's no index: style rows by position with Tailwind's first:, last:, odd: and nth-* variants, and identify them by the list's key",
+    at: pos('for-index.mel.html', '(member'),
+  },
+  {
+    file: 'for-unknown-list.mel.html',
+    severity: 'error',
+    message: "m-for: unknown field 'membrs' (did you mean 'members'?)",
+    at: pos('for-unknown-list.mel.html', 'membrs'),
+  },
+  {
+    file: 'for-not-a-list.mel.html',
+    severity: 'error',
+    message: `m-for: 'title' is a string, not a list; m-for goes over a list field ("type": "array")`,
+    at: pos('for-not-a-list.mel.html', 'in title', 3),
+  },
+  {
+    file: 'for-alias-clash.mel.html',
+    severity: 'error',
+    message: "m-for: 'title' is already a data field; pick another name, such as member",
+    at: pos('for-alias-clash.mel.html', 'title in members'),
+  },
+  {
+    file: 'for-with-if.mel.html',
+    severity: 'error',
+    message: "m-if can't go on an element with m-for: wrap the list in an element with m-if, or put the condition inside the row; to show only some items, have the host filter the list",
+    at: pos('for-with-if.mel.html', 'm-if'),
+  },
+  {
+    file: 'for-template.mel.html',
+    severity: 'error',
+    message: "put m-for on the element to repeat; <template> isn't supported",
+    at: pos('for-template.mel.html', '<template'),
+  },
+  {
+    file: 'key-binding.mel.html',
+    severity: 'error',
+    message: `':key' is Vue/Alpine syntax; keys live in the schema: add "key": "<field>" to the list, such as "key": "id"`,
+    at: pos('key-binding.mel.html', ':key'),
+  },
+  {
+    file: 'text-list.mel.html',
+    severity: 'error',
+    message: "m-text: 'members' is a list; show its items with m-for",
+    at: pos('text-list.mel.html', 'm-text="members"', 8),
+  },
+  {
+    file: 'text-position.mel.html',
+    severity: 'error',
+    message: "m-text: 'members.0' picks an item by position: a list's items are shown with m-for; for one particular item, have the host send it as its own field, such as featured",
+    at: pos('text-position.mel.html', 'members.0', 8),
+  },
+  {
+    file: 'text-length.mel.html',
+    severity: 'error',
+    message: "m-text: 'members.length' counts the items, which only conditions can use (m-if, m-else-if, m-show); to show a count, have the host send it as its own field, such as memberCount",
+    at: pos('text-length.mel.html', 'members.length'),
+  },
+  {
+    file: 'row-unknown-field.mel.html',
+    severity: 'error',
+    message: "m-text: unknown field 'member.nmae' (did you mean 'member.name'?)",
+    at: pos('row-unknown-field.mel.html', 'member.nmae'),
+  },
+  {
+    file: 'href-length.mel.html',
+    severity: 'error',
+    message: "m-bind:href: 'members.length' counts the items, which only conditions can use (m-if, m-else-if, m-show); to show a count, have the host send it as its own field, such as memberCount",
+    at: pos('href-length.mel.html', 'members.length'),
+  },
+  // Event payloads (SPEC D35): each emit against its event's payload (D15).
+  {
+    file: 'payload-missing.mel.html',
+    severity: 'error',
+    message: "m-on:click: event 'follow' has a payload; send it: emit('follow', { handle: ... })",
+    at: pos('payload-missing.mel.html', "emit('follow')", 6),
+  },
+  {
+    file: 'payload-unexpected.mel.html',
+    severity: 'error',
+    message: "m-on:click: event 'follow' has no payload; send emit('follow'), or declare its payload in the schema's events",
+    at: pos('payload-unexpected.mel.html', '{ handle: member.handle }'),
+  },
+  {
+    file: 'payload-unknown-field.mel.html',
+    severity: 'error',
+    message: "m-on:click: 'nmae' isn't a field of the payload of 'follow' (did you mean 'name'?)",
+    at: pos('payload-unknown-field.mel.html', 'nmae'),
+  },
+  {
+    file: 'payload-required-field.mel.html',
+    severity: 'error',
+    message: "m-on:click: the payload of 'follow' needs 'name'",
+    at: pos('payload-required-field.mel.html', '{ handle: member.handle }'),
+  },
+  {
+    file: 'payload-type.mel.html',
+    severity: 'error',
+    message: "m-on:click: 'member.followers' is a number, but the payload's 'handle' is a string",
+    at: pos('payload-type.mel.html', 'member.followers }'),
+  },
+  {
+    file: 'payload-maybe-missing.mel.html',
+    severity: 'error',
+    message: "m-on:click: 'member.email' may be missing, but the payload requires 'email'",
+    at: pos('payload-maybe-missing.mel.html', 'member.email'),
+  },
+  {
+    file: 'payload-positional.mel.html',
+    severity: 'error',
+    message: "m-on:click: a payload is an object of named fields: emit('follow', { memberHandle: member.handle })",
+    at: pos('payload-positional.mel.html', 'member.handle)'),
+  },
+  {
+    file: 'payload-literal.mel.html',
+    severity: 'error',
+    message: 'm-on:click: payload values are paths for now; have the host send the value as data',
+    at: pos('payload-literal.mel.html', "'ana'"),
+  },
 ]
 
 const warnings: Case[] = [
@@ -344,10 +502,59 @@ const warnings: Case[] = [
     message: 'no snapshot shows this element; add one where m-else-if="verified" holds and the conditions before it don\'t',
     at: pos('else-if-never-shown.mel.html', 'm-else-if'),
   },
+  // Lists: snapshot coverage (P8, SPEC §9.1), uses and rows.
+  {
+    file: 'for-no-rows.mel.html',
+    severity: 'warning',
+    message: "no snapshot shows a row of 'members' (it's empty in every snapshot)",
+    at: pos('for-no-rows.mel.html', 'm-for'),
+  },
+  {
+    file: 'list-never-empty.mel.html',
+    severity: 'warning',
+    message: `no snapshot shows 'members' empty; add one to design the empty state, or set "minItems": 1 if it's never empty`,
+    at: pos('list-never-empty.mel.html', 'm-for'),
+  },
+  {
+    file: 'list-never-several.mel.html',
+    severity: 'warning',
+    message: "no snapshot shows 'members' with more than one item",
+    at: pos('list-never-several.mel.html', 'm-for'),
+  },
+  {
+    file: 'row-never-shown.mel.html',
+    severity: 'warning',
+    message: 'no snapshot shows this element; add one where m-if="member.verified" holds',
+    at: pos('row-never-shown.mel.html', 'm-if'),
+  },
+  {
+    file: 'if-required-list.mel.html',
+    severity: 'warning',
+    message: "m-if: 'members' is a required list, so the condition always holds, even when it's empty; test members.length",
+    at: pos('if-required-list.mel.html', 'm-if="members"', 6),
+  },
+  {
+    file: 'row-id.mel.html',
+    severity: 'warning',
+    message: 'every row gets the same id; ids must be unique in a page',
+    at: pos('row-id.mel.html', 'id="member"'),
+  },
+  {
+    file: 'list-never-used.mel.html',
+    severity: 'warning',
+    message: "data field 'members' is never used",
+    at: pos('list-never-used.mel.html', '"members"'),
+  },
+  {
+    file: 'item-field-never-used.mel.html',
+    severity: 'warning',
+    message: "data field 'members[].name' is never used",
+    at: pos('item-field-never-used.mel.html', '"name"'),
+  },
 ]
 
 describe('good views have no diagnostics', () => {
-  for (const file of ['good-counter.mel.html', 'good-static.mel.html', 'good-nested.mel.html', 'good-conditionals.mel.html']) {
+  for (const file of ['good-counter.mel.html', 'good-static.mel.html', 'good-nested.mel.html', 'good-conditionals.mel.html', 'good-lists.mel.html']) {
     test(file, async () => {
       expect(await diagnosticsOf(file)).toEqual([])
     })

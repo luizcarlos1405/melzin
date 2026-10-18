@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Members</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "array",
+            "key": "handle",
+            "items": {
+              "type": "object",
+              "properties": { "handle": { "type": "string" }, "name": { "type": "string" } },
+              "required": ["handle", "name"]
+            }
+          }
+        },
+        "required": ["members"]
+      },
+      "events": {
+        "follow": {
+          "payload": {
+            "type": "object",
+            "properties": { "handle": { "type": "string" }, "name": { "type": "string" } },
+            "required": ["handle"]
+          }
+        }
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "nobody": { "data": { "members": [] } },
+      "two": { "data": { "members": [{ "handle": "ana", "name": "Ana" }, { "handle": "bo", "name": "Bo" }] } }
+    }
+  </script>
+</head>
+<body>
+  <ul>
+    <li m-for="member in members">
+      <span m-text="member.name"></span>
+      <button type="button" m-on:click="emit('follow', { handle: member.handle, nmae: member.name })">Follow</button>
+    </li>
+  </ul>
+</body>
+</html>

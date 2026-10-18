@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Members</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "members": {
+            "type": "array",
+            "key": "handle",
+            "items": {
+              "type": "object",
+              "properties": { "handle": { "type": "string" }, "name": { "type": "string" } },
+              "required": ["handle", "name"]
+            }
+          }
+        },
+        "required": ["title", "members"]
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "nobody": { "data": { "title": "T", "members": [] } },
+      "two": {
+        "data": {
+          "title": "T",
+          "members": [{ "handle": "ana", "name": "Ana" }, { "handle": "bo", "name": "Bo" }]
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1 m-text="title"></h1>
+</body>
+</html>

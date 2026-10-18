@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Members</title>
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "type": "array",
+            "key": "id",
+            "items": {
+              "type": "object",
+              "properties": { "id": { "type": "string" }, "label": { "type": "string" } },
+              "required": ["id", "label"]
+            },
+            "minItems": 2
+          }
+        },
+        "required": ["options"]
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "two": { "data": { "options": [{ "id": "a", "label": "A" }, { "id": "b", "label": "B" }] } },
+      "one": { "data": { "options": [{ "id": "a", "label": "A" }] } }
+    }
+  </script>
+</head>
+<body>
+  <ul>
+    <li m-for="option in options" m-text="option.label"></li>
+  </ul>
+</body>
+</html>
