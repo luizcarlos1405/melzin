@@ -2,7 +2,7 @@
 // nested and leaf lists, bindings inside rows, empty states, broken lists, warnings and destroy.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mountSource } from '../src/runtime/index.ts'
+import { DATA_WARNING_PREFIX, mountSource } from '../src/runtime/index.ts'
 import { useDom } from './helpers/dom.ts'
 import { view } from './runtime-fixtures.ts'
 
@@ -253,9 +253,10 @@ describe('bindings in rows', () => {
       members: [member('ana', 'Ana', { url: '/u/ana' }), member('bruno', 'Bruno', { url: 'javascript:alert(1)' })],
     })
     expect(all('a').map((a) => a.getAttribute('href'))).toEqual(['/u/ana', null])
-    expect(warnings).toEqual(['m-bind:href="member.url": javascript: URLs aren\'t allowed in links; the link has no href'])
+    expect(warnings).toEqual([`${DATA_WARNING_PREFIX}members[1].url: javascript: URLs aren't allowed in links; the link has no href`])
     v.update({ members: [member('ana', 'Ana'), member('bruno', 'Bruno', { url: '/u/bruno' })] })
     expect(all('a').map((a) => a.getAttribute('href'))).toEqual([null, '/u/bruno'])
+    expect(warnings).toHaveLength(1)
   })
 
   test('a bad directive in a row warns once, not once per row', () => {

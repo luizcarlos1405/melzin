@@ -2,6 +2,7 @@
 // (SPEC D34) and event payloads (D35).
 
 import { FOR_DIRECTIVE, ROUTE_INPUT, isIdent, positionMessage } from './constants.ts'
+import { blockedLinkScheme } from './markup.ts'
 
 export type LeafType = 'string' | 'number' | 'boolean'
 /** `route` makes a string field a link to that route (SPEC D23): the source fills it with the route's URL. */
@@ -649,6 +650,9 @@ function checkValue(field: FieldSchema, value: unknown, path: string, issues: Is
     issues.push({ message: `expected ${field.type}, got ${typeName(value)}${hint}`, path })
   } else if (typeof value === 'number' && !Number.isFinite(value)) {
     issues.push({ message: `expected a finite number, got ${value}`, path })
+  } else if (typeof value === 'string' && field.route !== undefined) {
+    const scheme = blockedLinkScheme(value)
+    if (scheme !== undefined) issues.push({ message: `${scheme}: URLs aren't allowed in links; the link has no href`, path })
   }
 }
 
@@ -717,9 +721,10 @@ function validateObjectData(schema: ObjectSchema, data: Record<string, unknown>,
 }
 
 /**
- * Checks data against the schema's `data`. Unknown fields, missing required fields, type mismatches
- * and the rules of lists (null items, duplicate keys, minItems and maxItems) are issues, with paths such
- * as `user.name` and `members[2].handle`. Without a schema `data`, only `{}` is valid.
+ * Checks data against the schema's `data`. Unknown fields, missing required fields, type mismatches,
+ * the rules of lists (null items, duplicate keys, minItems and maxItems) and link fields whose URL runs
+ * code (blockedLinkScheme) are issues, with paths such as `user.name` and `members[2].handle`. Without
+ * a schema `data`, only `{}` is valid.
  */
 export function validateData(schema: MelzinSchema | null | undefined, data: unknown): Issue[] {
   const issues: Issue[] = []

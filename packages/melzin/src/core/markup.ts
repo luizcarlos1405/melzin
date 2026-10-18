@@ -79,6 +79,19 @@ export function urlScheme(value: string): string | undefined {
   return /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(cleaned)?.[1]?.toLowerCase()
 }
 
+/** Schemes a link field's URL may not use (SPEC D23): they would run code or load a document, not navigate. */
+const LINK_BLOCKED_SCHEMES = new Set([...SCRIPT_SCHEMES, 'data'])
+
+/**
+ * The scheme that keeps a link field's URL out of its link (`javascript`, `vbscript` or `data`), or
+ * undefined when the URL may be the link's href. validateData reports it as a data issue; the runtime
+ * leaves such a link without an href.
+ */
+export function blockedLinkScheme(url: string): string | undefined {
+  const scheme = urlScheme(url)
+  return scheme !== undefined && LINK_BLOCKED_SCHEMES.has(scheme) ? scheme : undefined
+}
+
 /** Why an attribute can't be in a view's body, or undefined when it's fine. `name` is the qualified name. */
 export function attributeProblem(name: string, value: string): MarkupProblem | undefined {
   const lower = name.toLowerCase()

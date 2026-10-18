@@ -1,7 +1,7 @@
 // The URL input (`route`, SPEC D27) and links (m-bind:href, D23) in mount.
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { mountSource } from '../src/runtime/index.ts'
+import { DATA_WARNING_PREFIX, mountSource } from '../src/runtime/index.ts'
 import { useDom } from './helpers/dom.ts'
 import { view } from './runtime-fixtures.ts'
 
@@ -105,13 +105,30 @@ describe('m-bind:href', () => {
   })
 
   test('script URLs never reach the link', () => {
-    for (const url of ['javascript:alert(1)', ' JavaScript:alert(1)', 'data:text/html,x', 'vbscript:x']) {
+    const cases: [string, string][] = [['javascript:alert(1)', 'javascript'], [' JavaScript:alert(1)', 'javascript'], ['data:text/html,x', 'data'], ['vbscript:x', 'vbscript']]
+    for (const [url, scheme] of cases) {
       warnings = []
       root.replaceChildren()
       mountBody(`<a id="a" m-bind:href="authorUrl">A</a>`, { name: 'x', authorUrl: url })
       expect(root.querySelector('#a')?.hasAttribute('href')).toBe(false)
-      expect(warnings[0]).toMatch(/URLs aren't allowed in links; the link has no href$/)
+      expect(warnings).toEqual([`${DATA_WARNING_PREFIX}authorUrl: ${scheme}: URLs aren't allowed in links; the link has no href`])
     }
+  })
+
+  // The URL is a data issue (with its path), so it warns once per update and never on setRoute.
+  test('a script URL warns with the data, not on every render', () => {
+    const view = mountBody(`<a id="a" m-bind:href="authorUrl">A</a>`, { name: 'x', authorUrl: 'javascript:alert(1)' })
+    expect(warnings).toEqual([`${DATA_WARNING_PREFIX}authorUrl: javascript: URLs aren't allowed in links; the link has no href`])
+    warnings = []
+    view.setRoute({ name: 'profile', params: { handle: 'ana' }, query: {} })
+    view.setRoute({ name: 'profile', params: { handle: 'bruno' }, query: {} })
+    expect(warnings).toEqual([])
+    view.update({ name: 'x', authorUrl: '/u/ana' })
+    expect(warnings).toEqual([])
+    expect(root.querySelector('#a')?.getAttribute('href')).toBe('/u/ana')
+    view.update({ name: 'x', authorUrl: 'javascript:alert(2)' })
+    expect(root.querySelector('#a')?.hasAttribute('href')).toBe(false)
+    expect(warnings).toEqual([`${DATA_WARNING_PREFIX}authorUrl: javascript: URLs aren't allowed in links; the link has no href`])
   })
 
   test('problems are warned and skipped', () => {

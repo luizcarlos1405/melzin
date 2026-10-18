@@ -19,6 +19,7 @@ import {
   TEXT_DIRECTIVE,
   VOID_ELEMENTS,
   attributeProblem,
+  blockedLinkScheme,
   buildPayload,
   classifyAttribute,
   conditionHolds,
@@ -43,7 +44,6 @@ import {
   resolvePath,
   resolvePayloadValue,
   suggest,
-  urlScheme,
   validateData,
   valueAt,
   valueOrDefault,
@@ -190,9 +190,6 @@ function describeElement(el: Element, attribute: string, value: string): string 
 function chainRole(el: Element): ChainDirective | undefined {
   return el.getAttributeNames().find(isChainDirective)
 }
-
-/** Schemes a link field may not use: they would run code instead of navigating. */
-const SCRIPT_SCHEMES = new Set(['javascript', 'vbscript', 'data'])
 
 /** Text for a value: primitives through String(); objects (wrong data, already warned about) show nothing. */
 function toText(value: unknown): string {
@@ -674,12 +671,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     }
     for (const binding of block.hrefs) {
       const value = valueOrDefault(schema, data, binding.segments, scope)
-      let href = typeof value === 'string' && value !== '' ? value : null
-      const scheme = href === null ? undefined : urlScheme(href)
-      if (scheme !== undefined && SCRIPT_SCHEMES.has(scheme)) {
-        warn(`${HREF_DIRECTIVE}="${binding.segments.join('.')}": ${scheme}: URLs aren't allowed in links; the link has no href`)
-        href = null
-      }
+      // A URL that would run code never reaches the link; checkData warned about it with its path.
+      const href = typeof value === 'string' && value !== '' && blockedLinkScheme(value) === undefined ? value : null
       if (href === binding.lastHref) continue
       if (href === null) binding.el.removeAttribute('href')
       else binding.el.setAttribute('href', href)
