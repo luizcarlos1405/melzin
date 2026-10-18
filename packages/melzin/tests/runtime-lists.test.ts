@@ -270,6 +270,9 @@ describe('bindings in rows', () => {
     })
     expect(all('a').map((a) => a.getAttribute('href'))).toEqual(['/u/ana', null])
     expect(warnings).toEqual([`${DATA_WARNING_PREFIX}members[1].url: javascript: URLs aren't allowed in links; the link has no href`])
+    // A data warning: renders that only change the route don't repeat it.
+    v.setRoute({ name: 'members', params: {}, query: {} })
+    expect(warnings).toHaveLength(1)
     v.update({ members: [member('ana', 'Ana'), member('bruno', 'Bruno', { url: '/u/bruno' })] })
     expect(all('a').map((a) => a.getAttribute('href'))).toEqual([null, '/u/bruno'])
     expect(warnings).toHaveLength(1)
