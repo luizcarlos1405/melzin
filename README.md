@@ -164,7 +164,8 @@ packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, previ
   examples/counter/   a production page that mounts the counter
 examples/             apps that use Melzin as a package; each folder is its own workspace
   poll/               a poll with a small Bun backend, contract, view and API tests
-  profile/            a routed app: members and profiles, a remote and a local source, view and app tests
+  profile/            a routed app: a members list and profiles, a remote and a local source, contract,
+                      view, app and API tests
 docs/authoring.md     the view format and its rules, for whoever writes views
 SPEC.md               the design record: decisions, principles and a numbered list of hard problems
 POC.md                what the proof of concept builds, how, and what comes next

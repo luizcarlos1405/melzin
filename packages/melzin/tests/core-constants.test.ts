@@ -4,6 +4,7 @@ import { type DirectiveName, classifyAttribute, forChainMessage, isChainDirectiv
 
 const ONLY_HREF = '(m-bind:href is the only binding, for links)'
 const CLASS_HINT = `classes and styles are static for now ${ONLY_HREF}; to switch styles, show one of two elements with m-if and m-else`
+const CLICK_MODIFIER_HINT = 'modifiers aren\'t supported yet: write m-on:click (a button with type="button" has no default action to prevent)'
 const NAME_HINT = `attributes are static for now ${ONLY_HREF}; for an accessible name from data, put sr-only text with m-text inside the element`
 const ATTRIBUTE_HINT = `attributes are static for now ${ONLY_HREF}; to switch one, show one of two elements with m-if and m-else`
 
@@ -61,6 +62,9 @@ describe('constants', () => {
       ':title': NAME_HINT,
       ':aria-label': NAME_HINT,
       'v-bind:aria-describedby': NAME_HINT,
+      ':aria-hidden': ATTRIBUTE_HINT,
+      ':aria-expanded': ATTRIBUTE_HINT,
+      '@click.prevent': CLICK_MODIFIER_HINT,
       ':src': ATTRIBUTE_HINT,
       'v-bind': ATTRIBUTE_HINT,
       '@submit': 'only clicks for now: m-on:click',
@@ -86,6 +90,7 @@ describe('constants', () => {
       'm-bind:src': ATTRIBUTE_HINT,
       'm-bind': ATTRIBUTE_HINT,
       'm-on:submit': 'only clicks for now: m-on:click',
+      'm-on:click.stop': CLICK_MODIFIER_HINT,
       'm-model': "forms and inputs aren't supported yet",
     }
     const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href'

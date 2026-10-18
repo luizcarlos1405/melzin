@@ -468,7 +468,7 @@ describe('parseClickDirective: payloads (D35)', () => {
     ["emit('vote', 'a', b)", "a payload is an object of named fields: emit('vote', { <field>: <path> })", 13],
     // A trailing comma or a missing payload names what to write, never a string.
     ["emit('vote', { a: x }, )", "remove the trailing comma: emit('vote', { a: x })", 21],
-    ["emit('vote',)", "remove the trailing comma: emit('vote')", 11],
+    ["emit('vote',)", "remove the trailing comma: emit('vote'), or put the payload after it: emit('vote', { <field>: <path> })", 11],
     ["emit('vote', ,)", "expected a payload object, found ','", 13],
     ["emit('vote', ", 'expected a payload object, found end of value', 13],
     ["emit('vote', { : x })", "expected a field name, found ':'", 15],

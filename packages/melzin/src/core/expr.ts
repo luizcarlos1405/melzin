@@ -338,7 +338,12 @@ class Parser {
         if (comma.kind !== ',') break
         this.next()
         if (this.peek().kind === ')') {
-          throw new ExprSyntaxError(`remove the trailing comma: ${callee.value}(${args.map(formatArgument).join(', ')})`, comma.start)
+          const written = `${callee.value}(${args.map(formatArgument).join(', ')})`
+          // After the event name alone, the comma may also mean a payload is missing.
+          const orPayload = callee.value === EMIT_FUNCTION && args.length === 1
+            ? `, or put the payload after it: ${callee.value}(${formatArgument(args[0]!)}, { <field>: <path> })`
+            : ''
+          throw new ExprSyntaxError(`remove the trailing comma: ${written}${orPayload}`, comma.start)
         }
       }
     }

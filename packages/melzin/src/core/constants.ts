@@ -122,12 +122,15 @@ function bindingTarget(name: string): string | undefined {
   return /^m-(class|style)(:|$)/.exec(name)?.[1]
 }
 
+/** Attributes that name or describe an element, which sr-only text can stand in for. */
+const ACCESSIBLE_TEXT = new Set(['title', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-description'])
+
 function bindingHint(target: string): string {
   const only = '(m-bind:href is the only binding, for links)'
   if (target === 'class' || target === 'style') {
     return `classes and styles are static for now ${only}; to switch styles, show one of two elements with m-if and m-else`
   }
-  if (target === 'title' || target.startsWith('aria-')) {
+  if (ACCESSIBLE_TEXT.has(target)) {
     return `attributes are static for now ${only}; for an accessible name from data, put sr-only text with m-text inside the element`
   }
   return `attributes are static for now ${only}; to switch one, show one of two elements with m-if and m-else`
@@ -136,6 +139,7 @@ function bindingHint(target: string): string {
 const OTHER_HINTS: readonly [RegExp, string][] = [
   [/^m-model$/, "forms and inputs aren't supported yet"],
   [/^m-html$/, 'only plain text, through m-text'],
+  [/^m-on:click\./, 'modifiers aren\'t supported yet: write m-on:click (a button with type="button" has no default action to prevent)'],
   [/^m-on:/, 'only clicks for now: m-on:click'],
 ]
 
