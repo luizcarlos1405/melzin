@@ -14,6 +14,11 @@ Melzin is a design tool an AI operates, like pen.dev, where the file the AI desi
 production front end of a webapp. The design marks where data goes and carries sample data. In
 production, the same file renders real data and updates reactively when that data changes.
 
+Designing happens in three stages (D28): exploring directions in plain HTML, then the states (which data
+goes in and how the UI changes with it), then the contracts that connect the UI to the rest of the app.
+Melzin doesn't grow into a programming language to cover everything (D29): where a screen needs real
+code, Melzin is still where it gets designed, explored and reviewed.
+
 The artifact is a typed component written by an AI. It takes `data` in, sends events out and keeps its
 own `ui` state, and it ships with its types (the schema) and example states (the snapshots). What it
 renders is a pure function of `data` + `ui`.
@@ -49,6 +54,8 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 - Covers CRUD apps, dashboards and SaaS screens, and also interactive apps like chat and complex forms
   (D4).
 - Works embedded in existing apps and on its own for whole webapps (D7).
+- Supports each stage of design (exploration, states and contracts) on its own terms, so exploring never
+  waits on the contract (D28).
 
 **Non-goals for now**
 
@@ -57,18 +64,22 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 - A visual editor for humans (D1).
 - Games and other extremely interactive apps (D4).
 - Targets other than webapps, such as native mobile.
+- Becoming a programming language: behavior that would need one is code (D29).
 
 ## 4. Decisions
 
 - **D1. The AI is the main author, maybe the only one.** It works on the file directly, and humans may
   never edit it by hand. Humans review and explore through the preview shell and steer the AI by
-  prompting; there's no visual editor.
+  prompting; there's no visual editor. It's the workflow Melzin starts from: designing in pen.dev
+  through an AI, where nearly every change is a prompt and hand edits are rare. Direct manipulation
+  isn't ruled out for later, but it isn't planned.
 - **D2. The preview is a real browser** inside a shell that can zoom in and out and show many snapshots
   at once (§8).
 - **D3. Humans can inspect and edit the state of each render.** Edits change state only and are
   temporary: nothing is saved, and a refresh reloads everything from the file (for now).
 - **D4. Target apps:** CRUD apps, dashboards and SaaS screens, and also interactive apps such as chat
-  and complex forms. Not games or other extremely interactive apps.
+  and complex forms. Not games or other extremely interactive apps. *Refined by D29: where a screen
+  would need programming, Melzin designs it and code ships it.*
 - **D5. The view holds its own internal state.** State that doesn't come from a database or anywhere
   else (menu open, selected tab, unsaved input) lives inside the view. The outside only feeds data in
   and handles events. Internal state is still declared in the file and visible to tools: snapshots can
@@ -144,6 +155,22 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   `route.params.handle` is only used under routes whose path declares `:handle`. Snapshots can set it
   (`"route": { "params": { "handle": "bruno" } }`), and the shell shows it in the frame and lets the
   inspector edit it.
+- **D28. Design happens in three stages.** Each is a valid place to stop, grows the file the previous
+  one left, and asks for nothing a later one decides. The contract never gets in the way of exploring,
+  and looks, states and wiring each get the author's full attention, as they do when a design made in
+  pen.dev comes before any code (#61, Q13).
+  1. *Exploration:* compare alternatives and pick a design direction. Static HTML and Tailwind, with
+     sample content written inline; a view needs no schema (POC.md §3).
+  2. *States:* which data goes in, how the UI changes with it, and the edge cases. Bindings, the
+     schema's `data` and `ui`, and snapshots, hostile ones included (P8).
+  3. *Contracts:* the engine behind the UI. Typed events, links and routes, sources, and the connection
+     to the backend (D14, D20–D27).
+- **D29. Melzin stops where programming would start.** The format doesn't grow to express behavior
+  that takes a programming language (P1, #6). Past that line the behavior is code: a code component
+  (P7), or a screen written in regular code. Melzin may fit some apps very well and others poorly, and
+  that's acceptable. Where its views can't be what ships, Melzin is still the design tool: exploration
+  and states (D28) give the implementation, and its review, a design and every state to build from, as
+  pen.dev or any other design tool would (#63).
 
 ## 5. Principles
 
@@ -414,6 +441,7 @@ The browser app where humans review and explore the design (D1–D3), and where 
 - Simulated loading, failed, offline and stale states per route frame (P4, D24).
 - Live frames that run against a real source (a dev server, or a local source with seeded data) instead
   of snapshots (D20).
+- Alternatives side by side for exploration (D28, #61), each with its own theme if it needs one (#62).
 
 ## 9. Approaches to key complications
 
@@ -677,6 +705,7 @@ place the type appears (#59).
 6. ⚑ **Logic creep:** formatting, plurals, "+3 more", comparisons. Choose between no logic, a formatter
    library, or small typed expressions without side effects (P1). Internal state operations (#46) widen
    the surface. Template languages historically fail here by growing into bad programming languages.
+   *D29 sets the limit: what would take programming is code, not a bigger language.*
 7. ⚑ **Sample vs. default vs. placeholder** (P4).
 8. ⚑ **Conditionals and variants:** show/hide, styles driven by a boolean or enum, position-based
    variants in lists. With Tailwind (D9) and Vue's directives (D13), a variant is a class binding with
@@ -786,7 +815,7 @@ place the type appears (#59).
 46. ⚑ **Internal state operations:** with the view owning `ui` state (D5), interactions must change it:
     toggle a menu, pick a tab, type a draft, clear it after sending. That needs a small set of
     declarative operations (set, toggle, reset, add/remove an item, emit) that doesn't turn into a
-    programming language (P1, #6).
+    programming language (P1, #6, D29).
 47. **Host influence on internal state:** resetting a form after a successful save, focusing an input,
     opening a dialog when the server says so. React calls this controlled vs. uncontrolled components.
 48. **Internal state lifetime:** per-item state (each message's "expanded" toggle) must follow its
@@ -844,6 +873,22 @@ place the type appears (#59).
     data), whether it has its own loader, and how slotted screens relate to #56. *Deferred: routes map
     straight to views for now (D21).*
 
+### Stages
+
+61. **Exploration** (D28): comparing alternatives and design directions before anything is bound.
+    Today an alternative can simply be its own view, and the shell shows one view at a time. Still open:
+    where alternatives live, whether as separate views, as variants in one file that production strips
+    like other design-time content (#37), or as git branches; showing them side by side the way a design
+    tool's canvas does (§8); a direction that spans several screens; and promoting the chosen one
+    without leaving the rest behind as clutter.
+62. **Themes while exploring:** comparing design directions often means comparing colors, fonts and
+    radii, but a project has one theme (D12). Alternatives need a way to bring their own theme while the
+    screens that ship keep sharing one.
+63. **Designs that ship as code** (D29): when a screen is written in regular code, its views and
+    snapshots are its spec, and the design-tool problem comes back: the code can drift from the design.
+    If the implementation can render the same `data`, rendering every snapshot with it and comparing
+    screenshots with the design's would catch the drift.
+
 ## 11. Choosing battles
 
 The ⚑ items change what the file means, so getting one wrong means migrating every file later. The rest
@@ -851,7 +896,8 @@ can be added without breaking anything. Settle the ⚑ items on paper first; put
 translation, server rendering, form polish and theming. Routing (D20–D27, §7) is built (POC.md §15);
 shared frames across routes (#60) wait.
 
-**Next on paper:** the language inside `m-` attributes. It's ⚑ and gates the first prototype. To settle:
+**Next on paper:** the language inside `m-` attributes. It's ⚑ and gates the first prototype. D29 bounds
+it: a need that would take programming gets code (P7), not a bigger language. To settle:
 
 - what an expression can contain: paths, literals, comparisons, `!`, `&&`, `||`, maybe ternaries,
   formatter calls (#6)
@@ -911,6 +957,12 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   `"pizza": { "$snapshot": "option-row#landslide winner" }`, instead of repeating its data. It keeps
   child states in sync and lets generated states compose (P8), but adds a reference mechanism to
   snapshots (#34). Lean: yes.
+- **Q13. How does a view show its stage?** It could be inferred from the file (no schema: exploration;
+  bindings and snapshots: states; events, links and routes: contracts), declared in it, or chosen per
+  check. It matters for checks that help at one stage and are noise at another, such as flagging text
+  that looks like data (#33) in a static draft. Inferring needs no ceremony but can't tell a draft from
+  a finished static page; a `<meta>` tag in `<head>` (P9) is explicit and travels with the file. No lean
+  yet (D28).
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -936,7 +988,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   state, forms, complex widgets) is likely the hardest part of the project, and it's where existing
   design-to-production tools stop: Webflow and Framer stay with websites, while Plasmic and Builder.io
   act as a visual layer inside a code app. D4 raises the bar: chat apps and complex forms sit right at
-  this boundary, so internal state operations (#46) and code components (P7) carry more weight.
+  this boundary, so internal state operations (#46) and code components (P7) carry more weight. D29
+  sets the response: past the ceiling, the behavior is code and Melzin stays the design tool, instead of
+  the format growing into a language.
 - **Scope creep.** Standalone mode (D7) plus interactive apps (D4) pull Melzin toward becoming a whole
   framework. Keeping business logic and auth in the backend (§3) is the guardrail.
 - **A visual editor is expensive to build.** Avoided by D1.
@@ -1013,6 +1067,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   data or to a literal (D18).
 - **Type registry:** the project-wide set of named types, one per view plus their `$defs`, that schemas
   refer to with `$ref` (D17).
+- **Stage:** exploration, states or contracts, the three passes a design goes through (D28). Each is a
+  valid place to stop.
 
 ## Changelog
 
@@ -1042,3 +1098,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-17: routing built (POC.md §15): routes.json, link fields and `m-bind:href`, the `route` input,
   `startApp` with sources and the `navigate` hook, loading policies, and routes in the shell. The profile
   example became a routed app.
+- 2026-10-17: D28–D29 (design in three stages: exploration, states and contracts; Melzin stops where
+  programming would start and stays the design tool past it). Notes on D1 and D4, complications #61–#63
+  (exploration, themes while exploring, designs that ship as code) and Q13.

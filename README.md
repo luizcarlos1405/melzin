@@ -229,6 +229,8 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 - [ ] Production builds that strip snapshots
 
 **Tooling for AI authors.**
+- [ ] Exploration: design alternatives side by side in the shell, to pick a direction before anything is
+  bound
 - [ ] Generated hostile states and a screenshot command
 - [ ] Events linked to snapshots in the shell, for prototyping flows
 - [ ] Checks for unknown Tailwind classes

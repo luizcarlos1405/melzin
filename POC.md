@@ -403,6 +403,7 @@ reuses the binding table, the shared parser and the host API.
 | Components: views inside views, schemas composed with `$ref` | D16–D19, #12, §9.5 |
 | A custom element that dispatches DOM events | D7, §7 |
 | The standalone host: *built, with the route table, links and pages in the shell (§15)* | D11, D20–D27, #31, #51 |
+| Exploration: design alternatives side by side in the shell | D28, #61, #62 |
 | Events linked to snapshots in the shell | P6, #43 |
 | Generated hostile states and a screenshot CLI | P8, §8 |
 | Stripping snapshots from production builds | D8 |
