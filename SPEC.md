@@ -171,6 +171,9 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   that's acceptable. Where its views can't be what ships, Melzin is still the design tool: exploration
   and states (D28) give the implementation, and its review, a design and every state to build from, as
   pen.dev or any other design tool would (#63).
+- **D30. Snapshots extend other snapshots.** A snapshot can name a base snapshot and list only what
+  differs, so states don't repeat their shared data, and a change to that data reaches every snapshot
+  built on it (#34). The exact form is Q14.
 
 ## 5. Principles
 
@@ -261,7 +264,7 @@ too, so renames stay renames. List item types declare their key field. The contr
 backend covers `data` and events only.
 
 **Snapshots.** Named states (`data` + `ui`), stored inside the file (D8). A base snapshot holds the sample
-values; other snapshots override parts of it.
+values; other snapshots override parts of it (D30, Q14).
 
 **Design-time content.** Snapshots, notes, explorations and similar. They live in the file but are
 stripped from production (#37).
@@ -777,7 +780,8 @@ place the type appears (#59).
 33. **Forgotten bindings:** a hardcoded "Ana Souza" looks perfect in the design and is wrong for every
     user in production (P8).
 34. **Snapshot upkeep:** a base state plus overrides, updating snapshots when the schema changes, and the
-    explosion of possible combinations.
+    explosion of possible combinations. *Settled in part by D30: snapshots extend a base and override
+    what differs (Q14).*
 35. **Version mismatch at deploy:** the new UI expects a field the deployed backend doesn't send yet (P3,
     §9.3).
 36. **Adapter and contract tests:** generated types, contract tests, an adapter the AI keeps up to date.
@@ -915,6 +919,9 @@ Conditionals (`m-if`, `m-else-if`, `m-else`, `m-show`) were built ahead of this 
 provisional subset: a condition is a path, optionally negated with `!`, tested for truthiness
 (POC.md §14). The battle can still change it.
 
+Snapshots that extend a base (D30) don't depend on the language either, so they can be built at any
+time; POC.md §11 has them next.
+
 **After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
 (#37).
 
@@ -963,6 +970,12 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   that looks like data (#33) in a static draft. Inferring needs no ceremony but can't tell a draft from
   a finished static page; a `<meta>` tag in `<head>` (P9) is explicit and travels with the file. No lean
   yet (D28).
+- **Q14. How does a snapshot override its base?** Lean: JSON Merge Patch (RFC 7396), a known pattern
+  (P9). Objects merge field by field, `null` removes a field, and lists and plain values replace whole.
+  Melzin's types have no `null` so far, so that's how a snapshot makes an optional field missing:
+  `"signed out": { "extends": "follows you", "data": { "viewer": null } }`. The `extends` key names
+  the base, as in `tsconfig.json`; chains are fine, cycles are errors, and the checker validates each
+  snapshot once it's resolved. Changing one list item means restating the list (D30).
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -1101,3 +1114,4 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-17: D28–D29 (design in three stages: exploration, states and contracts; Melzin stops where
   programming would start and stays the design tool past it). Notes on D1 and D4, complications #61–#63
   (exploration, themes while exploring, designs that ship as code) and Q13.
+- 2026-10-17: D30 (snapshots extend other snapshots) and Q14 on its form; planned in POC.md §11.

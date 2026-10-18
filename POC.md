@@ -393,6 +393,7 @@ reuses the binding table, the shared parser and the host API.
 | Next | SPEC |
 |---|---|
 | `m-show`, `m-if` and `m-else`: *built, with `m-else-if` (§14)* | #8, #9 |
+| Snapshots that extend a base snapshot and override what differs | D30, #34, Q14 |
 | `m-bind`, including `m-bind:class` with literal classes | #8, #11, #52 |
 | `m-for` with keys and empty states | #1, §9.1 |
 | Internal `ui` state and state operations in handlers | D5, #46 |
@@ -420,7 +421,7 @@ What keeps the growth above cheap:
   re-renders a whole view.
 - **Final shapes, early.** The schema keeps its full top level (`data`, `ui`, `events`) even though `ui`
   is rejected for now, and events keep a reserved `payload` key. Snapshots are `{ data }` objects, so
-  `ui` and base-plus-overrides (#34) can slot in. Handlers take a payload argument from day one.
+  `ui` and base-plus-overrides (#34, D30) can slot in. Handlers take a payload argument from day one.
 - **One host API.** `mount`, `update` and `destroy` are what the custom element (D7) and the standalone
   host (D11) will wrap.
 - **One renderer.** The shell only renders through the runtime (P5).

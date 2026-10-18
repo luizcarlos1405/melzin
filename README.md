@@ -195,6 +195,7 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 
 **First real prototype: a profile page**, growing from [examples/profile](examples/profile/).
 - [x] `m-show`, `m-if`, `m-else-if` and `m-else`
+- [ ] Snapshots that extend a base snapshot and override only what differs
 - [ ] `m-bind` for attributes, including `m-bind:class` with literal Tailwind classes
 - [ ] `m-for` with keys and empty states
 - [ ] Internal UI state (open menus, selected tabs, drafts) and state operations in handlers
