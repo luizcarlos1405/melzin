@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createShellServer, listViewEntries, resolveViewFile } from '../src/shell.ts'
+import { createShellServer, listViewEntries, resolveAlternativeFile, resolveViewFile } from '../src/shell.ts'
 import { resolveProject } from '../src/project.ts'
 
 const COUNTER = `<!doctype html>
@@ -21,6 +21,18 @@ const COUNTER = `<!doctype html>
 </html>
 `
 const UNTITLED = '<!doctype html><html><head></head><body><p class="underline">hi</p></body></html>\n'
+const NIGHT_COUNTER = `<!doctype html>
+<html lang="en">
+<head>
+  <title>Counter</title>
+  <meta name="description" content="Dark, with a bigger number">
+  <script type="melzin/schema">{ "data": { "type": "object", "properties": { "count": { "type": "number" } } } }</script>
+</head>
+<body>
+  <p class="text-8xl bg-brand-600 ring-4" m-text="count"></p>
+</body>
+</html>
+`
 
 let dir: string
 let server: ReturnType<typeof createShellServer>
@@ -39,6 +51,18 @@ beforeAll(() => {
   symlinkSync(join(dir, 'nowhere.mel.html'), join(dir, 'views', 'broken.mel.html'))
   symlinkSync('user@host.1234:1700000000', join(dir, 'views', '.#counter.mel.html'))
   writeFileSync(join(dir, 'theme.css'), '@theme { --color-brand-600: #123456; }\n')
+  // Design alternatives (SPEC D31, D32): one with its own theme, and one only reachable through a
+  // symlink that leaves explore/.
+  mkdirSync(join(dir, 'explore', 'night'), { recursive: true })
+  mkdirSync(join(dir, 'explore', 'plain'))
+  mkdirSync(join(dir, 'outside'))
+  writeFileSync(join(dir, 'explore', 'night', 'counter.mel.html'), NIGHT_COUNTER)
+  writeFileSync(join(dir, 'explore', 'night', 'theme.css'), '@theme { --color-brand-600: #0a0a0a; }\n')
+  writeFileSync(join(dir, 'explore', 'plain', 'settings.mel.html'), UNTITLED)
+  writeFileSync(join(dir, 'explore', 'stray.mel.html'), UNTITLED)
+  writeFileSync(join(dir, 'outside', 'counter.mel.html'), 'SECRET')
+  symlinkSync(join(dir, 'outside'), join(dir, 'explore', 'escape'))
+  symlinkSync(join(dir, 'secret.mel.html'), join(dir, 'explore', 'plain', 'link.mel.html'))
   server = createShellServer({ project: resolveProject({ cwd: dir }), port: 0, development: false })
   base = server.url.href.replace(/\/$/, '')
 })
@@ -89,8 +113,8 @@ describe('shell server', () => {
     expect(names).not.toContain('link')
     expect(names).not.toContain('broken')
     expect(names.some((name) => name.startsWith('.'))).toBe(false)
-    expect(list).toContainEqual({ name: 'counter', file: 'counter.mel.html', url: '/views/counter.mel.html', title: 'My Counter' })
-    expect(list).toContainEqual({ name: 'untitled', file: 'untitled.mel.html', url: '/views/untitled.mel.html', title: 'untitled' })
+    expect(list).toContainEqual({ name: 'counter', file: 'counter.mel.html', url: '/views/counter.mel.html', title: 'My Counter', description: '', stage: 'states' })
+    expect(list).toContainEqual({ name: 'untitled', file: 'untitled.mel.html', url: '/views/untitled.mel.html', title: 'untitled', description: '', stage: 'exploration' })
   })
 
   test('/views/<file> serves the file verbatim with no-store', async () => {
@@ -138,6 +162,74 @@ describe('shell server', () => {
     expect(css).toContain('#123456')
   })
 
+  test('/__melzin/api/explore lists the alternatives and the files explore/ has no place for (SPEC D31)', async () => {
+    const response = await fetch(`${base}/__melzin/api/explore`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toEqual({
+      alternatives: [
+        {
+          name: 'night',
+          theme: true,
+          views: [{ name: 'counter', file: 'counter.mel.html', url: '/explore/night/counter.mel.html', title: 'Counter', description: 'Dark, with a bigger number', stage: 'states' }],
+        },
+        {
+          name: 'plain',
+          theme: false,
+          views: [{ name: 'settings', file: 'settings.mel.html', url: '/explore/plain/settings.mel.html', title: 'settings', description: '', stage: 'exploration' }],
+        },
+      ],
+      problems: ["explore/stray.mel.html: alternatives go in a folder each, such as explore/<alternative>/stray.mel.html; the folder's name is the alternative's"],
+    })
+  })
+
+  test('/explore/<alternative>/<file> serves an alternative verbatim, like /views/', async () => {
+    const response = await fetch(`${base}/explore/night/counter.mel.html`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
+    expect(await response.text()).toBe(NIGHT_COUNTER)
+  })
+
+  test('/explore/ rejects traversal, misplaced files and symlinks that leave explore/', async () => {
+    const paths = [
+      '/explore/night/../../secret.mel.html',
+      '/explore/night/..%2F..%2Fsecret.mel.html',
+      '/explore/..%2Fsecret.mel.html',
+      '/explore/night%2Fcounter.mel.html',
+      '/explore/stray.mel.html',
+      '/explore/escape/counter.mel.html',
+      '/explore/plain/link.mel.html',
+      '/explore/night/theme.css',
+      '/explore/night/missing.mel.html',
+      '/explore/nope/counter.mel.html',
+      '/explore/night/counter.mel.html/x',
+      '/explore/',
+    ]
+    for (const path of paths) {
+      const response = await fetch(base + path)
+      expect({ path, status: response.status }).toEqual({ path, status: 404 })
+      expect(await response.text()).not.toContain('SECRET')
+    }
+  })
+
+  test("/__melzin/styles.css?alt= builds an alternative's CSS, its theme over the project's (SPEC D32)", async () => {
+    const response = await fetch(`${base}/__melzin/styles.css?alt=night`)
+    expect(response.status).toBe(200)
+    const css = await response.text()
+    expect(css).toContain('.text-8xl')
+    expect(css).toContain('.ring-4')
+    expect(css).toContain('.text-6xl') // views/ too: views the alternative doesn't have render with its theme
+    expect(css).toContain('#0a0a0a')
+    expect(css).not.toContain('#123456')
+    const plain = await (await fetch(`${base}/__melzin/styles.css?alt=plain`)).text()
+    expect(plain).toContain('#123456')
+    expect((await fetch(`${base}/__melzin/styles.css?alt=escape`)).status).toBe(404)
+    expect((await fetch(`${base}/__melzin/styles.css?alt=nope`)).status).toBe(404)
+    const project = await (await fetch(`${base}/__melzin/styles.css`)).text()
+    expect(project).not.toContain('.ring-4')
+  })
+
   test('unknown paths are 404', async () => {
     expect((await fetch(`${base}/nope`)).status).toBe(404)
     expect((await fetch(`${base}/__melzin/other`)).status).toBe(404)
@@ -148,7 +240,7 @@ describe('shell server', () => {
   })
 
   test('project data is refused to other host names (DNS rebinding)', async () => {
-    for (const path of ['/__melzin/api/views', '/views/counter.mel.html', '/__melzin/styles.css', '/nope']) {
+    for (const path of ['/__melzin/api/views', '/__melzin/api/explore', '/views/counter.mel.html', '/explore/night/counter.mel.html', '/__melzin/styles.css', '/nope']) {
       const response = await fetch(base + path, { headers: { Host: `evil.example:${server.port}` } })
       expect({ path, status: response.status }).toEqual({ path, status: 403 })
     }
@@ -165,6 +257,23 @@ describe('resolveViewFile', () => {
     for (const name of ['', '..', '../secret.mel.html', 'notes.html', '.mel.html', 'link.mel.html', '%', 'nested/deep.mel.html']) {
       expect(resolveViewFile(project, name)).toBeNull()
     }
+  })
+
+  test('resolveAlternativeFile accepts only the views of listed alternatives', () => {
+    const project = resolveProject({ cwd: dir })
+    expect(resolveAlternativeFile(project, 'night', 'counter.mel.html')).toBe(join(dir, 'explore', 'night', 'counter.mel.html'))
+    expect(resolveAlternativeFile(project, 'n%69ght', 'counter%2Emel.html')).toBe(join(dir, 'explore', 'night', 'counter.mel.html'))
+    const rejected: [string, string][] = [
+      ['night', 'theme.css'],
+      ['escape', 'counter.mel.html'],
+      ['plain', 'link.mel.html'],
+      ['..', 'secret.mel.html'],
+      ['night', '../counter.mel.html'],
+      ['', 'stray.mel.html'],
+      ['%', 'counter.mel.html'],
+      ['current', 'counter.mel.html'],
+    ]
+    for (const [alternative, name] of rejected) expect(resolveAlternativeFile(project, alternative, name)).toBeNull()
   })
 
   test('listViewEntries falls back to the name when the title is missing', async () => {

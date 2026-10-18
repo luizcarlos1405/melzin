@@ -228,6 +228,19 @@ describe('melzin check on a project', () => {
     ])
   })
 
+  test('an alternative in explore/ is checked against the routes of the view it stands in for (SPEC D31)', async () => {
+    mkdirSync(join(dir, 'explore/cards'), { recursive: true })
+    writeFileSync(join(dir, 'explore/cards/home.mel.html'), page('<p m-text="route.params.y"></p>', { data: { type: 'object', properties: {} } }, { s: { route: { params: { y: 'a' } } } }))
+    try {
+      const result = await checkFiles(['explore/cards/home.mel.html'], { cwd: dir })
+      expect(result.files.map(({ file, diagnostics }) => [file, messages(diagnostics)])).toEqual([
+        ['explore/cards/home.mel.html', ['warning: snapshots["s"].route.params.y: no route that shows this view has a :y parameter', "error: route.params.y: route 'home' (/) has no :y parameter"]],
+      ])
+    } finally {
+      rmSync(join(dir, 'explore'), { recursive: true, force: true })
+    }
+  })
+
   test('the CLI checks routes.json by default', async () => {
     const proc = Bun.spawn(['bun', join(import.meta.dir, '../src/index.ts'), 'check'], { cwd: dir, stdout: 'pipe', stderr: 'pipe' })
     const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])

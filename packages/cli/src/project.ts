@@ -1,11 +1,14 @@
-// Where a Melzin project keeps its views and theme. Commands run from the project root.
+// Where a Melzin project keeps its views, theme and design alternatives. Commands run from the
+// project root.
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
-import { ROUTES_FILE, VIEW_FILE_SUFFIX } from 'melzin/core'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { CURRENT_VERSION, EXPLORE_DIR, ROUTES_FILE, VIEW_FILE_SUFFIX } from 'melzin/core'
 
 export const DEFAULT_VIEWS_DIR = 'views'
 export const DEFAULT_THEME_FILE = 'theme.css'
+/** The theme an alternative may bring in its folder, layered over the project's (SPEC D32). */
+export const ALTERNATIVE_THEME_FILE = 'theme.css'
 
 export type ProjectOptions = {
   /** Project root; defaults to process.cwd(). */
@@ -14,6 +17,18 @@ export type ProjectOptions = {
   views?: string
   /** Theme file, relative to cwd (default `theme.css`). It may not exist. */
   theme?: string
+}
+
+/** A design alternative (SPEC D31): a folder of views that stand in for the views of the same name. */
+export type Alternative = {
+  /** The folder's name: explore/<name>/. */
+  name: string
+  /** Absolute folder path. */
+  dir: string
+  /** Absolute path of the folder's theme.css (check `existsSync`), layered over the project's (D32). */
+  themeFile: string
+  /** Absolute paths of the `*.mel.html` files directly inside the folder, sorted by name. */
+  views: string[]
 }
 
 export type Project = {
@@ -25,37 +40,102 @@ export type Project = {
   themeFile: string
   /** Absolute path of the route table, routes.json at the root (check `existsSync` before reading). */
   routesFile: string
+  /** Absolute path of explore/, where design alternatives live (SPEC D31). It may not exist. */
+  exploreDir: string
   /**
    * Absolute paths of the `*.mel.html` files directly inside viewsDir, sorted by name. Dotfiles
    * (such as an editor's `.#name.mel.html` lock file) and entries that can't be read are skipped.
    */
   listViews(): string[]
+  /**
+   * The folders directly inside exploreDir, sorted by name, with their views. Dotfiles, a folder named
+   * `current` (see misplacedViewProblem) and anything whose real path leaves exploreDir are skipped.
+   */
+  listAlternatives(): Alternative[]
+}
+
+/** The `*.mel.html` files directly inside dir, sorted by name; dotfiles and unreadable entries skipped. */
+function listViewFiles(dir: string): string[] {
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) return []
+  return readdirSync(dir)
+    .filter((name) => name.endsWith(VIEW_FILE_SUFFIX) && !name.startsWith('.'))
+    .sort()
+    .map((name) => join(dir, name))
+    .filter((path) => {
+      try {
+        return statSync(path).isFile()
+      } catch {
+        return false // a dangling symlink, say
+      }
+    })
+}
+
+/** The real path, or null when it can't be resolved. */
+function realPath(path: string): string | null {
+  try {
+    return realpathSync(path)
+  } catch {
+    return null
+  }
 }
 
 export function resolveProject(options: ProjectOptions = {}): Project {
   const root = resolve(options.cwd ?? process.cwd())
   const viewsDir = resolve(root, options.views ?? DEFAULT_VIEWS_DIR)
   const themeFile = resolve(root, options.theme ?? DEFAULT_THEME_FILE)
+  const exploreDir = join(root, EXPLORE_DIR)
   return {
     root,
     viewsDir,
     themeFile,
     routesFile: join(root, ROUTES_FILE),
-    listViews() {
-      if (!existsSync(viewsDir) || !statSync(viewsDir).isDirectory()) return []
-      return readdirSync(viewsDir)
-        .filter((name) => name.endsWith(VIEW_FILE_SUFFIX) && !name.startsWith('.'))
-        .sort()
-        .map((name) => join(viewsDir, name))
-        .filter((path) => {
-          try {
-            return statSync(path).isFile()
-          } catch {
-            return false // a dangling symlink, say
-          }
+    exploreDir,
+    listViews: () => listViewFiles(viewsDir),
+    listAlternatives() {
+      const realExplore = existsSync(exploreDir) && statSync(exploreDir).isDirectory() ? realPath(exploreDir) : null
+      if (realExplore === null) return []
+      const alternatives: Alternative[] = []
+      for (const name of readdirSync(exploreDir).sort()) {
+        if (name.startsWith('.') || name === CURRENT_VERSION) continue
+        const dir = join(exploreDir, name)
+        const real = realPath(dir)
+        if (real === null || !isInside(realExplore, real) || !statSync(real).isDirectory()) continue
+        const views = listViewFiles(dir).filter((path) => {
+          const file = realPath(path)
+          return file !== null && isInside(real, file)
         })
+        alternatives.push({ name, dir, themeFile: join(dir, ALTERNATIVE_THEME_FILE), views })
+      }
+      return alternatives
     },
   }
+}
+
+/**
+ * Why a view file in explore/ can't be an alternative, or undefined (SPEC D31): alternatives go in a
+ * folder each, and `current` names the version in views/. Files elsewhere are never misplaced.
+ */
+export function misplacedViewProblem(project: Project, path: string): string | undefined {
+  const rel = relative(project.exploreDir, resolve(path))
+  if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return undefined
+  const parts = rel.split(sep)
+  if (parts.length === 1) {
+    return `alternatives go in a folder each, such as ${EXPLORE_DIR}/<alternative>/${parts[0]}; the folder's name is the alternative's`
+  }
+  if (parts.length === 2 && parts[0] === CURRENT_VERSION) {
+    return `'${CURRENT_VERSION}' is what the shell calls the version in the views folder, so it can't name an alternative; rename ${EXPLORE_DIR}/${CURRENT_VERSION}/`
+  }
+  return undefined
+}
+
+/** View files in explore/ that misplacedViewProblem rejects, with the reason, sorted by path. */
+export function misplacedViews(project: Project): { path: string; problem: string }[] {
+  const { exploreDir } = project
+  const candidates = [...listViewFiles(exploreDir), ...listViewFiles(join(exploreDir, CURRENT_VERSION))]
+  return candidates.flatMap((path) => {
+    const problem = misplacedViewProblem(project, path)
+    return problem === undefined ? [] : [{ path, problem }]
+  })
 }
 
 /**
@@ -98,6 +178,25 @@ export function resolveViewFile(project: Project, rawName: string): string | nul
     return null
   }
   return path
+}
+
+/**
+ * Maps the parts of an `/explore/<alternative>/<file>` URL to an alternative's view file, or null:
+ * the alternative must be one listAlternatives returns and the file one of its views, under the same
+ * rules as resolveViewFile.
+ */
+export function resolveAlternativeFile(project: Project, rawAlternative: string, rawName: string): string | null {
+  let alternative: string
+  let name: string
+  try {
+    alternative = decodeURIComponent(rawAlternative)
+    name = decodeURIComponent(rawName)
+  } catch {
+    return null
+  }
+  if (name === '' || name.startsWith('.') || /[/\\\0]/.test(name) || !name.endsWith(VIEW_FILE_SUFFIX)) return null
+  const found = project.listAlternatives().find((candidate) => candidate.name === alternative)
+  return found?.views.find((candidate) => basename(candidate) === name) ?? null
 }
 
 /** Thrown for bad command-line usage; the CLI prints the message and exits with code 2. */

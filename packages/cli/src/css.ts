@@ -17,6 +17,12 @@ export type BuildCssOptions = {
   viewsDir: string
   /** `@theme { ... }` plus optional plain CSS; skipped if missing. Must not import tailwindcss. */
   themeFile?: string
+  /**
+   * A design alternative (SPEC D31, D32): its folder is scanned too, and its theme file, under the same
+   * rules as themeFile, comes after it, so the tokens it sets win. The shell uses this; production
+   * builds don't.
+   */
+  alternative?: { dir: string; themeFile?: string }
   minify?: boolean
 }
 
@@ -27,10 +33,14 @@ function cssString(value: string): string {
   return JSON.stringify(value)
 }
 
-/** The in-memory entry stylesheet. */
-export function entryCss(viewsDir: string, themeFile: string | undefined): string {
-  const lines = ['@import "tailwindcss" source(none);', `@source ${cssString(viewsDir)};`]
-  if (themeFile !== undefined && existsSync(themeFile)) lines.push(`@import ${cssString(themeFile)};`)
+/**
+ * The in-memory entry stylesheet: Tailwind, the directories to scan, then the theme files in order
+ * (later ones win where they set the same token). Missing theme files are skipped.
+ */
+export function entryCss(sourceDirs: readonly string[], themeFiles: readonly (string | undefined)[]): string {
+  const lines = ['@import "tailwindcss" source(none);']
+  for (const dir of sourceDirs) lines.push(`@source ${cssString(dir)};`)
+  for (const theme of themeFiles) if (theme !== undefined && existsSync(theme)) lines.push(`@import ${cssString(theme)};`)
   return lines.join('\n') + '\n'
 }
 
@@ -38,11 +48,17 @@ export async function buildCss(options: BuildCssOptions): Promise<string> {
   const projectDir = resolve(options.projectDir)
   const viewsDir = resolve(projectDir, options.viewsDir)
   const themeFile = options.themeFile === undefined ? undefined : resolve(projectDir, options.themeFile)
+  const alternative = options.alternative
+  const alternativeDir = alternative === undefined ? undefined : resolve(projectDir, alternative.dir)
+  const alternativeTheme = alternative?.themeFile === undefined ? undefined : resolve(projectDir, alternative.themeFile)
   // Importing Tailwind a second time would duplicate all of its CSS.
-  if (themeFile !== undefined && existsSync(themeFile) && /@import\s+(url\(\s*)?["']?tailwindcss/.test(readFileSync(themeFile, 'utf8'))) {
-    throw new Error(`${themeFile} must not import tailwindcss; melzin adds it. Keep only @theme { ... } and plain CSS there`)
+  for (const theme of [themeFile, alternativeTheme]) {
+    if (theme !== undefined && existsSync(theme) && /@import\s+(url\(\s*)?["']?tailwindcss/.test(readFileSync(theme, 'utf8'))) {
+      throw new Error(`${theme} must not import tailwindcss; melzin adds it. Keep only @theme { ... } and plain CSS there`)
+    }
   }
-  const compiler = await compile(entryCss(viewsDir, themeFile), {
+  const sources = alternativeDir === undefined ? [viewsDir] : [viewsDir, alternativeDir]
+  const compiler = await compile(entryCss(sources, [themeFile, alternativeTheme]), {
     base: projectDir,
     onDependency: () => {},
     customCssResolver: async (id) => {
@@ -55,10 +71,10 @@ export async function buildCss(options: BuildCssOptions): Promise<string> {
     },
   })
   // `source(none)` disables automatic detection, so only our @source (and any in the theme) count.
-  const sources = compiler.root !== null && compiler.root !== 'none'
+  const scanned = compiler.root !== null && compiler.root !== 'none'
     ? [{ ...compiler.root, negated: false }, ...compiler.sources]
     : compiler.sources
-  const candidates = new Scanner({ sources }).scan()
+  const candidates = new Scanner({ sources: scanned }).scan()
   const css = compiler.build(candidates)
   return options.minify ? optimize(css, { minify: true }).code : css
 }

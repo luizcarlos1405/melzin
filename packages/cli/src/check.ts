@@ -57,7 +57,7 @@ import {
   valueAt,
   viewStage,
 } from 'melzin/core'
-import { UsageError, resolveProject } from './project.ts'
+import { UsageError, misplacedViewProblem, misplacedViews, resolveProject } from './project.ts'
 import { generateRouteTypes, generateTypes, routeTypesPathFor, typesPathFor, viewTypesImport } from './typegen.ts'
 
 type Element = DefaultTreeAdapterTypes.Element
@@ -1208,11 +1208,14 @@ export async function checkFiles(paths: string[], options: CheckOptions = {}): P
         const stale = staleRouteTypes(absolute, file, result.table, project.viewsDir)
         if (stale !== undefined) diagnostics.unshift(stale)
       } else {
+        // An alternative in explore/<alternative>/ is checked as the view it stands in for (SPEC D31).
         const view = absolute.endsWith(VIEW_FILE_SUFFIX) ? basename(absolute).slice(0, -VIEW_FILE_SUFFIX.length) : undefined
         const analysis = analyze(source, absolute, routes === null || view === undefined ? undefined : { routes, view })
         diagnostics = analysis.diagnostics
         const stale = staleTypes(absolute, file, analysis)
         if (stale !== undefined) diagnostics.unshift(stale)
+        const misplaced = misplacedViewProblem(project, absolute)
+        if (misplaced !== undefined) diagnostics.unshift({ line: 1, col: 1, severity: 'error', message: misplaced })
       }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
@@ -1258,8 +1261,8 @@ export function formatDiagnostics(result: CheckResult): string[] {
 const CHECK_USAGE = 'usage: melzin check [files...] [--views dir]'
 
 /**
- * `melzin check [files...] [--views dir]`: the given files, or every view plus routes.json when
- * there is one. Returns the exit code (1 when there are errors).
+ * `melzin check [files...] [--views dir]`: the given files, or every view, every alternative in
+ * explore/ (SPEC D31) and routes.json when there is one. Returns the exit code (1 when there are errors).
  */
 export async function runCheck(args: string[]): Promise<number> {
   let parsed
@@ -1272,7 +1275,11 @@ export async function runCheck(args: string[]): Promise<number> {
   let paths = positionals
   if (paths.length === 0) {
     const project = resolveProject({ views: values.views })
-    const views = project.listViews()
+    const views = [
+      ...project.listViews(),
+      ...project.listAlternatives().flatMap((alternative) => alternative.views),
+      ...misplacedViews(project).map(({ path }) => path),
+    ]
     if (views.length === 0) {
       console.error(`melzin check: no *${VIEW_FILE_SUFFIX} files in ${relative(process.cwd(), project.viewsDir) || '.'}`)
       return 1

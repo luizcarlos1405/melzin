@@ -88,3 +88,54 @@ describe('melzin check', () => {
     expect(code).toBe(2)
   })
 })
+
+describe('melzin check with alternatives in explore/ (SPEC D31)', () => {
+  let project = ''
+
+  beforeAll(() => {
+    project = mkdtempSync(join(tmpdir(), 'melzin-check-explore-'))
+    mkdirSync(join(project, 'views'))
+    mkdirSync(join(project, 'explore/cards'), { recursive: true })
+    mkdirSync(join(project, 'explore/current'))
+    mkdirSync(join(project, 'explore/.hidden'))
+    copyFileSync(join(fixtures, 'good-counter.mel.html'), join(project, 'views/counter.mel.html'))
+    // An alternative of the counter, with a mistake, and a screen that only exists as an alternative.
+    copyFileSync(join(fixtures, 'text-unknown-path.mel.html'), join(project, 'explore/cards/counter.mel.html'))
+    copyFileSync(join(fixtures, 'good-static.mel.html'), join(project, 'explore/cards/settings.mel.html'))
+    copyFileSync(join(fixtures, 'good-static.mel.html'), join(project, 'explore/stray.mel.html'))
+    copyFileSync(join(fixtures, 'good-static.mel.html'), join(project, 'explore/current/counter.mel.html'))
+    copyFileSync(join(fixtures, 'text-unknown-path.mel.html'), join(project, 'explore/.hidden/counter.mel.html'))
+  })
+
+  afterAll(() => {
+    rmSync(project, { recursive: true, force: true })
+  })
+
+  test('checks every alternative, and the view files explore/ has no place for', async () => {
+    const { code, stdout } = await run([], project)
+    expect(stdout).toBe(
+      [
+        "explore/cards/counter.mel.html:15:14: error: m-text: unknown field 'cuont' (did you mean 'count'?)",
+        "explore/stray.mel.html:1:1: error: alternatives go in a folder each, such as explore/<alternative>/stray.mel.html; the folder's name is the alternative's",
+        "explore/current/counter.mel.html:1:1: error: 'current' is what the shell calls the version in the views folder, so it can't name an alternative; rename explore/current/",
+        '3 errors, 0 warnings in 5 files',
+        '',
+      ].join('\n'),
+    )
+    expect(code).toBe(1)
+  })
+
+  test('a project whose only views are alternatives still has something to check', async () => {
+    const fresh = mkdtempSync(join(tmpdir(), 'melzin-check-fresh-'))
+    try {
+      mkdirSync(join(fresh, 'views'))
+      mkdirSync(join(fresh, 'explore/warm'), { recursive: true })
+      copyFileSync(join(fixtures, 'good-static.mel.html'), join(fresh, 'explore/warm/home.mel.html'))
+      const { code, stdout } = await run([], fresh)
+      expect(stdout).toBe('0 errors, 0 warnings in 1 file\n')
+      expect(code).toBe(0)
+    } finally {
+      rmSync(fresh, { recursive: true, force: true })
+    }
+  })
+})

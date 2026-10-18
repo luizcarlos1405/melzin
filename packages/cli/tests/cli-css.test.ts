@@ -63,7 +63,33 @@ describe('buildCss', () => {
   })
 
   test('entry CSS', () => {
-    expect(entryCss('/v', undefined)).toBe('@import "tailwindcss" source(none);\n@source "/v";\n')
+    expect(entryCss(['/v'], [undefined])).toBe('@import "tailwindcss" source(none);\n@source "/v";\n')
+    const themed = entryCss(['/v', '/x'], [join(dir, 'theme.css'), join(dir, 'missing.css')])
+    expect(themed).toBe(`@import "tailwindcss" source(none);\n@source "/v";\n@source "/x";\n@import ${JSON.stringify(join(dir, 'theme.css'))};\n`)
+  })
+
+  test("an alternative's folder is scanned too, and its theme wins where it sets a token (SPEC D31, D32)", async () => {
+    mkdirSync(join(dir, 'explore/night'), { recursive: true })
+    writeFileSync(join(dir, 'explore/night/a.mel.html'), '<p class="text-brand rounded-card ring-2">x</p>')
+    writeFileSync(join(dir, 'explore/night/theme.css'), '@theme {\n  --color-brand: #0a0a0a;\n  --radius-card: 2rem;\n}\n')
+    const css = await buildCss({ projectDir: dir, viewsDir: 'views', themeFile: 'theme.css', alternative: { dir: 'explore/night', themeFile: 'explore/night/theme.css' } })
+    expect(css).toContain('.p-4') // from views/
+    expect(css).toContain('.ring-2') // from the alternative
+    expect(css).toContain('.rounded-card')
+    expect(css).toContain('--color-brand: #0a0a0a')
+    expect(css).not.toContain('#ff0066')
+    expect(css).toContain('.plain-rule') // the project theme still applies
+    const plain = await buildCss({ projectDir: dir, viewsDir: 'views', themeFile: 'theme.css' })
+    expect(plain).not.toContain('.ring-2')
+    expect(plain).toContain('--color-brand: #ff0066')
+  })
+
+  test("an alternative's theme that imports tailwindcss is refused too", async () => {
+    mkdirSync(join(dir, 'explore/bad'), { recursive: true })
+    writeFileSync(join(dir, 'explore/bad/theme.css'), '@import "tailwindcss";\n')
+    await expect(buildCss({ projectDir: dir, viewsDir: 'views', alternative: { dir: 'explore/bad', themeFile: 'explore/bad/theme.css' } })).rejects.toThrow(
+      /explore\/bad\/theme\.css must not import tailwindcss/,
+    )
   })
 })
 

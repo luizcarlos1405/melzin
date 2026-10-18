@@ -15,6 +15,13 @@ export const VIEW_FILE_SUFFIX = '.mel.html'
 
 /** The route table's file, at the project root (SPEC D21). */
 export const ROUTES_FILE = 'routes.json'
+/** Design alternatives live in explore/<alternative>/ at the project root, next to views/ (SPEC D31). */
+export const EXPLORE_DIR = 'explore'
+/**
+ * What the shell calls the version of a view in views/, as opposed to its alternatives (`?alt=current`),
+ * so no alternative can take the name (SPEC D31).
+ */
+export const CURRENT_VERSION = 'current'
 /** The name views read the URL input under: `route.name`, `route.params.handle`, `route.query.tab` (D27). */
 export const ROUTE_INPUT = 'route'
 
