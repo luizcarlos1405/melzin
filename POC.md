@@ -1016,6 +1016,10 @@ Made for this step; the binding-language battle (SPEC §11) can still change the
 - **No `m-if` on an `m-for` element.** Vue's precedence between `v-if` and `v-for` changed from Vue 2
   to Vue 3, so either reading surprises someone. A wrapper, a condition inside the row or a filtered
   list each say what they mean.
+- **No `<template>`** (SPEC Q15). A list repeats one element, and one wrapper covers the known cases:
+  `class="contents"`, a `<div>` around each `<dt>` and `<dd>` pair, a `<tbody>` per item. `<template>`
+  stays an error until a real screen needs it, since allowing it later only adds to the format. Its
+  message names the wrapper, and `<template m-for>` points at `m-for` on the element.
 - **Rows follow a comment anchor, with nothing between them,** like a chain's branches, so the
   container holds only what the author wrote, and `:empty` and position variants work.
 - **Bad keys fall back to positions** for that render, with the data warning: the rows still show, as

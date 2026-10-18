@@ -100,7 +100,7 @@ reaches the page, except the last two rows, which it keeps with a warning:
 | `<style>` (also inside `<svg>`) and `<link>` | they would restyle the whole host page; use Tailwind classes |
 | `<base>` | it would change how every relative URL in the host page resolves |
 | `<meta>` and `<title>` | they belong in `<head>` |
-| `<template>` | its content would never be bound; write the markup directly, and put `m-for` on the element to repeat |
+| `<template>` | its content would never be bound (Q15); to group elements, wrap them in one element, such as `<div class="contents">`, and put `m-for` on the element to repeat |
 | SVG `<set>` or `<animate>` that targets `href` | links are static |
 | `style="..."` attributes | styling is Tailwind classes only (§6) |
 | `<form>` | forms aren't supported yet; use `<button type="button">` |
@@ -613,7 +613,8 @@ and keeps the fields around it. For members with a handle and a name:
 
 ## 7. Not supported yet
 
-Don't try these; the checker rejects them. POC.md §11 lists when each comes in.
+Don't try these; the checker rejects them. POC.md §11 lists the next steps, and SPEC §11 and §12 the
+choices still open, such as Q15 for `<template>`.
 
 | Not yet | What to do now |
 |---|---|
@@ -624,7 +625,7 @@ Don't try these; the checker rejects them. POC.md §11 lists when each comes in.
 | An index in `m-for` (`(item, index) in items`), destructuring, `of`, ranges (`n in 5`) | `item in items`; position variants (`odd:`, `first:`) for styles, the list's key for identity, the items in snapshots |
 | Filtering, sorting or cutting a list in the view (`items.slice(0, 3)`, `\| filter`, `m-if` on the `m-for` element) | The host sends the list as it should show, and a field such as `"moreLabel": "+12 more"` |
 | An item by position (`members[0].name`), a count in `m-text` (`items.length`) | A field the host sends: `featured.name`, `"countLabel": "12 members"`; `.length` works in conditions |
-| `<template m-for>`, `<template>` to group elements | `m-for` on the element to repeat; one wrapper element for several |
+| `<template m-for>`, `<template>` to group elements (Q15: not until a real screen needs it) | `m-for` on the element to repeat; one wrapper element for several, such as `<div class="contents">` |
 | Lists of booleans, lists of lists, a `default` on a list | Object items with a key: `{ "id", "done" }`, `{ "id", "rows" }`; a required list the host sends as `[]` |
 | Payload values that aren't paths (`{ optionId: 'pizza' }`, `!`, calls), payload fields that are objects or lists | Paths to strings, numbers or booleans: send the item's key and let the host look up the rest |
 | Snapshots that change one item of a base's list | Restate the whole list (§5) |
