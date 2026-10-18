@@ -207,7 +207,11 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 
 **Embedding and hosting.**
 - [ ] A custom element, so views embed in React, Vue or plain HTML
-- [ ] A standalone host: the URL picks a screen, the backend serves its data and handles its events
+- [ ] A standalone host: a declared route table picks the screen, and a pluggable source serves its data
+  and handles its events. The source can run at build time (static sites), on a server, or on the device
+  (offline-first apps)
+- [ ] Per-route lazy loading, background prefetching and a generated service worker
+- [ ] Frames shared across routes, such as an app shell with navigation
 - [ ] Server-side rendering and hydration
 - [ ] Production builds that strip snapshots
 

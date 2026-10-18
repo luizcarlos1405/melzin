@@ -88,6 +88,8 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   clashes.)
 - **D11. Standalone mode uses the generic host in §7:** the URL picks a screen, the backend-for-frontend
   serves its data, events go to the backend, and realtime screens get patches pushed by the server.
+  *Amended by D20–D21: the URL picks a screen from the route table, and a source serves its data. The
+  backend-for-frontend is one kind of source.*
 - **D12. One Tailwind theme per project.** Every screen shares it, since design tokens are brand-wide.
 - **D13. Vue's directive set, under the `m-` prefix:** `m-text`, `m-html`, `m-show`, `m-if`,
   `m-else-if`, `m-else`, `m-for`, `m-on`, `m-bind`, `m-model` and `m-slot`, with Vue's modifiers
@@ -109,6 +111,24 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   computing values for a child belongs in the backend adapter (P3), not in the view.
 - **D19. Child views stay encapsulated.** A child's `ui` state is private to it. Its events go to its
   parent only, and the parent handles, re-emits or explicitly ignores each one (D15, §9.4).
+- **D20. Data comes from pluggable sources.** The contract stays fixed: a route's params go in, data
+  matching its view's schema comes out, and events go to handlers. Where that code runs is the app's
+  choice: a *static* source runs at build time (static sites), a *remote* source runs on a server
+  (the backend-for-frontend of D11), and a *local* source runs on the device, such as a worker reading
+  IndexedDB (offline-first apps). Each route can use a different source. Business logic stays in regular
+  code (§3); that code may simply run on the device (§7).
+- **D21. Routes are declared in a route table,** not derived from folders. Each named route maps a path
+  to a view, and the route's data is that view's data type. The browser owns the table, so navigation
+  works offline and with no server. The checker, the shell, the prerenderer and the service worker
+  read it without running code (§7).
+- **D22. Paths use `URLPattern` syntax** (`/u/:handle`), the web standard, instead of an invented one
+  (P9).
+- **D23. Views never build URLs.** A link is a plain `<a>` whose `href` binds to a `data` field typed
+  as a link to a named route. The source fills it in through generated, typed helpers, and the checker
+  knows every link's target (§7).
+- **D24. Loading policies per route.** Code is `eager` (in the first bundle), `prefetch` (downloaded in
+  the background after first paint; the default) or `lazy` (fetched on intent, such as hovering a
+  link). Data is `network-only`, `stale-while-revalidate` (the default) or `offline` (§7).
 
 ## 5. Principles
 
@@ -252,13 +272,71 @@ React, Vue, Svelte or plain HTML, with no per-framework adapter.
 
 **Standalone** (D11). A small generic host does a host app's job (#51):
 
-- the URL picks a screen (#31)
-- the host loads that screen's `data` from the backend-for-frontend (P3)
-- events go to the backend, which answers with new data or a patch
-- realtime screens such as chat receive patches pushed by the server (#49)
+- the URL picks a screen from the route table (D21, #31)
+- the host loads that screen's `data` from the route's source (D20)
+- events go to the source's handlers, which answer with new data or a patch
+- realtime screens such as chat receive patches pushed by the source (#49)
 
-Business logic and auth stay in the backend in both modes. The standalone host resembles Phoenix LiveView
-or Hotwire, except the server sends data shaped by the schema instead of HTML.
+Business logic and auth stay in regular code in both modes. With a remote source, the standalone host
+resembles Phoenix LiveView or Hotwire, except the server sends data shaped by the schema instead of HTML.
+
+**Sources** (D20). The same app can range from a static site to an offline-first app by changing where
+its loaders and handlers run:
+
+| Source | Where the code runs | Fits |
+|---|---|---|
+| static | at build time; every route is prerendered | marketing sites, docs, blogs |
+| remote | on a server, fetched as JSON | single-page apps with a backend-for-frontend (P3) |
+| local | on the device, such as a worker reading IndexedDB | offline-first apps and PWAs |
+
+Melzin types the contract and doesn't care where it runs. A sync engine (Replicache, PowerSync and
+similar) sits behind a local source; Melzin doesn't build one.
+
+**Routes** (D21, D22). A sketch of the route table:
+
+```json
+{
+  "routes": {
+    "home": { "path": "/", "view": "feed", "code": "eager" },
+    "profile": {
+      "path": "/u/:handle",
+      "view": "profile",
+      "params": { "handle": { "type": "string" } }
+    },
+    "settings": { "path": "/settings", "view": "settings", "code": "lazy", "data": "network-only" }
+  }
+}
+```
+
+Compared with routes from folders (Next, SvelteKit, Nuxt), the table keeps file names free of syntax
+(`[handle]`, `(group)`, `+page`), which frameworks spell differently and models mix up. Every view keeps
+a clean type name in the registry (D16, D17), route settings sit next to the path instead of in
+frontmatter or sidecar files, and URLs can change without moving files. The cost is editing two places
+to add a screen; the checker catches the drift (a route to a missing view, a dead link). Code splitting
+doesn't need folders either: the `$ref` graph (D17) already says which views each route needs.
+
+**Links** (D23). The schema marks a field as a link to a route, the source fills it with a generated
+helper such as `href.profile({ handle })`, and the view binds it:
+`<a m-bind:href="authorUrl">`. Links keep their native behavior (open in a new tab, copy link,
+crawlers), and the host intercepts the ones that stay inside the app.
+
+**Loading** (D24). Views are small (HTML and JSON, no logic) and fixed per build, so code gets a content
+hash and is cached forever; data changes, so it gets a cache policy. The intended timeline:
+
+1. First draw: the page carries the current route's views and data inline, or is prerendered.
+2. Idle: the host downloads the `prefetch` routes in the background, and a generated service worker can
+   cache them for offline use.
+3. Intent: hovering or pressing a link (or the link scrolling into view) fetches that route's code and,
+   if its policy allows, its data.
+4. Navigation: render from the cache when the policy allows, then revalidate. Back and forward redraw
+   the cached state (route, data and `ui`).
+
+A route whose views have no events and no `ui` state needs no JavaScript at all, so a static site
+could ship none on most pages.
+
+**Not decided yet:** how navigation is intercepted and overridden, shared frames across routes (#60),
+not-found and error screens, `ui` state in the URL (`?tab=`), modals as routes, and the details of each
+source's protocol.
 
 ## 8. Preview shell
 
@@ -620,7 +698,10 @@ place the type appears (#59).
     Tailwind's theme holds the tokens and `dark:` handles dark mode (D9), and there's one theme per
     project (D12).
 31. **Routing and multiple screens:** syncing URL and state, a shared app shell, navigation events, deep
-    links to specific UI states. Needed for standalone mode (D7, §7).
+    links to specific UI states. Needed for standalone mode (D7, §7). *Settled in part by D20–D24:
+    pluggable sources, a declared route table, `URLPattern` paths, links as typed fields and loading
+    policies. Still open: navigation events, a shared app shell (#60), `ui` state in the URL, and
+    not-found and error screens.*
 
 ### Tooling and workflow
 
@@ -683,7 +764,8 @@ place the type appears (#59).
 50. **Reviewing AI changes:** if humans never read the file (D1), they review by looking: before/after
     renders of every snapshot, plus the schema diff (§9.3).
 51. **Standalone host** (D7): building only with Melzin means something has to do a host app's job:
-    routing (#31), loading data, sending events, realtime updates. *Shape settled by D11 (§7).*
+    routing (#31), loading data, sending events, realtime updates. *Shape settled by D11 (§7), with
+    routing and data sources settled by D20–D24.*
 
 ### Styling
 
@@ -719,12 +801,18 @@ place the type appears (#59).
 59. **Shared children:** a child used by many screens turns one schema change into many breaking
     changes. The diff reports them per screen (§9.5); the shell could show where each view is used, and
     render every screen that uses a changed child for review (#50).
+60. **Shared frames across routes:** an app shell (nav bar, sidebar) that wraps many routes. The aim is
+    to need no "layout" concept: a frame is an ordinary view with a `<slot>` (D16) that receives a whole
+    screen. Still open: whether the frame stays mounted across navigation (keeping its `ui` state and
+    data), whether it has its own loader, and how slotted screens relate to #56. *Deferred: routes map
+    straight to views for now (D21).*
 
 ## 11. Choosing battles
 
 The ⚑ items change what the file means, so getting one wrong means migrating every file later. The rest
 can be added without breaking anything. Settle the ⚑ items on paper first; put off animations,
-translation, server rendering, form polish, routing and theming.
+translation, server rendering, form polish and theming. Routing's shape is on paper (D20–D24, §7); it
+gets built later, and shared frames across routes (#60) wait until then.
 
 **Next on paper:** the language inside `m-` attributes. It's ⚑ and gates the first prototype. To settle:
 
@@ -776,7 +864,7 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Q5. Where do snapshots live?** *Settled by D8: inside the file, to start.*
 - **Q6. Plain CSS or Tailwind?** *Settled by D9: Tailwind.*
 - **Q7. Exact Vue/Alpine directive names, or a Melzin prefix?** *Settled by D10: `m-`.*
-- **Q8. Is the standalone host in §7 the right shape?** *Settled by D11: yes.*
+- **Q8. Is the standalone host in §7 the right shape?** *Settled by D11: yes, amended by D20–D21.*
 - **Q9. Where does the Tailwind theme live?** *Settled by D12: one theme per project.*
 - **Q10. Which directives, exactly?** *Settled by D13: Vue's set.*
 - **Q11. Can the view see how an event ended?** Lean: yes, through a built-in status per event (idle,
@@ -871,6 +959,9 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   Every declared event needs one (D15).
 - **Host:** whatever feeds a view its `data` and handles its events: the app embedding it, or Melzin's
   standalone host.
+- **Route:** a named entry in the route table that maps a `URLPattern` path to a view (D21, D22).
+- **Source:** the code that loads a route's data and handles its events: static (build time), remote
+  (a server) or local (on the device) (D20).
 - **Snapshot:** a named state (`data` + `ui`) that renders the UI in one particular situation.
 - **Sample, default, placeholder:** see P4.
 - **Render:** one live instance of the view in the shell, for one snapshot at one viewport size.
@@ -903,3 +994,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   encapsulated children). Added §9.5, complications #56–#59 and Q12.
 - 2026-10-17: conditionals built ahead of the language battle, with a provisional condition syntax, and
   the profile example that uses them (POC.md §14).
+- 2026-10-17: routing on paper. D20–D24 (pluggable sources, a declared route table, `URLPattern`
+  paths, links as typed fields with no URL building in views, loading policies per route); D11 amended.
+  Expanded §7 and added complication #60 (shared frames across routes, deferred).
