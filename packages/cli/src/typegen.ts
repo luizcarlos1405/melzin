@@ -2,17 +2,31 @@
 // a stale types file).
 
 import { basename, dirname, join, relative, sep } from 'node:path'
-import { type FieldSchema, type MelzinSchema, type ObjectSchema, ROUTES_FILE, type RouteTable, VIEW_FILE_SUFFIX } from 'melzin/core'
+import {
+  type EventSchema,
+  type FieldSchema,
+  type MelzinSchema,
+  type ObjectSchema,
+  type PayloadSchema,
+  ROUTES_FILE,
+  type RouteTable,
+  VIEW_FILE_SUFFIX,
+} from 'melzin/core'
 
 const EMPTY = 'Record<string, never>'
 
-function comment(description: string | undefined, indent: string): string[] {
-  if (description === undefined || description.trim() === '') return []
-  const text = description.replace(/\s+/g, ' ').trim().replaceAll('*/', '*\\/')
-  return [`${indent}/** ${text} */`]
+/** A description as one line of comment text, or undefined when there's none. */
+function commentText(description: string | undefined): string | undefined {
+  if (description === undefined || description.trim() === '') return undefined
+  return description.replace(/\s+/g, ' ').trim().replaceAll('*/', '*\\/')
 }
 
-function objectType(object: ObjectSchema, indent: string): string {
+function comment(description: string | undefined, indent: string): string[] {
+  const text = commentText(description)
+  return text === undefined ? [] : [`${indent}/** ${text} */`]
+}
+
+function objectType(object: ObjectSchema | PayloadSchema, indent: string): string {
   const entries = Object.entries(object.properties)
   if (entries.length === 0) return EMPTY
   const required = new Set(object.required ?? [])
@@ -33,13 +47,36 @@ function fieldType(field: FieldSchema, indent: string): string {
   return field.route !== undefined ? `Href<'${field.route}'>` : field.type
 }
 
+/**
+ * An event's payload (SPEC D35): inline, `{ optionId: string; note?: string }`, unless a field has a
+ * description, which then goes above it as a comment, one field per line.
+ */
+function payloadType(payload: PayloadSchema, indent: string): string {
+  const entries = Object.entries(payload.properties)
+  if (entries.length === 0) return EMPTY
+  if (entries.some(([, field]) => commentText(field.description) !== undefined)) return objectType(payload, indent)
+  const required = new Set(payload.required ?? [])
+  return `{ ${entries.map(([name, field]) => `${name}${required.has(name) ? '' : '?'}: ${fieldType(field, indent)}`).join('; ')} }`
+}
+
+/** The event's description, with the payload's as its @param. */
+function eventComment(event: EventSchema, indent: string): string[] {
+  const own = commentText(event.description)
+  const payload = commentText(event.payload?.description)
+  if (payload === undefined) return comment(own, indent)
+  if (own === undefined) return [`${indent}/** @param payload ${payload} */`]
+  return [`${indent}/**`, `${indent} * ${own}`, `${indent} * @param payload ${payload}`, `${indent} */`]
+}
+
+/** One handler per event; an event without a payload calls its handler with undefined. */
 function handlersType(events: MelzinSchema['events']): string {
   const entries = Object.entries(events ?? {})
   if (entries.length === 0) return EMPTY
   const lines = ['{']
   for (const [name, event] of entries) {
-    lines.push(...comment(event.description, '  '))
-    lines.push(`  ${name}: (payload?: undefined) => void`)
+    lines.push(...eventComment(event, '  '))
+    const parameter = event.payload === undefined ? 'payload?: undefined' : `payload: ${payloadType(event.payload, '  ')}`
+    lines.push(`  ${name}: (${parameter}) => void`)
   }
   lines.push('}')
   return lines.join('\n')

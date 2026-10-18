@@ -30,10 +30,27 @@ const HOME = view(
   '<a m-bind:href="anaUrl">Ana</a>',
   { s: { data: { anaUrl: '/u/ana' } } },
 )
+// A list of links (D34) and an event with a payload (D35).
 const PROFILE = view(
-  { data: { type: 'object', properties: { name: { type: 'string' }, homeUrl: { type: 'string', route: 'home' } }, required: ['name'] }, events: { follow: {} } },
-  `<h1 m-text="name"></h1><a m-bind:href="homeUrl">Home</a><button m-on:click="emit('follow')">Follow</button>`,
-  { s: { data: { name: 'Ana', homeUrl: '/' } } },
+  {
+    data: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        homeUrl: { type: 'string', route: 'home' },
+        followers: {
+          type: 'array',
+          key: 'handle',
+          items: { type: 'object', properties: { handle: { type: 'string' }, url: { type: 'string', route: 'profile' } }, required: ['handle', 'url'] },
+        },
+      },
+      required: ['name'],
+    },
+    events: { follow: { payload: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'] } } },
+  },
+  `<h1 m-text="name"></h1><a m-bind:href="homeUrl">Home</a><button m-on:click="emit('follow', { handle: route.params.handle })">Follow</button>
+<ul><li m-for="follower in followers"><a m-bind:href="follower.url" m-text="follower.handle"></a></li></ul>`,
+  { s: { data: { name: 'Ana', homeUrl: '/', followers: [] }, route: { params: { handle: 'ana' } } } },
 )
 const CARD = view({ data: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } }, '<p m-text="name"></p>', { s: { data: { name: 'Ana' } } })
 
@@ -111,8 +128,12 @@ describe('a typed app', () => {
           source: {
             home: { load: ({ query }) => ({ anaUrl: href('profile', { handle: 'ana' }, { as: query.as }) }) },
             profile: {
-              load: async ({ params }) => ({ name: params.handle, homeUrl: href('home') }),
-              on: { follow: (_payload, page) => page.update({ name: page.data.name }) },
+              load: async ({ params }) => ({
+                name: params.handle,
+                homeUrl: href('home'),
+                followers: [{ handle: 'bo', url: href('profile', { handle: 'bo' }) }],
+              }),
+              on: { follow: ({ handle }, page) => page.update({ ...page.data, name: handle }) },
             },
             profileCard: { load: () => ({ name: 'x' }) },
           },
@@ -170,6 +191,32 @@ describe('a typed app', () => {
           source: {
             home: { load: () => ({ anaUrl: hrefs<Routes>(routes)('profile', { handle: 'a' }) }) },
             profile: { load: () => ({ name: 'x' }), on: { follow() {} } },
+          },
+        })`,
+    },
+    {
+      file: 'app-wrong-payload.ts',
+      errors: ['TS2322'],
+      body: `
+        await startApp<Routes>(el, {
+          routes,
+          source: {
+            home: { load: () => ({ anaUrl: hrefs<Routes>(routes)('profile', { handle: 'a' }) }) },
+            profile: { load: () => ({ name: 'x' }), on: { follow: (payload: { handle: number }) => { void payload } } },
+            profileCard: { load: () => ({ name: 'x' }) },
+          },
+        })`,
+    },
+    {
+      file: 'app-hand-built-item-link.ts',
+      errors: ['TS2322'],
+      body: `
+        await startApp<Routes>(el, {
+          routes,
+          source: {
+            home: { load: () => ({ anaUrl: hrefs<Routes>(routes)('profile', { handle: 'a' }) }) },
+            profile: { load: () => ({ name: 'x', followers: [{ handle: 'bo', url: '/u/bo' }] }), on: { follow() {} } },
+            profileCard: { load: () => ({ name: 'x' }) },
           },
         })`,
     },

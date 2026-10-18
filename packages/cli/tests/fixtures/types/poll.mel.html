@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>T</title>
+  <script type="melzin/schema">
+{
+  "data": {
+    "type": "object",
+    "properties": {
+      "question": { "type": "string" },
+      "options": {
+        "type": "array",
+        "key": "id",
+        "description": "In the order to show",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "label": { "type": "string" },
+            "votes": { "type": "number", "description": "Votes so far" },
+            "note": { "type": "string" },
+            "mine": { "type": "boolean", "description": "The viewer's vote" }
+          },
+          "required": ["id", "label", "votes", "mine"]
+        },
+        "minItems": 2
+      },
+      "tags": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+    },
+    "required": ["question", "options"]
+  },
+  "events": {
+    "vote": {
+      "description": "One vote for an option",
+      "payload": {
+        "type": "object",
+        "properties": { "optionId": { "type": "string" }, "note": { "type": "string" } },
+        "required": ["optionId"]
+      }
+    },
+    "pick": {
+      "payload": {
+        "type": "object",
+        "description": "The option to show first",
+        "properties": { "votes": { "type": "number", "description": "Its votes" }, "mine": { "type": "boolean" } },
+        "required": ["votes", "mine"]
+      }
+    },
+    "reset": {}
+  }
+}
+  </script>
+  <script type="melzin/snapshots">
+{
+  "close race": { "data": { "question": "Lunch?", "options": [{ "id": "a", "label": "A", "votes": 2, "note": "hot", "mine": true }, { "id": "b", "label": "B", "votes": 1, "mine": false }], "tags": ["food", "fun"] } },
+  "no tags": { "data": { "question": "Lunch?", "options": [{ "id": "a", "label": "A", "votes": 0, "mine": false }, { "id": "b", "label": "B", "votes": 0, "mine": false }] } }
+}
+  </script>
+</head>
+<body>
+  <h1 m-text="question"></h1>
+  <ul>
+    <li m-for="option in options">
+      <span m-text="option.label"></span> <span m-text="option.votes"></span>
+      <button m-on:click="emit('vote', { optionId: option.id, note: option.note })">Vote</button>
+      <button m-on:click="emit('pick', { votes: option.votes, mine: option.mine })">Pick</button>
+    </li>
+  </ul>
+  <p m-for="tag in tags" m-text="tag"></p>
+  <button m-on:click="emit('reset')">Reset</button>
+</body>
+</html>

@@ -1,5 +1,6 @@
 // The generated types against the real `mount` signature, checked by tsc: correct hosts pass; a
-// missing handler, an extra handler and wrong data fail (D15).
+// missing handler, an extra handler, wrong data and a handler that takes the wrong payload fail (D15,
+// D35).
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -118,13 +119,68 @@ const hosts: Host[] = [
     errors: ['TS2322'],
     body: `await mount<Data, Handlers>(el, '/v', { data: {}, on: { anything() {} } })`,
   },
+  // Lists (D34) and payloads (D35).
+  {
+    file: 'poll-ok.ts',
+    types: 'poll',
+    errors: [],
+    body: `
+      const options = [{ id: 'a', label: 'A', votes: 0, mine: false }, { id: 'b', label: 'B', votes: 2, mine: true, note: 'hot' }]
+      const view = await mount<Data, Handlers>(el, '/v', {
+        data: { question: 'Lunch?', options, tags: ['food'] },
+        on: {
+          vote: ({ optionId, note }) => {
+            const id: string = optionId
+            const extra: string | undefined = note
+            view.update({ ...view.data, options: view.data.options.map((option) => (option.id === id ? { ...option, votes: option.votes + 1 } : option)) })
+            void extra
+          },
+          pick: (payload) => { const votes: number = payload.votes; void votes },
+          reset: (payload) => { const nothing: undefined = payload; void nothing },
+        },
+      })`,
+  },
+  {
+    file: 'poll-wrong-payload.ts',
+    types: 'poll',
+    errors: ['TS2322'],
+    mentions: 'optionId',
+    body: `await mount<Data, Handlers>(el, '/v', {
+        data: { question: 'Q', options: [] },
+        on: { vote: (payload: { optionId: number }) => { void payload }, pick() {}, reset() {} },
+      })`,
+  },
+  {
+    file: 'poll-payload-field-it-lacks.ts',
+    types: 'poll',
+    errors: ['TS2322'],
+    body: `await mount<Data, Handlers>(el, '/v', {
+        data: { question: 'Q', options: [] },
+        on: { vote: (payload: { optionId: string; userId: string }) => { void payload }, pick() {}, reset() {} },
+      })`,
+  },
+  {
+    file: 'poll-wrong-item.ts',
+    types: 'poll',
+    errors: ['TS2322'],
+    body: `await mount<Data, Handlers>(el, '/v', {
+        data: { question: 'Q', options: [{ id: 'a', label: 'A', votes: '3', mine: false }] },
+        on: { vote() {}, pick() {}, reset() {} },
+      })`,
+  },
+  {
+    file: 'poll-list-of-strings.ts',
+    types: 'poll',
+    errors: ['TS2322'],
+    body: `await mount<Data, Handlers>(el, '/v', { data: { question: 'Q', options: [], tags: [1, 2] }, on: { vote() {}, pick() {}, reset() {} } })`,
+  },
 ]
 
 let output = ''
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), 'melzin-tsc-'))
-  for (const name of ['counter', 'nested', 'no-data', 'no-events']) {
+  for (const name of ['counter', 'nested', 'no-data', 'no-events', 'poll']) {
     const view = await loadViewFile(join(fixtures, `${name}.mel.html`))
     writeFileSync(join(dir, `${name}.types.ts`), generateTypes(view.schema, `${name}.mel.html`))
   }

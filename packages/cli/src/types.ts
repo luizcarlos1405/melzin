@@ -1,7 +1,8 @@
 // `melzin types`: TypeScript types for a view's host, generated from its schema. `Handlers` has one
-// required function per declared event, so a host that misses one (or adds an undeclared one) fails
-// its type check (D15). For routes.json it writes routes.types.ts, the types of a typed source (D20),
-// and the types of every view a route shows.
+// required function per declared event, taking the event's payload (D35), so a host that misses one,
+// adds an undeclared one or expects another payload fails its type check (D15). Lists are arrays of
+// their items (D34). For routes.json it writes routes.types.ts, the types of a typed source (D20), and
+// the types of every view a route shows.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
