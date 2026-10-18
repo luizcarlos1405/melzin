@@ -288,6 +288,52 @@ describe('payloadFixMessage', () => {
     expect(fixOf("emit('pick', { '1': member.handle })", members)).toBe("write field names without quotes: { handle: member.handle }")
   })
 
+  test('in nested rows, a field named after a row gets that row\'s key, and no other guess', () => {
+    const board = valid({
+      data: {
+        type: 'object',
+        properties: {
+          groups: {
+            type: 'array',
+            key: 'gid',
+            items: {
+              type: 'object',
+              properties: {
+                gid: { type: 'string' },
+                members: {
+                  type: 'array',
+                  key: 'handle',
+                  items: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'] },
+                },
+              },
+              required: ['gid', 'members'],
+            },
+          },
+        },
+        required: ['groups'],
+      },
+      events: {
+        two: { payload: { type: 'object', properties: { groupId: { type: 'string' }, memberHandle: { type: 'string' }, other: { type: 'string' } }, required: ['groupId', 'memberHandle'] } },
+        three: { payload: { type: 'object', properties: { groupId: { type: 'string' }, other: { type: 'string' } }, required: ['other'] } },
+      },
+    })
+    const outer = resolveList(board, 'group', ['groups'])
+    if (!outer.ok) throw new Error(outer.message)
+    const inner = resolveList(board, 'member', ['group', 'members'], outer.scope)
+    if (!inner.ok) throw new Error(inner.message)
+    const fix = (value: string): string => {
+      const parsed = parseClickDirective(value)
+      if (parsed.ok || parsed.fix === undefined) throw new Error(`expected a payload fix for ${value}`)
+      return payloadFixMessage(board, parsed.fix, inner.scope)
+    }
+    expect(fix("emit('two', { groupId })")).toBe("write the value's path too: { groupId: group.gid }")
+    expect(fix("emit('two', $event)")).toBe("a payload is an object of named fields: emit('two', { groupId: group.gid, memberHandle: member.handle })")
+    // Named after no row: with two rows in scope, any key would be a guess that passes the checker.
+    expect(fix("emit('three', $event)")).toBe("a payload is an object of named fields: emit('three', { other: <path> })")
+    // A short alias isn't the start of a longer word: 'm' doesn't name 'memberHandle'.
+    expect(payloadFixMessage(board, { kind: 'shorthand', callee: 'emit', event: 'two', name: 'memberHandle' }, inner.scope)).toBe("write the value's path too: { memberHandle: member.handle }")
+  })
+
   test("an event without a payload sends none; an undeclared one gets the parse error's own message", () => {
     expect(fixOf("emit('clear', member.handle)", members)).toBe("event 'clear' has no payload; send emit('clear'), or declare its payload in the schema's events")
     expect(fixOf("emit('clear', { x })", members)).toBe("event 'clear' has no payload; send emit('clear'), or declare its payload in the schema's events")

@@ -1064,7 +1064,9 @@ the reviewers' reproductions were run again. What changed:
 - **Messages name the fix with the names in scope.** Payload fixes use the event's declared fields
   and the row's alias, in the checker and the runtime alike (core's `payloadFixMessage`):
   `emit('pick', member.handle)` gets `emit('pick', { handle: member.handle })`, where it used to
-  suggest `{ memberHandle: member.handle }`, and other forms a hard-coded `option.id`. A count compared
+  suggest `{ memberHandle: member.handle }`, and other forms a hard-coded `option.id`. In nested rows a
+  field only gets the key of a row it's named after (`groupId` gets `group.gid`), and otherwise
+  `<path>`, since a wrong key would pass the checker. A count compared
   with 0 or 1 points at `m-if="members.length"` or `m-if="!members.length"`, `members.lenght` gets a
   did-you-mean, and a bare item field in a row points at `member.name`. `v-for`, `:class` and `:title`
   get the `m-*` form and its workaround, `m-bind:href` built from parts says views never build URLs,

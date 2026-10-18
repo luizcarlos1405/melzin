@@ -121,11 +121,21 @@ export function buildPayload(
   return result
 }
 
+/** Whether a payload field is named after a row's alias: `optionId` and `option` after `option`. */
+function namedAfter(name: string, alias: string): boolean {
+  if (!name.startsWith(alias)) return false
+  const next = name.charAt(alias.length)
+  return next === '' || next === '_' || (next >= 'A' && next <= 'Z')
+}
+
 /**
  * A path that could fill the payload field `name` (of `type`, when declared), for the fix of a payload
  * that doesn't parse: an item field of that name in the rows in scope (innermost first), a string or
- * number item named like it, a data field of that name, or else the innermost row's key (`option.id`)
- * or item. Only paths that resolve to a leaf of the field's type count; undefined when none does.
+ * number item named like it, a data field of that name, or else the key (or the item) of the row the
+ * field is named after (`option.id` for `optionId`). With one row in scope, its key is the guess even
+ * when the name says nothing; with nested rows a wrong guess would pass the checker and send the wrong
+ * item's key, so there's none. Only paths that resolve to a leaf of the field's type count; undefined
+ * when none does.
  */
 function pathFor(schema: MelzinSchema | null | undefined, name: string, type: LeafType | undefined, scope: Scope | undefined): string | undefined {
   const rows = [...(scope ?? [])].reverse()
@@ -135,9 +145,9 @@ function pathFor(schema: MelzinSchema | null | undefined, name: string, type: Le
     if (items.type === 'object' ? Object.hasOwn(items.properties, name) : alias === name) candidates.push(items.type === 'object' ? [alias, name] : [alias])
   }
   candidates.push([name])
-  const innermost = rows[0]
-  if (innermost !== undefined) {
-    const [alias, entry] = innermost
+  const row = rows.find(([alias]) => namedAfter(name, alias)) ?? (rows.length === 1 ? rows[0] : undefined)
+  if (row !== undefined) {
+    const [alias, entry] = row
     if (entry.list.items.type !== 'object') candidates.push([alias])
     else if (entry.list.key !== undefined) candidates.push([alias, entry.list.key])
   }
