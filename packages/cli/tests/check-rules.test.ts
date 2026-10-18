@@ -474,7 +474,7 @@ const warnings: Case[] = [
   },  {
     file: 'mustache.mel.html',
     severity: 'warning',
-    message: "'{{ count }}' isn't Melzin syntax and would show as is; bind an empty element instead: <span m-text=\"name\"></span>",
+    message: "'{{ count }}' isn't Melzin syntax and would show as is; bind an empty element instead: <span m-text=\"count\"></span>",
     at: pos('mustache.mel.html', '{{'),
   },
   {
@@ -536,7 +536,7 @@ const warnings: Case[] = [
   {
     file: 'row-id.mel.html',
     severity: 'warning',
-    message: 'every row gets the same id; ids must be unique in a page',
+    message: 'every row gets the same id, but ids must be unique in a page; remove the id',
     at: pos('row-id.mel.html', 'id="member"'),
   },
   {

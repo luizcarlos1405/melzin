@@ -848,6 +848,10 @@ export function resolveField(schema: MelzinSchema | null | undefined, segments: 
       return { ok: true, field: { type: 'number' }, required, length: node }
     }
     if (node.type !== 'object') {
+      // `title.length` in a condition: the string alone already says whether it's empty.
+      if (node.type === 'string' && segment === 'length' && i === segments.length - 1) {
+        return { ok: false, message: `'${before}' is a string and has no length; a condition on '${before}' itself holds when it isn't empty` }
+      }
       return { ok: false, message: `'${before}' is a ${node.type} and has no fields` }
     }
     const child: FieldSchema | undefined = Object.hasOwn(node.properties, segment) ? node.properties[segment] : undefined

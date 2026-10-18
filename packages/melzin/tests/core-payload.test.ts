@@ -189,6 +189,9 @@ describe('payloadIssues (D15)', () => {
     ])
     // Undeclared events are reported on their own.
     expect(issues("emit('nope', { id: option.id })")).toEqual([])
+    // A payload without fields is written as such.
+    const empty = { events: { ping: { payload: { type: 'object', properties: {} } } } }
+    expect(payloadIssues(valid(empty), 'ping', undefined, 6)).toEqual([{ message: "event 'ping' has a payload; send it: emit('ping', {})", offset: 6 }])
   })
 
   test('unknown fields, missing required fields and wrong types', () => {

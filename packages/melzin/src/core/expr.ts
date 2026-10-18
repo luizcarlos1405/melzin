@@ -527,9 +527,22 @@ export function parseTextDirective(value: string): TextDirectiveResult {
   return parsePathDirective(TEXT_DIRECTIVE, 'user.name', value)
 }
 
+/** What to do instead of building a URL in m-bind:href (`'/u/' + member.handle`, a template literal, a call). */
+const URL_BUILDING_HINT =
+  'views never build URLs: bind a link field (a string field with "route": "<route name>" in the schema), which the source fills with href() (docs/authoring.md §3)'
+
 /** `m-bind:href="links.profile"` → `['links', 'profile']`: the path of a link field (SPEC D23). */
 export function parseHrefDirective(value: string): TextDirectiveResult {
-  return parsePathDirective(HREF_DIRECTIVE, 'author.profileUrl', value)
+  const result = parsePathDirective(HREF_DIRECTIVE, 'author.profileUrl', value)
+  if (result.ok) return result
+  // A call (href('profile', ...), whatever its arguments), joined strings or a template literal: the URL
+  // is being built.
+  const call = /^\s*[A-Za-z_$][\w$]*\s*\(/.exec(value)
+  if (call !== null) {
+    return { ok: false, message: `${HREF_DIRECTIVE} needs a path such as author.profileUrl, not a call; ${URL_BUILDING_HINT}`, offset: value.search(/\S/) }
+  }
+  const { message, offset } = result
+  return { ok: false, message: ['+', '`'].includes(value.charAt(offset)) ? `${message}; ${URL_BUILDING_HINT}` : message, offset }
 }
 
 // Characters that start the operators a condition might reach for: comparisons, && and ||, arithmetic

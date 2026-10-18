@@ -113,6 +113,10 @@ describe('a broken m-for', () => {
       "error: m-else can't go on an element with m-for: wrap the list in an element with m-else, or put the condition inside the row; to show only some items, have the host filter the list",
     ])
     expect(check(`${LIST}<p m-if="title">x</p><p m-for="tag in members" m-text="tag.name"></p><p m-else>y</p>`)).toEqual([
+      'error: m-else must come right after an element with m-if or m-else-if; an m-for element ends a chain: for when the list is empty, wrap the list in an element with m-if="members.length" and put m-else after the wrapper',
+    ])
+    // Text between them ends the chain anyway, so the hint is only for the element right after the list.
+    expect(check(`${LIST}<p m-for="tag in members" m-text="tag.name"></p> or <p m-else>y</p>`)).toEqual([
       'error: m-else must come right after an element with m-if or m-else-if',
     ])
   })
@@ -162,6 +166,39 @@ describe('loops and bindings the runtime would not run', () => {
     const body = `<h1 m-text="title"></h1><ul><li m-for="member in members">${PICK_ROW.replace("'pick'", "'pik'").replace('<span m-text="member.name"></span>', '')}</li></ul>`
     const named = body.replace('{ handle: member.handle }', '{ handle: member.handle, name: member.name }')
     expect(check(named, PICK)).toEqual([`error: m-on:click: event 'pik' isn't declared in the schema's events (did you mean 'pick'?)`])
+  })
+})
+
+describe('messages that name the fix', () => {
+  test("a mustache's example binds its own path", () => {
+    expect(check(LIST.replace('<span m-text="member.name"></span>', '<span m-text="member.name"></span>{{ member.handle }}'))).toEqual([
+      `warning: '{{ member.handle }}' isn't Melzin syntax and would show as is; bind an empty element instead: <span m-text="member.handle"></span>`,
+    ])
+    expect(check(`${LIST}<p>{{ members.length + 1 }}</p>`)).toEqual([
+      `warning: '{{ members.length + 1 }}' isn't Melzin syntax and would show as is; bind an empty element instead: <span m-text="<path>"></span>`,
+    ])
+  })
+
+  test("a string's length in a condition: the string alone says whether it's empty", () => {
+    expect(check(LIST.replace('<h1 m-text="title"></h1>', '<h1 m-if="title.length" m-text="title"></h1>'))).toEqual([
+      "error: m-if: 'title' is a string and has no length; a condition on 'title' itself holds when it isn't empty",
+    ])
+  })
+
+  test('a URL built in m-bind:href', () => {
+    const builds = 'views never build URLs: bind a link field (a string field with "route": "<route name>" in the schema), which the source fills with href() (docs/authoring.md §3)'
+    const row = (href: string): string => LIST.replace('<span m-text="member.name"></span>', `<a m-bind:href="${href}" m-text="member.name"></a>`)
+    expect(check(row("&#39;/u/&#39; + member.handle"))).toEqual([`error: m-bind:href: unexpected character '+'; ${builds}`])
+    expect(check(row('`/u/${member.handle}`'))).toEqual([`error: m-bind:href: unexpected character '\`'; ${builds}`])
+    expect(check(row('href(&#39;profile&#39;, member.handle)'))).toEqual([`error: m-bind:href: m-bind:href needs a path such as author.profileUrl, not a call; ${builds}`])
+  })
+
+  test('a payload without fields is sent as {}', () => {
+    const schema = { ...SCHEMA, events: { ping: { payload: { type: 'object', properties: {} } } } }
+    expect(check(`${LIST}<button m-on:click="emit('ping')">Ping</button>`, schema)).toEqual([
+      "error: m-on:click: event 'ping' has a payload; send it: emit('ping', {})",
+    ])
+    expect(check(`${LIST}<button m-on:click="emit('ping', {})">Ping</button>`, schema)).toEqual([])
   })
 })
 
@@ -363,7 +400,7 @@ describe('snapshot coverage in rows', () => {
 
   test('a static id inside a row', () => {
     const source = page(LIST.replace('<span m-text', '<span id="name" m-text'), SCHEMA, SNAPSHOTS)
-    expect(checkSource(source)).toEqual([{ ...at(source, 'id="name"'), severity: 'warning', message: 'every row gets the same id; ids must be unique in a page' }])
+    expect(checkSource(source)).toEqual([{ ...at(source, 'id="name"'), severity: 'warning', message: 'every row gets the same id, but ids must be unique in a page; remove the id' }])
   })
 })
 

@@ -307,6 +307,12 @@ describe('resolvePath', () => {
 
   test('leaves have no fields', () => {
     expect(resolvePath(schema, ['user', 'name', 'first'])).toEqual({ ok: false, message: "'user.name' is a string and has no fields" })
+    // A string's length, for a condition: the string alone holds when it isn't empty.
+    expect(resolvePath(schema, ['user', 'name', 'length'])).toEqual({
+      ok: false,
+      message: "'user.name' is a string and has no length; a condition on 'user.name' itself holds when it isn't empty",
+    })
+    expect(resolvePath(schema, ['user', 'name', 'length', 'x'])).toEqual({ ok: false, message: "'user.name' is a string and has no fields" })
   })
 })
 

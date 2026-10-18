@@ -75,8 +75,8 @@ export function payloadIssues(
   const required = declared.required ?? []
   if (payload === undefined) {
     const shown = required.length > 0 ? required : fields.slice(0, 1)
-    const example = shown.map((name) => `${name}: ...`).join(', ')
-    return [{ message: `event '${event}' has a payload; send it: emit('${event}', { ${example} })`, offset }]
+    const example = shown.length === 0 ? '{}' : `{ ${shown.map((name) => `${name}: ...`).join(', ')} }`
+    return [{ message: `event '${event}' has a payload; send it: emit('${event}', ${example})`, offset }]
   }
   const issues: PayloadIssue[] = []
   for (const field of payload.fields) {

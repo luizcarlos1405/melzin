@@ -47,7 +47,13 @@ describe('link fields', () => {
   test('parseHrefDirective', () => {
     expect(parseHrefDirective('links.home')).toEqual({ ok: true, path: ['links', 'home'] })
     expect(parseHrefDirective('!x')).toEqual({ ok: false, message: "m-bind:href needs a path such as author.profileUrl; '!' only works in conditions (m-if, m-show)", offset: 0 })
-    expect(parseHrefDirective("emit('x')")).toEqual({ ok: false, message: 'm-bind:href needs a path such as author.profileUrl, not a call', offset: 0 })
+    const builds = 'views never build URLs: bind a link field (a string field with "route": "<route name>" in the schema), which the source fills with href() (docs/authoring.md §3)'
+    expect(parseHrefDirective("emit('x')")).toEqual({ ok: false, message: `m-bind:href needs a path such as author.profileUrl, not a call; ${builds}`, offset: 0 })
+    // Building the URL in the view: a call, joined strings or a template literal.
+    expect(parseHrefDirective(" href('profile', member.handle)")).toEqual({ ok: false, message: `m-bind:href needs a path such as author.profileUrl, not a call; ${builds}`, offset: 1 })
+    expect(parseHrefDirective("'/u/' + member.handle")).toEqual({ ok: false, message: `unexpected character '+'; ${builds}`, offset: 6 })
+    expect(parseHrefDirective('`/u/${member.handle}`')).toEqual({ ok: false, message: `unexpected character '\`'; ${builds}`, offset: 0 })
+    expect(parseHrefDirective('member..url')).toEqual({ ok: false, message: "expected a name after '.', found '.'", offset: 7 })
   })
 })
 

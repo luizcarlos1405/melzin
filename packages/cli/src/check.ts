@@ -21,6 +21,7 @@ import {
   LIST_ITEMS,
   type ListSchema,
   type MelzinSchema,
+  PATH_PLACEHOLDER,
   ROUTES_FILE,
   ROUTE_INPUT,
   type RouteRef,
@@ -1004,12 +1005,15 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     const location = node.sourceCodeLocation
     const raw = location ? source.slice(location.startOffset, location.endOffset) : node.value
     const at = (location?.startOffset ?? 0) + Math.max(0, raw.indexOf('{{'))
-    warning(at, `'${match[0]}' isn't Melzin syntax and would show as is; bind an empty element instead: <span ${TEXT_DIRECTIVE}="name"></span>`)
+    // The mustache's own path when it is one: {{ member.name }} → m-text="member.name".
+    const inner = parseTextDirective(match[0].slice(2, -2))
+    const path = inner.ok ? inner.path.join('.') : PATH_PLACEHOLDER
+    warning(at, `'${match[0]}' isn't Melzin syntax and would show as is; bind an empty element instead: <span ${TEXT_DIRECTIVE}="${path}"></span>`)
   }
 
   // An element's directives and attributes. Returns the m-if chain that continues after it, if any; an
   // m-for element is never part of one, so it ends the chain before it.
-  const checkElement = (node: Element, context: Context, chain: Chain | undefined): Chain | undefined => {
+  const checkElement = (node: Element, context: Context, chain: Chain | undefined, after: Element | undefined): Chain | undefined => {
     const offset = startOf(node) ?? 0
     const nameOf = attributeName
     const attributeAt = (name: string): number => node.sourceCodeLocation?.attrs?.[name]?.startOffset ?? offset
@@ -1038,7 +1042,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         const attribute = attributeProblem(name, attr.value)
         if (attribute !== undefined) error(at, attribute.message)
         else if (name === 'href' && (node.tagName === 'a' || node.tagName === 'area')) staticLinks.push({ href: attr.value, offset: at })
-        if (name === 'id' && row.inRow) warning(at, 'every row gets the same id; ids must be unique in a page')
+        if (name === 'id' && row.inRow) warning(at, 'every row gets the same id, but ids must be unique in a page; remove the id')
       } else if (kind.kind === 'foreign' && FOREIGN_LOOPS.has(name)) {
         // The m-for to write, with the loop's own names: m-for="member in members".
         const { alias, list } = looseLoop(attr.value)
@@ -1078,7 +1082,14 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     let next: Chain | undefined
     if (role !== undefined && role.directive !== IF_DIRECTIVE) {
       if (chain === undefined) {
-        error(role.at, `${role.directive} must come right after an element with ${IF_DIRECTIVE} or ${ELSE_IF_DIRECTIVE}`)
+        // Right after a list: what the author likely means is the list's empty state.
+        const loop = after === undefined ? undefined : getAttr(after, FOR_DIRECTIVE)
+        const parsed = loop === undefined ? undefined : parseForDirective(loop)
+        const list = parsed?.ok ? parsed.path.join('.') : '<list>'
+        const hint = loop === undefined
+          ? ''
+          : `; an ${FOR_DIRECTIVE} element ends a chain: for when the list is empty, wrap the list in an element with ${IF_DIRECTIVE}="${list}.length" and put ${role.directive} after the wrapper`
+        error(role.at, `${role.directive} must come right after an element with ${IF_DIRECTIVE} or ${ELSE_IF_DIRECTIVE}${hint}`)
       } else {
         previous = chain.conditions
       }
@@ -1123,10 +1134,15 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   // walked in order, so an m-else-if or m-else knows the chain it continues.
   const walkNodes = (nodes: ChildNode[], context: Context): void => {
     let chain: Chain | undefined
+    // The element sibling right before, with only whitespace and comments between.
+    let previous: Element | undefined
     for (const node of nodes) {
       if (isText(node)) {
         checkMustache(node)
-        if (!isInterElementWhitespace(node.value)) chain = undefined
+        if (!isInterElementWhitespace(node.value)) {
+          chain = undefined
+          previous = undefined
+        }
         continue
       }
       if (!isElement(node)) continue // comments don't end a chain
@@ -1142,10 +1158,12 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
           const inside = droppedBindings(node)
           if (inside.sends) broken.click = true
           if (inside.reads) broken.markup = true
+          previous = undefined
           continue
         }
       }
-      chain = checkElement(node, context, chain)
+      chain = checkElement(node, context, chain, previous)
+      previous = node
     }
   }
   walkNodes(bodyNodes, { gate: undefined, scope: undefined, inRow: false, lenient: undefined })
