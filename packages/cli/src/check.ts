@@ -161,6 +161,7 @@ const JSON_ESCAPES: Readonly<Record<string, string>> = {
   r: '\r',
   t: '\t',
 }
+const UNTERMINATED_STRING = 'unterminated string'
 const NUMBER_RE = /-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/y
 const WORD_RE = /[A-Za-z0-9_$.+-]+/y
 
@@ -308,7 +309,7 @@ class JsonParser {
     this.pos++ // "
     let value = ''
     for (;;) {
-      if (this.pos >= this.text.length) throw new JsonSyntaxError('unterminated string', start)
+      if (this.pos >= this.text.length) throw new JsonSyntaxError(UNTERMINATED_STRING, start)
       const ch = this.text.charAt(this.pos)
       if (ch === '"') {
         this.pos++
@@ -405,6 +406,33 @@ type DataBlock = {
   text: string
   /** Offset of `text` in the source. */
   textStart: number
+  /** Where a `</script>` inside one of its JSON strings ended the block, if one did (see scriptEndCut). */
+  cutAt?: number
+}
+
+/**
+ * Where a data block's JSON was cut short by a `</script>` inside one of its strings, which ends the
+ * block in HTML: the offset of that tag, and the source the rest of the JSON spilled into (up to and
+ * with the `</script>` meant to end the block). Undefined unless the JSON, continued up to a later
+ * `</script>`, parses whole.
+ */
+function scriptEndCut(
+  source: string,
+  textStart: number,
+  text: string,
+  endTag: { startOffset: number; endOffset: number } | undefined,
+): { at: number; spill: [number, number] } | undefined {
+  if (endTag === undefined) return undefined
+  const parsed = parseJsonWithLocations(text)
+  if (parsed.ok || parsed.message !== UNTERMINATED_STRING) return undefined
+  const close = /<\/script(?=[\s/>])[^>]*>?/gi
+  close.lastIndex = endTag.endOffset
+  for (let match = close.exec(source); match !== null; match = close.exec(source)) {
+    const whole = parseJsonWithLocations(source.slice(textStart, match.index))
+    if (whole.ok) return { at: endTag.startOffset, spill: [endTag.endOffset, match.index + match[0].length] }
+    if (whole.message !== UNTERMINATED_STRING) return undefined
+  }
+  return undefined
 }
 
 type Analysis = { diagnostics: Diagnostic[]; view: LoadedView }
@@ -569,7 +597,22 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   let title: string | undefined
   let description: string | undefined
   const blocks = new Map<DataBlockType, DataBlock>()
+  // Source a data block's JSON spilled into after a `</script>` in one of its strings: what the parser
+  // made of it is reported as that block's error, not as head content.
+  const spills: [number, number][] = []
+  const spilled = (node: ChildNode): boolean => {
+    const location = node.sourceCodeLocation
+    if (location == null) return false
+    return spills.some(([start, end]) => {
+      if (location.startOffset < start || location.startOffset >= end) return false
+      // Text may run on past the block's real end (over the end tags HTML ignores there); an element
+      // that does holds what comes after, which is checked as usual.
+      if (!isText(node)) return location.endOffset <= end
+      return !/\S/.test(source.slice(end, location.endOffset).replace(/<[^>]*>/g, ''))
+    })
+  }
   for (const node of headNodes) {
+    if (spilled(node)) continue
     const offset = startOf(node) ?? 0
     if (isText(node)) {
       const lead = node.value.search(/\S/)
@@ -595,15 +638,17 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         error(offset, `<script> isn't allowed in <head>; views have no scripts, only the melzin/schema and melzin/snapshots data blocks`)
         continue
       }
+      const content = node.childNodes.find(isText)?.sourceCodeLocation
+      const textStart = content?.startOffset ?? node.sourceCodeLocation?.startTag?.endOffset ?? offset
+      const text = content ? source.slice(content.startOffset, content.endOffset) : ''
+      const cut = scriptEndCut(source, textStart, text, node.sourceCodeLocation?.endTag ?? undefined)
+      if (cut !== undefined) spills.push(cut.spill)
       if (blocks.has(blockType)) {
         error(offset, `duplicate ${blockType} block; a view has at most one`)
         issues.push({ message: `duplicate ${blockType} block; a view has at most one` })
         continue
       }
-      const content = node.childNodes.find(isText)?.sourceCodeLocation
-      const textStart = content?.startOffset ?? node.sourceCodeLocation?.startTag?.endOffset ?? offset
-      const text = content ? source.slice(content.startOffset, content.endOffset) : ''
-      blocks.set(blockType, { type: blockType, element: node, text, textStart })
+      blocks.set(blockType, { type: blockType, element: node, text, textStart, cutAt: cut?.at })
       continue
     }
     const styling = tag === 'link' || tag === 'style' ? ' (styling is Tailwind classes only)' : ''
@@ -619,8 +664,11 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   const parseBlock = (block: DataBlock, options: JsonParseOptions): JsonParseResult => {
     const result = parseJsonWithLocations(block.text, options)
     if (!result.ok) {
-      const message = `invalid JSON in the ${block.type} block: ${result.message}`
-      error(block.textStart + result.offset, message)
+      const cut = block.cutAt !== undefined
+      const message = cut
+        ? `invalid JSON in the ${block.type} block: a '</script>' inside a string ends the block here; write it as '<\\/script>'`
+        : `invalid JSON in the ${block.type} block: ${result.message}`
+      error(cut ? block.cutAt! : block.textStart + result.offset, message)
       issues.push({ message })
     }
     return result

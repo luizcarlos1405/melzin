@@ -133,6 +133,35 @@ describe('invalid schema', () => {
   })
 })
 
+describe("a '</script>' inside a data block's string", () => {
+  const CUT = "invalid JSON in the melzin/snapshots block: a '</script>' inside a string ends the block here; write it as '<\\/script>'"
+
+  test('is the only error, at the tag that ends the block: what it spilled into the head is not reported', () => {
+    const source = page(CLEAN_BODY, { snapshots: '{ "hostile": { "data": { "count": 0, "note": "<script>alert(1)</script> & <img src=x onerror=alert(2)>" } } }' })
+    expect(checkSource(source)).toEqual([{ ...at(source, '</script> &'), severity: 'error', message: CUT }])
+    // Two of them, the second written in capitals: reported one at a time.
+    const two = page(CLEAN_BODY, { snapshots: '{ "a": { "data": { "count": 0 }, "note": "x</script>y" }, "b": { "data": { "count": 1 }, "note": "</SCRIPT >" } }' })
+    expect(checkSource(two)).toEqual([{ ...at(two, '</script>y'), severity: 'error', message: CUT }])
+    // In the schema block too.
+    const schema = page(CLEAN_BODY, { schema: SCHEMA.replace('{ "type": "number" }', '{ "type": "number", "description": "no </script> in here" }') })
+    expect(messages(checkSource(schema))).toEqual([
+      "error: invalid JSON in the melzin/schema block: a '</script>' inside a string ends the block here; write it as '<\\/script>'",
+    ])
+  })
+
+  test("written as '<\\/script>', it's fine; a string left open is still 'unterminated string'", () => {
+    expect(messages(checkSource(page(CLEAN_BODY, { snapshots: '{ "zero <\\/script>": { "data": { "count": 0 } } }' })))).toEqual([])
+    expect(messages(checkSource(page(CLEAN_BODY, { snapshots: '{ "zero": { "data": { "count": 0 }, "note": "open } }' })))).toEqual([
+      'error: invalid JSON in the melzin/snapshots block: unterminated string',
+    ])
+  })
+
+  test('an element it spilled that holds what comes after is still reported', () => {
+    const source = page(CLEAN_BODY, { snapshots: '{ "zero": { "data": { "count": 0 }, "note": "</script><div>" } }' })
+    expect(messages(checkSource(source))).toContain(`error: <div> isn't allowed in <head>; it may only hold <title>, <meta> and the melzin/schema and melzin/snapshots blocks`)
+  })
+})
+
 describe('markup', () => {
   test('directive names are case-insensitive (HTML lowercases them)', () => {
     expect(checkSource(page(`<p M-TEXT="count"></p><button M-ON:CLICK="emit('increment')">+</button>`))).toEqual([])
