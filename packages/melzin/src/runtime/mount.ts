@@ -51,6 +51,7 @@ import {
   valueOrDefault,
   withAlias,
 } from '../core/index.ts'
+import * as dom from './dom.ts'
 import { parseDocument, readSchemaBlock } from './viewdoc.ts'
 
 export type Handlers = object
@@ -103,7 +104,7 @@ type Plan = {
   hrefs: { at: NodePath; segments: readonly string[] }[]
   shows: { at: NodePath; test: Test }[]
   clicks: { at: NodePath; send: Send }[]
-  chains: { branches: { at: NodePath; test: Test }[] }[]
+  chains: { anchor: NodePath; branches: { at: NodePath; test: Test }[] }[]
   lists: ListPlan[]
 }
 /**
@@ -149,9 +150,6 @@ type Block = {
   lists: ListBinding[]
 }
 
-/** Browsers with Element.prototype.moveBefore move a node without resetting it (focus, animations, iframes). */
-type MovingParent = Node & { moveBefore?: (node: Node, child: Node | null) => void }
-
 const ELEMENT_NODE = 1
 const TEXT_NODE = 3
 const COMMENT_NODE = 8
@@ -189,12 +187,12 @@ function formatIssues(issues: readonly Issue[]): string {
 }
 
 function describeElement(el: Element, attribute: string, value: string): string {
-  return `<${el.tagName.toLowerCase()} ${attribute}${value === '' ? '' : `="${value}"`}>`
+  return `<${dom.tagName(el).toLowerCase()} ${attribute}${value === '' ? '' : `="${value}"`}>`
 }
 
 /** The element's m-if, m-else-if or m-else: the first one, if it has several. */
 function chainRole(el: Element): ChainDirective | undefined {
-  return el.getAttributeNames().find(isChainDirective)
+  return dom.getAttributeNames(el).find(isChainDirective)
 }
 
 /** Text for a value: primitives through String(); objects (wrong data, already warned about) show nothing. */
@@ -206,9 +204,9 @@ function toText(value: unknown): string {
 /** The child indexes that lead from `root` down to `node`. */
 function pathOf(node: Node, root: Node): number[] {
   const path: number[] = []
-  for (let at = node; at !== root; at = at.parentNode!) {
+  for (let at = node; at !== root; at = dom.parentNode(at)!) {
     let index = 0
-    for (let sibling = at.previousSibling; sibling !== null; sibling = sibling.previousSibling) index++
+    for (let sibling = dom.previousSibling(at); sibling !== null; sibling = dom.previousSibling(sibling)) index++
     path.push(index)
   }
   return path.reverse()
@@ -216,7 +214,7 @@ function pathOf(node: Node, root: Node): number[] {
 
 function nodeAt(root: Node, path: NodePath): Node {
   let node = root
-  for (const index of path) node = node.childNodes[index]!
+  for (const index of path) node = dom.childNodes(node)[index]!
   return node
 }
 
@@ -247,16 +245,12 @@ function stablePositions(source: readonly number[]): Set<number> {
 
 /** Moves a row: with moveBefore where the browser has it, so the row keeps its state; else insertBefore. */
 function move(parent: Node, node: Node, before: Node | null): void {
-  const { moveBefore } = parent as MovingParent
-  if (typeof moveBefore === 'function') {
-    try {
-      moveBefore.call(parent, node, before)
-      return
-    } catch {
-      // A move the browser refuses (across documents, say) still works as a plain insert.
-    }
+  try {
+    if (dom.moveBefore(parent, node, before)) return
+  } catch {
+    // A move the browser refuses (across documents, say) still works as a plain insert.
   }
-  parent.insertBefore(node, before)
+  dom.insertBefore(parent, node, before)
 }
 
 /**
@@ -267,23 +261,23 @@ function move(parent: Node, node: Node, before: Node | null): void {
 function sanitize(body: HTMLElement, warn: (message: string) => void): void {
   for (const el of [...body.querySelectorAll('*')]) {
     if (!body.contains(el)) continue // inside an element dropped earlier
-    const tag = el.localName
-    const blockType = tag === 'script' ? dataBlockType(el.getAttribute('type')) : undefined
+    const tag = dom.localName(el)
+    const blockType = tag === 'script' ? dataBlockType(dom.getAttribute(el, 'type')) : undefined
     const problem = blockType === undefined
-      ? elementProblem(tag, el.namespaceURI, (name) => el.getAttribute(name))
+      ? elementProblem(tag, dom.namespaceURI(el), (name) => dom.getAttribute(el, name))
       : { message: `the ${blockType} block belongs in <head>`, drop: true }
     if (problem !== undefined) {
       warn(problem.drop ? `${problem.message}; dropped` : problem.message)
       if (problem.drop) {
-        el.remove()
+        dom.remove(el)
         continue
       }
     }
-    for (const name of el.getAttributeNames()) {
-      const attribute = attributeProblem(name, el.getAttribute(name) ?? '')
+    for (const name of dom.getAttributeNames(el)) {
+      const attribute = attributeProblem(name, dom.getAttribute(el, name) ?? '')
       if (attribute === undefined) continue
       warn(`<${tag}>: ${attribute.message}${attribute.drop ? '; removed' : ''}`)
-      if (attribute.drop) el.removeAttribute(name)
+      if (attribute.drop) dom.removeAttribute(el, name)
     }
   }
 }
@@ -307,13 +301,14 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   // Handlers are looked up like data (hasField): methods on a class count, Object.prototype's don't.
   const handlerFor = (name: string): unknown => (hasField(on, name) ? on[name] : undefined)
 
-  const body = doc.body
+  const body = dom.body(doc)
   sanitize(body, warn)
 
-  // The view is bound and rendered in a fragment, so the host page only ever sees it finished.
-  const target = element.ownerDocument
-  const fragment = target.createDocumentFragment()
-  for (const child of body.childNodes) fragment.appendChild(target.importNode(child, true))
+  // The view is bound and rendered in a fragment, so the host page only ever sees it finished. Calls
+  // on the view's elements and on the documents go through dom.ts: the markup's names can't shadow them.
+  const target = dom.ownerDocument(element)
+  const fragment = dom.createDocumentFragment(target)
+  for (const child of body.childNodes) fragment.appendChild(dom.importNode(target, child))
 
   let data = options.data
   let route: RouteInput = options.route ?? {}
@@ -372,11 +367,11 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       warn(`${describeElement(el, TEXT_DIRECTIVE, value)}: ${resolved.message}; skipped`)
       return undefined
     }
-    if (VOID_ELEMENTS.has(el.localName)) {
-      warn(`${describeElement(el, TEXT_DIRECTIVE, value)}: <${el.localName}> has no content to set; skipped`)
+    if (VOID_ELEMENTS.has(dom.localName(el))) {
+      warn(`${describeElement(el, TEXT_DIRECTIVE, value)}: <${dom.localName(el)}> has no content to set; skipped`)
       return undefined
     }
-    if (el.firstElementChild !== null) {
+    if (dom.firstElementChild(el) !== null) {
       warn(`${describeElement(el, TEXT_DIRECTIVE, value)} has child elements; ${TEXT_DIRECTIVE} replaces them`)
     }
     return parsed.path
@@ -416,7 +411,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   // A condition that can't be used (a parse error, an unknown field) warns and counts as false, so a
   // broken m-if hides its element rather than showing it to everyone.
   const conditionTest = (el: Element, directive: string, scope: Scope | undefined): Test => {
-    const value = el.getAttribute(directive) ?? ''
+    const value = dom.getAttribute(el, directive) ?? ''
     const parsed = parseConditionDirective(directive, value)
     if (!parsed.ok) {
       warn(`${describeElement(el, directive, value)}: ${parsed.message} (at column ${parsed.offset + 1}); treated as false`)
@@ -434,7 +429,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   // A link's URL comes from a link field, a string field that names its route (SPEC D23).
   const hrefPath = (el: Element, value: string, scope: Scope | undefined): readonly string[] | undefined => {
     const where = describeElement(el, HREF_DIRECTIVE, value)
-    if (el.localName !== 'a' && el.localName !== 'area') {
+    const tag = dom.localName(el)
+    if (tag !== 'a' && tag !== 'area') {
       warn(`${where}: ${HREF_DIRECTIVE} only works on links (<a> and <area>); skipped`)
       return undefined
     }
@@ -460,12 +456,12 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       warn(`${where}: '${parsed.path.join('.')}' isn't a link field; give it "route": "<route name>" in the schema; skipped`)
       return undefined
     }
-    if (el.hasAttribute('href')) warn(`${where}: the link also has a static href, which the field's URL replaces; keep one`)
+    if (dom.hasAttribute(el, 'href')) warn(`${where}: the link also has a static href, which the field's URL replaces; keep one`)
     return parsed.path
   }
 
   const elseTest = (el: Element): Test => {
-    const value = el.getAttribute(ELSE_DIRECTIVE) ?? ''
+    const value = dom.getAttribute(el, ELSE_DIRECTIVE) ?? ''
     if (value.trim() !== '') {
       warn(`${describeElement(el, ELSE_DIRECTIVE, value)}: ${ELSE_DIRECTIVE} takes no value; for another condition use ${ELSE_IF_DIRECTIVE}="${value}"`)
     }
@@ -482,7 +478,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     const hrefs: { node: Node; segments: readonly string[] }[] = []
     const shows: { node: Node; test: Test }[] = []
     const clicks: { node: Node; send: Send }[] = []
-    const chains: { node: Node; test: Test }[][] = []
+    const chains: { anchor: Node; branches: { node: Node; test: Test }[] }[] = []
     const lists: (Omit<ListPlan, 'at'> & { node: Node })[] = []
     // Elements already taken into a chain, so the walk doesn't call them orphans.
     const chained = new Set<Element>()
@@ -492,12 +488,13 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     const collectChain = (first: Element, role: ChainDirective): { node: Node; test: Test }[] => {
       chained.add(first)
       const branches = [{ node: first as Node, test: conditionTest(first, role, scope) }]
-      for (let node = first.nextSibling; node !== null; node = node.nextSibling) {
-        if (node.nodeType === COMMENT_NODE) continue
-        if (node.nodeType === TEXT_NODE && isInterElementWhitespace(node.textContent ?? '')) continue
-        if (node.nodeType !== ELEMENT_NODE) break
+      for (let node = dom.nextSibling(first); node !== null; node = dom.nextSibling(node)) {
+        const type = dom.nodeType(node)
+        if (type === COMMENT_NODE) continue
+        if (type === TEXT_NODE && isInterElementWhitespace(node.textContent ?? '')) continue
+        if (type !== ELEMENT_NODE) break
         const el = node as Element
-        if (el.hasAttribute(FOR_DIRECTIVE)) break
+        if (dom.hasAttribute(el, FOR_DIRECTIVE)) break
         const next = chainRole(el)
         if (next !== ELSE_IF_DIRECTIVE && next !== ELSE_DIRECTIVE) break
         chained.add(el)
@@ -509,8 +506,10 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
 
     // The anchors compileList left, which stand for their lists: content, unlike other comments.
     const listAnchors = new Set<Node>()
-    const isBlank = (node: Node): boolean =>
-      node.nodeType === TEXT_NODE ? isInterElementWhitespace(node.textContent ?? '') : node.nodeType === COMMENT_NODE && !listAnchors.has(node)
+    const isBlank = (node: Node): boolean => {
+      const type = dom.nodeType(node)
+      return type === TEXT_NODE ? isInterElementWhitespace(node.textContent ?? '') : type === COMMENT_NODE && !listAnchors.has(node)
+    }
 
     // An m-for element leaves the template for an anchor comment that its rows will follow. A list
     // that is its container's only content (the rest is whitespace and comments) takes the container's
@@ -518,16 +517,18 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     // stays, so a list in running text keeps the spaces around it. A broken m-for warns and shows no
     // rows: hiding beats showing the wrong thing.
     const compileList = (el: Element): void => {
-      const value = el.getAttribute(FOR_DIRECTIVE) ?? ''
+      const value = dom.getAttribute(el, FOR_DIRECTIVE) ?? ''
       const skip = (message: string): void => warn(`${describeElement(el, FOR_DIRECTIVE, value)}: ${message}; shows no rows`)
-      const anchor = target.createComment(FOR_DIRECTIVE)
-      const siblings = [...el.parentNode!.childNodes]
+      const parent = dom.parentNode(el)!
+      const siblings = [...dom.childNodes(parent)]
       if (siblings.every((node) => node === el || isBlank(node))) {
-        for (const node of siblings) if (node.nodeType === TEXT_NODE) node.remove()
+        for (const node of siblings) if (dom.nodeType(node) === TEXT_NODE) node.remove()
       }
-      el.replaceWith(anchor)
+      const anchor = dom.createComment(target, FOR_DIRECTIVE)
+      dom.insertBefore(parent, anchor, el)
+      dom.remove(el)
       listAnchors.add(anchor)
-      el.removeAttribute(FOR_DIRECTIVE)
+      dom.removeAttribute(el, FOR_DIRECTIVE)
       const parsed = parseForDirective(value)
       if (!parsed.ok) return skip(`${parsed.message} (at column ${parsed.offset + 1})`)
       const role = chainRole(el)
@@ -539,16 +540,16 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     }
 
     const visit = (el: Element): void => {
-      if (el.hasAttribute(FOR_DIRECTIVE)) return compileList(el)
+      if (dom.hasAttribute(el, FOR_DIRECTIVE)) return compileList(el)
       const role = chainRole(el)
-      for (const name of el.getAttributeNames()) {
+      for (const name of dom.getAttributeNames(el)) {
         const kind = classifyAttribute(name)
         if (kind.kind === 'plain') continue
         if (kind.kind !== 'directive') {
-          warn(`<${el.tagName.toLowerCase()}>: ${kind.message}; ignored`)
+          warn(`<${dom.tagName(el).toLowerCase()}>: ${kind.message}; ignored`)
           continue
         }
-        const value = el.getAttribute(name) ?? ''
+        const value = dom.getAttribute(el, name) ?? ''
         if (kind.name === TEXT_DIRECTIVE) {
           const segments = textPath(el, value, scope)
           if (segments !== undefined) texts.push({ node: el, segments })
@@ -559,27 +560,33 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
           const segments = hrefPath(el, value, scope)
           if (segments !== undefined) hrefs.push({ node: el, segments })
         } else if (kind.name === SHOW_DIRECTIVE) {
-          if ((el as Element & Partial<ElementCSSInlineStyle>).style === undefined) {
-            warn(`${describeElement(el, SHOW_DIRECTIVE, value)}: <${el.localName}> has no style to hide it with; skipped`)
+          if (dom.style(el) === undefined) {
+            warn(`${describeElement(el, SHOW_DIRECTIVE, value)}: <${dom.localName(el)}> has no style to hide it with; skipped`)
           } else {
             shows.push({ node: el, test: conditionTest(el, SHOW_DIRECTIVE, scope) })
           }
         } else if (kind.name !== role) {
-          warn(`<${el.tagName.toLowerCase()}>: an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}; ${kind.name} ignored`)
+          warn(`<${dom.tagName(el).toLowerCase()}>: an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}; ${kind.name} ignored`)
         }
       }
       if (role !== undefined && !chained.has(el)) {
         if (role !== IF_DIRECTIVE) {
           const fallback = role === ELSE_DIRECTIVE ? 'ignored' : `treated as ${IF_DIRECTIVE}`
-          warn(`${describeElement(el, role, el.getAttribute(role) ?? '')}: ${role} must come right after an element with ${IF_DIRECTIVE} or ${ELSE_IF_DIRECTIVE}; ${fallback}`)
+          warn(`${describeElement(el, role, dom.getAttribute(el, role) ?? '')}: ${role} must come right after an element with ${IF_DIRECTIVE} or ${ELSE_IF_DIRECTIVE}; ${fallback}`)
         }
-        if (role !== ELSE_DIRECTIVE) chains.push(collectChain(el, role))
+        if (role !== ELSE_DIRECTIVE) {
+          // The chain's anchor goes in the template, so every row cloned from it has its own.
+          const branches = collectChain(el, role)
+          const anchor = dom.createComment(target, IF_DIRECTIVE)
+          dom.insertBefore(dom.parentNode(el)!, anchor, el)
+          chains.push({ anchor, branches })
+        }
       }
-      for (const child of [...el.children]) visit(child)
+      for (const child of [...dom.children(el)]) visit(child)
     }
 
-    if (root.nodeType === ELEMENT_NODE) visit(root as Element)
-    else for (const child of [...root.children]) visit(child)
+    if (dom.nodeType(root) === ELEMENT_NODE) visit(root as Element)
+    else for (const child of [...dom.children(root)]) visit(child)
 
     // Paths are taken once the walk has put every anchor in place; rows find their nodes by them.
     const at = (node: Node): NodePath => pathOf(node, root)
@@ -588,7 +595,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       hrefs: hrefs.map(({ node, segments }) => ({ at: at(node), segments })),
       shows: shows.map(({ node, test }) => ({ at: at(node), test })),
       clicks: clicks.map(({ node, send }) => ({ at: at(node), send })),
-      chains: chains.map((branches) => ({ branches: branches.map(({ node, test }) => ({ at: at(node), test })) })),
+      chains: chains.map(({ anchor, branches }) => ({ anchor: at(anchor), branches: branches.map(({ node, test }) => ({ at: at(node), test })) })),
       lists: lists.map(({ node, ...list }) => ({ at: at(node), ...list })),
     }
   }
@@ -603,29 +610,26 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       texts: plan.texts.map(({ at, segments }) => ({ segments, el: elementAt(at), lastText: null })),
       hrefs: plan.hrefs.map(({ at, segments }) => ({ segments, el: elementAt(at), lastHref: undefined })),
       shows: plan.shows.map(({ at, test }) => {
-        const { style } = elementAt(at) as Element & ElementCSSInlineStyle
+        const style = dom.style(elementAt(at))!
         return { style, test, display: style.display, shown: null }
       }),
       clicks: plan.clicks.map(({ at, send }) => ({ el: elementAt(at), listener: () => emit(send, scope) })),
-      chains: plan.chains.map(({ branches }) => ({
-        anchor: target.createComment(IF_DIRECTIVE),
+      chains: plan.chains.map(({ anchor, branches }) => ({
+        anchor: nodeAt(root, anchor) as Comment,
         branches: branches.map(({ at, test }) => ({ el: elementAt(at), test })),
         active: null,
       })),
       lists: plan.lists.map((list) => ({ anchor: nodeAt(root, list.at) as Comment, plan: list, rows: [] })),
     }
-    for (const { el, listener } of block.clicks) el.addEventListener('click', listener)
+    for (const { el, listener } of block.clicks) dom.addEventListener(el, 'click', listener)
     // Each chain's elements leave the tree; render puts the one that should show after the anchor.
-    for (const chain of block.chains) {
-      chain.branches[0]!.el.before(chain.anchor)
-      for (const { el } of chain.branches) el.remove()
-    }
+    for (const chain of block.chains) for (const { el } of chain.branches) dom.remove(el)
     return block
   }
 
   /** Removes a block's listeners, its rows' included. */
   const unbind = (block: Block): void => {
-    for (const { el, listener } of block.clicks) el.removeEventListener('click', listener)
+    for (const { el, listener } of block.clicks) dom.removeEventListener(el, 'click', listener)
     block.clicks.length = 0
     for (const list of block.lists) {
       for (const row of list.rows) unbind(row.block)
@@ -635,7 +639,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
 
   const createRow = (plan: ListPlan, scope: Scope | undefined): Row => {
     const entry: ScopeEntry = { list: plan.list, path: plan.path }
-    const el = plan.template.cloneNode(true) as Element
+    const el = dom.cloneNode(plan.template)
     return { key: undefined, el, entry, block: instantiate(plan.plan, el, withAlias(scope, plan.alias, entry)) }
   }
 
@@ -665,11 +669,11 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     }
     // source[j]: the old row that shows item j, or -1 for a new row.
     const source = keys.map((key, j) => (keyed ? (byKey.get(key!) ?? -1) : j < rows.length ? j : -1))
-    const end = (rows.at(-1)?.el ?? anchor).nextSibling
+    const end = dom.nextSibling(rows.at(-1)?.el ?? anchor)
     const kept = new Set(source)
     rows.forEach((row, i) => {
       if (kept.has(i)) return
-      row.el.remove()
+      dom.remove(row.el)
       unbind(row.block)
     })
     const next = items.map((item, j): Row => {
@@ -685,8 +689,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     for (let j = next.length - 1; j >= 0; j--) {
       const { el } = next[j]!
       const before = j + 1 < next.length ? next[j + 1]!.el : end
-      if (source[j] === -1) parent.insertBefore(el, before)
-      else if (!stable.has(j) && el.nextSibling !== before) move(parent, el, before)
+      if (source[j] === -1) dom.insertBefore(parent, el, before)
+      else if (!stable.has(j) && dom.nextSibling(el) !== before) move(parent, el, before)
     }
     binding.rows = next
   }
@@ -696,7 +700,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     for (const chain of block.chains) {
       const next = chain.branches.find((branch) => branch.test(scope))?.el ?? null
       if (next === chain.active) continue
-      chain.active?.remove()
+      if (chain.active !== null) dom.remove(chain.active)
       if (next !== null) chain.anchor.after(next)
       chain.active = next
     }
@@ -710,7 +714,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     for (const binding of block.texts) {
       const text = toText(readPath(schema, data, route, binding.segments, scope))
       if (text !== binding.lastText) {
-        binding.el.textContent = text
+        dom.setTextContent(binding.el, text)
         binding.lastText = text
       }
     }
@@ -719,8 +723,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       // A URL that would run code never reaches the link; checkData warned about it with its path.
       const href = typeof value === 'string' && value !== '' && blockedLinkScheme(value) === undefined ? value : null
       if (href === binding.lastHref) continue
-      if (href === null) binding.el.removeAttribute('href')
-      else binding.el.setAttribute('href', href)
+      if (href === null) dom.removeAttribute(binding.el, 'href')
+      else dom.setAttribute(binding.el, 'href', href)
       binding.lastHref = href
     }
   }
@@ -750,7 +754,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
 
   checkData(data)
   renderBlock(view)
-  element.appendChild(fragment)
+  dom.appendChild(element, fragment)
 
   return {
     get data() {
@@ -780,17 +784,17 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     destroy(): void {
       if (destroyed) return
       destroyed = true
-      for (const list of topLevelLists) for (const row of list.rows) row.el.remove()
+      for (const list of topLevelLists) for (const row of list.rows) dom.remove(row.el)
       topLevelLists.length = 0
       unbind(view)
-      for (const chain of topLevelChains) chain.active?.remove()
+      for (const chain of topLevelChains) if (chain.active !== null) dom.remove(chain.active)
       topLevelChains.length = 0
       view.texts.length = 0
       view.hrefs.length = 0
       view.shows.length = 0
       view.chains.length = 0
       view.lists.length = 0
-      for (const node of nodes) node.parentNode?.removeChild(node)
+      for (const node of nodes) dom.remove(node as ChildNode)
       nodes.length = 0
     },
   }

@@ -1,4 +1,18 @@
-// View sources shared by the runtime tests.
+// View sources shared by the runtime tests, and a way to watch the runtime's DOM calls.
+
+/**
+ * Sets `name` on `proto` to `descriptor` for one test and returns the function that puts back what was
+ * there. The runtime calls DOM members from the prototypes, past a node's own properties
+ * (src/runtime/dom.ts), so a test watches a call where the member's interface defines it.
+ */
+export function patchMember(proto: object, name: string, descriptor: PropertyDescriptor): () => void {
+  const before = Object.getOwnPropertyDescriptor(proto, name)
+  Object.defineProperty(proto, name, { configurable: true, ...descriptor })
+  return () => {
+    if (before === undefined) delete (proto as Record<string, unknown>)[name]
+    else Object.defineProperty(proto, name, before)
+  }
+}
 
 type ViewParts = { title?: string; schema?: unknown; snapshots?: unknown; head?: string; body: string }
 

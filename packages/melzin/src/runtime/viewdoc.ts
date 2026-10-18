@@ -10,6 +10,7 @@ import {
   parseSnapshots,
   validateSchema,
 } from '../core/index.ts'
+import * as dom from './dom.ts'
 
 export type ParsedView = {
   /** Text of `<title>`, '' when missing. */
@@ -37,7 +38,7 @@ function dataBlocks(root: HTMLElement, type: string): HTMLScriptElement[] {
 // Text or a disallowed element in <head> makes the HTML parser end the head early, so the blocks after
 // it land in <body>. Say so instead of silently treating the view as having no schema.
 function misplacedIssue(doc: Document, type: string, label: string): Issue | undefined {
-  if (dataBlocks(doc.body, type).length === 0) return undefined
+  if (dataBlocks(dom.body(doc), type).length === 0) return undefined
   return {
     message:
       `the ${type} block ended up in <body>: something before it in <head> (text, or an element other than ` +
@@ -49,7 +50,8 @@ function misplacedIssue(doc: Document, type: string, label: string): Issue | und
 type BlockJson = { present: false } | { present: true; ok: true; value: unknown } | { present: true; ok: false; issue: Issue }
 
 function readBlockJson(doc: Document, type: string, label: string, issues: Issue[]): BlockJson {
-  const blocks = dataBlocks(doc.head, type)
+  // dom.head and dom.body: a named element in the view (<img name="head">) can't stand in for them.
+  const blocks = dataBlocks(dom.head(doc), type)
   const first = blocks[0]
   if (first === undefined) {
     const misplaced = misplacedIssue(doc, type, label)
@@ -101,7 +103,7 @@ export function parseViewHtml(html: string): ParsedView {
   }
 
   // Only the head's own <title>: an inline SVG's <title> in the body isn't the view's name.
-  const titleElement = [...doc.head.children].find((child) => child.localName === 'title')
+  const titleElement = [...dom.head(doc).children].find((child) => child.localName === 'title')
   const title = (titleElement?.textContent ?? '').replace(/\s+/g, ' ').trim()
-  return { title, schema: schemaBlock.schema, snapshots, body: doc.body, issues }
+  return { title, schema: schemaBlock.schema, snapshots, body: dom.body(doc), issues }
 }

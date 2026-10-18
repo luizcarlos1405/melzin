@@ -15,6 +15,7 @@ import {
   matchRoute,
   validateRouteTable,
 } from '../core/index.ts'
+import * as dom from './dom.ts'
 import { type MelzinView, type Payload, mountSource } from './mount.ts'
 
 /**
@@ -176,8 +177,9 @@ function linkOf(event: Event, base: string): { link: Element; url: URL } | null 
 
 export async function startApp<R extends RouteTypes = RouteTypes>(root: Element, options: AppOptions<R>): Promise<MelzinApp<R>> {
   const table = readTable(options.routes)
-  const doc = root.ownerDocument
-  const win = doc.defaultView
+  // The document's members through dom.ts: a view's named elements (<img name="baseURI">) shadow them.
+  const doc = dom.ownerDocument(root)
+  const win = dom.defaultView(doc)
   if (win === null) throw new Error('melzin: startApp needs an element in a window')
   const warn = (message: string): void => {
     if (options.onWarning) options.onWarning(message)
@@ -255,7 +257,7 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
   const showProblem = (message: string): void => {
     warn(message)
     clear()
-    const box = doc.createElement('p')
+    const box = dom.createElement(doc, 'p')
     box.setAttribute('role', 'alert')
     box.setAttribute('data-melzin-problem', '')
     box.textContent = message
@@ -414,7 +416,7 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
       const saved = (win.history.state as { melzinScroll?: unknown } | null)?.melzinScroll
       if (Array.isArray(saved)) scrollTo(Number(saved[0]) || 0, Number(saved[1]) || 0)
     } else if (kind !== 'initial') {
-      const anchor = target.hash === '' ? null : doc.getElementById(decodeURIComponent(target.hash.slice(1)))
+      const anchor = target.hash === '' ? null : dom.getElementById(doc, decodeURIComponent(target.hash.slice(1)))
       if (anchor !== null && typeof anchor.scrollIntoView === 'function') anchor.scrollIntoView()
       else scrollTo(0, 0)
     }
@@ -438,7 +440,7 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
   const onClick = (event: Event): void => {
     const mouse = event as MouseEvent
     if (mouse.defaultPrevented || mouse.button !== 0 || mouse.metaKey || mouse.ctrlKey || mouse.shiftKey || mouse.altKey) return
-    const found = linkOf(event, doc.baseURI)
+    const found = linkOf(event, dom.baseURI(doc))
     if (found === null) return
     const { link, url } = found
     const target = link.getAttribute('target')
@@ -458,7 +460,7 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
   }
 
   const onIntent = (event: Event): void => {
-    const found = linkOf(event, doc.baseURI)
+    const found = linkOf(event, dom.baseURI(doc))
     if (found === null || found.url.origin !== win.location.origin) return
     const match = matchRoute(table, found.url)
     if (match === null) return
@@ -466,10 +468,10 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
     prefetchData(match)
   }
 
-  doc.addEventListener('click', onClick)
-  doc.addEventListener('pointerover', onIntent)
-  doc.addEventListener('focusin', onIntent)
-  doc.addEventListener('touchstart', onIntent, { passive: true })
+  dom.addEventListener(doc, 'click', onClick)
+  dom.addEventListener(doc, 'pointerover', onIntent)
+  dom.addEventListener(doc, 'focusin', onIntent)
+  dom.addEventListener(doc, 'touchstart', onIntent, { passive: true })
   win.addEventListener('popstate', onPopState)
   const previousRestoration = win.history.scrollRestoration
   win.history.scrollRestoration = 'manual'
@@ -486,10 +488,10 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
       if (destroyed) return
       destroyed = true
       controller?.abort()
-      doc.removeEventListener('click', onClick)
-      doc.removeEventListener('pointerover', onIntent)
-      doc.removeEventListener('focusin', onIntent)
-      doc.removeEventListener('touchstart', onIntent)
+      dom.removeEventListener(doc, 'click', onClick)
+      dom.removeEventListener(doc, 'pointerover', onIntent)
+      dom.removeEventListener(doc, 'focusin', onIntent)
+      dom.removeEventListener(doc, 'touchstart', onIntent)
       win.removeEventListener('popstate', onPopState)
       win.history.scrollRestoration = previousRestoration
       current?.view.destroy()

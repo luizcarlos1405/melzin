@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { mountSource } from '../src/runtime/index.ts'
 import { useDom } from './helpers/dom.ts'
-import { COUNTER, COUNTER_SCHEMA, PROFILE, view } from './runtime-fixtures.ts'
+import { COUNTER, COUNTER_SCHEMA, PROFILE, patchMember, view } from './runtime-fixtures.ts'
 
 useDom()
 
@@ -133,27 +133,29 @@ describe('update', () => {
     const p = root.querySelector('p')!
     const button = root.querySelector('button')!
     let writes = 0
-    const proto = Object.getPrototypeOf(p)
-    let owner = proto
+    let owner = Object.getPrototypeOf(p)
     while (owner && !Object.getOwnPropertyDescriptor(owner, 'textContent')) owner = Object.getPrototypeOf(owner)
     const descriptor = Object.getOwnPropertyDescriptor(owner, 'textContent')!
-    Object.defineProperty(p, 'textContent', {
-      configurable: true,
+    const restore = patchMember(owner, 'textContent', {
       get() {
         return descriptor.get!.call(this)
       },
       set(value: string) {
-        writes++
+        if (this === p) writes++
         descriptor.set!.call(this, value)
       },
     })
-    v.update({ count: 1 })
-    expect(writes).toBe(0)
-    v.update({ count: 2 })
-    expect(writes).toBe(1)
-    expect(p.textContent).toBe('2')
-    v.update({ count: 2 })
-    expect(writes).toBe(1)
+    try {
+      v.update({ count: 1 })
+      expect(writes).toBe(0)
+      v.update({ count: 2 })
+      expect(writes).toBe(1)
+      expect(p.textContent).toBe('2')
+      v.update({ count: 2 })
+      expect(writes).toBe(1)
+    } finally {
+      restore()
+    }
     expect(root.querySelector('p')).toBe(p)
     expect(root.querySelector('button')).toBe(button)
   })

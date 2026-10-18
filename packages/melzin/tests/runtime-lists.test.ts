@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { DATA_WARNING_PREFIX, mountSource } from '../src/runtime/index.ts'
 import { useDom } from './helpers/dom.ts'
-import { view } from './runtime-fixtures.ts'
+import { patchMember, view } from './runtime-fixtures.ts'
 
 useDom()
 
@@ -138,19 +138,24 @@ describe('rows', () => {
     const ul = $('ul')
     const before = new Map(all('li').map((li) => [li.textContent, li]))
     let inserts = 0
-    const insertBefore = ul.insertBefore.bind(ul)
-    ul.insertBefore = (<T extends Node>(node: T, child: Node | null): T => {
-      inserts++
-      return insertBefore(node, child)
-    }) as typeof ul.insertBefore
-
-    v.update({ members: members('b', 'c', 'd', 'a') })
-    expect(texts('li')).toEqual(['B', 'C', 'D', 'A'])
-    expect(inserts).toBe(1)
-    // From b c d a: no two rows are in order any more, so three of the four move.
-    v.update({ members: members('a', 'd', 'c', 'b') })
-    expect(texts('li')).toEqual(['A', 'D', 'C', 'B'])
-    expect(inserts).toBe(4)
+    const insertBefore = Node.prototype.insertBefore
+    const restore = patchMember(Node.prototype, 'insertBefore', {
+      value(this: Node, node: Node, child: Node | null) {
+        if (this === ul) inserts++
+        return insertBefore.call(this, node, child)
+      },
+    })
+    try {
+      v.update({ members: members('b', 'c', 'd', 'a') })
+      expect(texts('li')).toEqual(['B', 'C', 'D', 'A'])
+      expect(inserts).toBe(1)
+      // From b c d a: no two rows are in order any more, so three of the four move.
+      v.update({ members: members('a', 'd', 'c', 'b') })
+      expect(texts('li')).toEqual(['A', 'D', 'C', 'B'])
+      expect(inserts).toBe(4)
+    } finally {
+      restore()
+    }
     expect(all('li').every((li) => before.get(li.textContent) === li)).toBe(true)
     expect(children(ul)).toEqual(['#m-for', 'li', 'li', 'li', 'li'])
   })
@@ -187,30 +192,41 @@ describe('rows', () => {
 
   test('with moveBefore, rows move without leaving the document; new rows are inserted', () => {
     const v = mountBody(LIST, { members: members('a', 'b', 'c') })
-    const ul = $('ul') as HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void }
+    const ul = $('ul')
     const moved: string[] = []
     let inserts = 0
-    const insertBefore = ul.insertBefore.bind(ul)
-    ul.insertBefore = (<T extends Node>(node: T, child: Node | null): T => {
-      inserts++
-      return insertBefore(node, child)
-    }) as typeof ul.insertBefore
-    ul.moveBefore = (node, child) => {
-      moved.push(node.textContent ?? '')
-      insertBefore(node, child)
-    }
-    v.update({ members: members('c', 'a', 'b', 'd') })
-    expect(texts('li')).toEqual(['C', 'A', 'B', 'D'])
-    expect(moved).toEqual(['C'])
-    expect(inserts).toBe(1)
+    let refuse = false
+    const insertBefore = Node.prototype.insertBefore
+    const restore = [
+      patchMember(Node.prototype, 'insertBefore', {
+        value(this: Node, node: Node, child: Node | null) {
+          if (this === ul) inserts++
+          return insertBefore.call(this, node, child)
+        },
+      }),
+      // happy-dom has no moveBefore; browsers have it on Element.prototype.
+      patchMember(Element.prototype, 'moveBefore', {
+        value(this: Element, node: Node, child: Node | null) {
+          if (refuse) throw new DOMException('refused', 'HierarchyRequestError')
+          moved.push(node.textContent ?? '')
+          insertBefore.call(this, node, child)
+        },
+      }),
+    ]
+    try {
+      v.update({ members: members('c', 'a', 'b', 'd') })
+      expect(texts('li')).toEqual(['C', 'A', 'B', 'D'])
+      expect(moved).toEqual(['C'])
+      expect(inserts).toBe(1)
 
-    // A move the browser refuses falls back to a plain insert.
-    ul.moveBefore = () => {
-      throw new DOMException('refused', 'HierarchyRequestError')
+      // A move the browser refuses falls back to a plain insert.
+      refuse = true
+      v.update({ members: members('a', 'b', 'd', 'c') })
+      expect(texts('li')).toEqual(['A', 'B', 'D', 'C'])
+      expect(inserts).toBe(2)
+    } finally {
+      for (const undo of restore) undo()
     }
-    v.update({ members: members('a', 'b', 'd', 'c') })
-    expect(texts('li')).toEqual(['A', 'B', 'D', 'C'])
-    expect(inserts).toBe(2)
   })
 })
 

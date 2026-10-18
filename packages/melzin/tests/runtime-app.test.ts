@@ -208,6 +208,30 @@ describe('links', () => {
     expect(app?.route?.name).toBe('home')
   })
 
+  test("a view's named elements can't stop links, problems or destroy", async () => {
+    await start('/')
+    // Browsers make a document's named images its own properties (<img name="baseURI"> is
+    // document.baseURI); happy-dom doesn't, so the test does. (Not createElement: happy-dom's own
+    // DOMParser calls it on the document.)
+    const img = document.createElement('img')
+    const names = ['baseURI', 'getElementById', 'removeEventListener']
+    try {
+      for (const name of names) Object.defineProperty(document, name, { configurable: true, value: img })
+      expect(click('#ana').defaultPrevented).toBe(true)
+      await settle()
+      expect(text('#name')).toBe('ANA')
+      await app!.navigate('/u/bruno#name')
+      expect(text('#name')).toBe('BRUNO')
+      failNext = '/u/carla'
+      await app!.navigate('/u/carla')
+      expect(text('[data-melzin-problem]')).toContain('the server is down')
+      app!.destroy()
+      app = null
+    } finally {
+      for (const name of names) delete (document as unknown as Record<string, unknown>)[name]
+    }
+  })
+
   test('navigate() to a URL with no route leaves the app', async () => {
     await start('/')
     const assign = spyOn(location, 'assign').mockImplementation(() => {})
