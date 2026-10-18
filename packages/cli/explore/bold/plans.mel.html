@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="description" content="Bold: dark, big type, plans as rows. Brings its own theme (an indigo brand, tighter corners), so every screen picks it up.">
+  <title>Plans</title>
+</head>
+<body>
+  <main class="min-h-screen bg-zinc-950 font-sans text-white">
+    <div class="mx-auto max-w-5xl px-6 py-14 sm:py-20">
+      <p class="text-sm font-semibold tracking-wide text-brand-300">Pricing</p>
+      <h1 class="mt-4 text-5xl font-black tracking-tight text-balance sm:text-7xl">
+        Simple pricing.
+        <span class="block text-brand-400">No surprises.</span>
+      </h1>
+      <div class="mt-12 divide-y divide-white/10 border-y border-white/10">
+        <section class="grid gap-5 py-8 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div>
+            <h2 class="text-2xl font-bold">Hobby</h2>
+            <p class="mt-1 text-zinc-400">Up to 3 views, one seat, community support.</p>
+          </div>
+          <div class="flex items-center justify-between gap-6 sm:justify-end">
+            <p class="text-3xl font-black tabular-nums">$0</p>
+            <button type="button" class="rounded-lg bg-white/10 px-5 py-2.5 text-sm font-semibold hover:bg-white/20">Start free</button>
+          </div>
+        </section>
+        <section class="grid gap-5 py-8 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div>
+            <h2 class="flex items-center gap-3 text-2xl font-bold">
+              Team
+              <span class="rounded-md bg-brand-500 px-2 py-0.5 text-xs font-bold tracking-wide text-white uppercase">Popular</span>
+            </h2>
+            <p class="mt-1 text-zinc-400">Unlimited views and routes, schema diffs on every pull request, priority support.</p>
+          </div>
+          <div class="flex items-center justify-between gap-6 sm:justify-end">
+            <p class="text-3xl font-black tabular-nums">$12<span class="text-base font-semibold text-zinc-400"> /seat/mo</span></p>
+            <button type="button" class="rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-400">Try it free</button>
+          </div>
+        </section>
+      </div>
+      <p class="mt-8 text-sm text-zinc-500">Prices in US dollars. Cancel any time.</p>
+    </div>
+  </main>
+</body>
+</html>

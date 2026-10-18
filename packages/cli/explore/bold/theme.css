@@ -1,0 +1,23 @@
+/* The bold direction's tokens (SPEC D32). The shell loads this after the project's theme.css, so
+   these win and the rest of the project theme still applies. Promoting the direction merges them into
+   theme.css. */
+
+@theme {
+  /* An indigo brand instead of honey. */
+  --color-brand-50: oklch(0.97 0.02 275);
+  --color-brand-100: oklch(0.94 0.04 275);
+  --color-brand-200: oklch(0.88 0.08 275);
+  --color-brand-300: oklch(0.8 0.13 275);
+  --color-brand-400: oklch(0.71 0.18 275);
+  --color-brand-500: oklch(0.6 0.22 275);
+  --color-brand-600: oklch(0.53 0.23 275);
+  --color-brand-700: oklch(0.47 0.21 275);
+  --color-brand-800: oklch(0.4 0.17 275);
+  --color-brand-900: oklch(0.35 0.13 275);
+  --color-brand-950: oklch(0.26 0.09 275);
+
+  /* Tighter corners. */
+  --radius-xl: 0.375rem;
+  --radius-2xl: 0.5rem;
+  --radius-3xl: 0.75rem;
+}
