@@ -306,8 +306,12 @@ payload is an object of named fields, each filled from a path:
   into the URL (`route.params.handle`). No literals, no `!`, no calls and no `.length`: have the host
   send the value as data. `{ optionId }` is an error too; write `{ optionId: option.id }`.
 - A value whose path may be missing (an optional field on the way, or `route.query.<name>`) can only
-  fill an optional field of the payload. A field with a default, `route.name` and the route's
-  parameters are always there.
+  fill an optional field of the payload. A field with a default is always there. So are `route.name`
+  and the route's parameters in an app (`startApp`, §12), or when the host passes `route` to `mount`
+  (§10). If a required field still comes out missing at the click (the host left out `route`, or sent
+  data that doesn't match the schema), the runtime warns once for that emit, with the fix, and sends
+  the payload without the field. In the shell, a view opened by its name rather than as a route's page
+  has no `route.name`, so such a click warns there too.
 - At the click, the runtime reads each value as it is then, with defaults, so a row's button sends
   its item's current values after any update. A field whose value is missing is left out, so the
   handler gets `{ optionId: 'pizza' }` or `{ optionId: 'pizza', note: '...' }`.
@@ -972,10 +976,19 @@ const view = await mount<Data, Handlers>(document.querySelector('#app')!, '/view
     trackOrder: () => { location.href = '/track' },
     contactSupport: () => { location.href = '/help' },
   },
+  // Optional: where the runtime's warnings go.
+  onWarning: (message) => sendToMonitoring(message),
 })
 // Later, with fresh data: only the text that changed is rewritten.
 view.update(await (await fetch('/api/order')).json())
 ```
+
+The runtime warns and carries on when the data doesn't match the schema, a handler is missing or a
+directive can't be used. Without `onWarning`, warnings go to `console.warn` with a `[melzin]` prefix;
+in production, forward them somewhere you'll see them. A view that reads `route` and isn't run by
+`startApp` (§12) gets the URL from a `route` option, such as
+`route: { name: 'profile', params: { handle: 'ana' }, query: {} }`, and `view.setRoute(route)` replaces
+it.
 
 The page must also load the compiled CSS and serve the view file at the URL given to `mount`; §11
 shows both.
@@ -1159,6 +1172,8 @@ await startApp<Routes>(document.querySelector('#app')!, {
   },
   // Optional: runs before every navigation. Return false to stay, or a URL to go there instead.
   navigate: (to, from) => undefined,
+  // Optional: where the runtime's warnings go, as with mount (§10); console.warn by default.
+  onWarning: (message) => sendToMonitoring(message),
 })
 ```
 
