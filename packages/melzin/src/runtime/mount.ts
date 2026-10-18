@@ -5,6 +5,7 @@ import {
   type ChainDirective,
   ELSE_DIRECTIVE,
   ELSE_IF_DIRECTIVE,
+  FOR_DIRECTIVE,
   HREF_DIRECTIVE,
   IF_DIRECTIVE,
   type Issue,
@@ -339,6 +340,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       else if (kind.name === CLICK_DIRECTIVE) bindClick(el, value)
       else if (kind.name === HREF_DIRECTIVE) bindHref(el, value)
       else if (kind.name === SHOW_DIRECTIVE) bindShow(el)
+      else if (kind.name === FOR_DIRECTIVE) warn(`${describeElement(el, FOR_DIRECTIVE, value)}: lists aren't rendered yet; the element shows once`)
       else if (kind.name !== role) {
         warn(`<${el.tagName.toLowerCase()}>: an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}; ${kind.name} ignored`)
       }

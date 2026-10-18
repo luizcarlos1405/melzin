@@ -4,25 +4,43 @@
 //   expr    := '!'? operand
 //   operand := path | call
 //   path    := ident ('.' ident)*
-//   call    := ident '(' (string (',' string)*)? ')'
+//   call    := ident '(' (string (',' arg)*)? ')'
+//   arg     := string | object
+//   object  := '{' (field (',' field)* ','?)? '}'       an event's payload (SPEC D35)
+//   field   := ident ':' path
 //   string  := '…' | "…"
+//   loop    := ident 'in' path                         m-for only (D34)
 //
 // Growing the language (operators, more calls, formatters) means extending this file.
 
-import { CLICK_DIRECTIVE, EMIT_FUNCTION, HREF_DIRECTIVE, NAME_HINTS, TEXT_DIRECTIVE, isIdent } from './constants.ts'
+import {
+  CLICK_DIRECTIVE,
+  EMIT_FUNCTION,
+  FOR_DIRECTIVE,
+  HREF_DIRECTIVE,
+  NAME_HINTS,
+  TEXT_DIRECTIVE,
+  isIdent,
+  positionMessage,
+} from './constants.ts'
 
 export type StringLit = { kind: 'string'; value: string; start: number; end: number }
 export type PathExpr = { kind: 'path'; segments: string[]; start: number; end: number }
-export type CallExpr = { kind: 'call'; callee: string; args: StringLit[]; start: number; end: number }
+/** A field of an object literal: `optionId: option.id`. `nameStart` is the offset of its name. */
+export type ObjectField = { name: string; nameStart: number; value: PathExpr }
+export type ObjectLit = { kind: 'object'; fields: ObjectField[]; start: number; end: number }
+export type CallExpr = { kind: 'call'; callee: string; args: (StringLit | ObjectLit)[]; start: number; end: number }
 export type NotExpr = { kind: 'not'; operand: PathExpr | CallExpr; start: number; end: number }
 export type Expr = PathExpr | CallExpr | NotExpr
+/** `member in members`: the alias each row reads its item through, and the list. */
+export type LoopExpr = { kind: 'loop'; alias: string; aliasStart: number; source: PathExpr; start: number; end: number }
 
 /** `offset` is 0-based, into the directive value. */
 export type ParseError = { message: string; offset: number }
 
 export type ParseResult = { ok: true; expr: Expr } | { ok: false; message: string; offset: number }
 
-export type TokenKind = 'word' | 'string' | '.' | '(' | ')' | ',' | '!' | 'eof'
+export type TokenKind = 'word' | 'string' | '.' | '(' | ')' | ',' | '!' | '[' | ']' | '{' | '}' | ':' | 'eof'
 export type Token = { kind: TokenKind; value: string; start: number; end: number }
 
 class ExprSyntaxError extends Error {
@@ -34,7 +52,29 @@ class ExprSyntaxError extends Error {
 }
 
 const WHITESPACE = new Set([' ', '\t', '\n', '\r', '\f'])
-const PUNCTUATION = new Set(['.', '(', ')', ',', '!'])
+const PUNCTUATION = new Set(['.', '(', ')', ',', '!', '[', ']', '{', '}', ':'])
+// Assigning it to a plain object would set the object's prototype instead of adding a key.
+const RESERVED_NAME = '__proto__'
+// Words that read as literals in a payload, where only paths are allowed for now.
+const LITERAL_WORDS = new Set(['true', 'false', 'null', 'undefined'])
+
+// What m-for accepts (D34), and what to do instead of each form Vue allows that Melzin doesn't.
+const LOOP_EXAMPLE = `${FOR_DIRECTIVE}="member in members"`
+const LOOP_USAGE = `${FOR_DIRECTIVE} needs a name for each item and a list: ${LOOP_EXAMPLE}`
+const NO_INDEX_MESSAGE =
+  "there's no index: style rows by position with Tailwind's first:, last:, odd: and nth-* variants, and identify them by the list's key"
+const DESTRUCTURING_MESSAGE = 'name the item and read its fields: member in members, then member.name'
+const RANGE_MESSAGE = 'the number of rows comes from the data: put the items in snapshots'
+const SHAPED_LIST_MESSAGE = 'the host sends the list as it should show: filtered, sorted and cut to length'
+const PAYLOAD_LEAVES_MESSAGE = 'payload values are paths to strings, numbers or booleans for now, such as option.id'
+
+/** `emit('vote', option.id)`: a payload has named fields, so the fix names one. */
+function positionalPayloadMessage(callee: string, event: string, segments: readonly string[]): string {
+  const last = segments.at(-1)
+  const field = segments.length >= 2 ? `${segments.at(-2)}${last!.charAt(0).toUpperCase()}${last!.slice(1)}` : last
+  const example = field === undefined ? '{ optionId: option.id }' : `{ ${field}: ${segments.join('.')} }`
+  return `a payload is an object of named fields: ${callee}('${event}', ${example})`
+}
 
 // Words are lexed loosely (letters, digits, _ and $) so the parser can say "'1x' isn't a valid name"
 // or give a hint for `$emit` instead of complaining about a single character.
@@ -185,11 +225,25 @@ class Parser {
     return this.path(first)
   }
 
+  // Paths name fields; a list's items are only reached through m-for, so a position gets a hint.
   private path(first: Token): PathExpr {
     const segments = [first.value]
     let end = first.end
-    while (this.peek().kind === '.') {
+    for (;;) {
+      const next = this.peek()
+      if (next.kind === '[') {
+        const inside = this.peek(1)
+        const message = inside.kind === 'word' && /^[0-9]+$/.test(inside.value)
+          ? positionMessage(`${segments.join('.')}[${inside.value}]`)
+          : `'[' isn't part of a path; paths join names with dots, such as user.name`
+        throw new ExprSyntaxError(message, next.start)
+      }
+      if (next.kind !== '.') break
       this.next()
+      const after = this.peek()
+      if (after.kind === 'word' && /^[0-9]+$/.test(after.value)) {
+        throw new ExprSyntaxError(positionMessage(`${segments.join('.')}.${after.value}`), after.start)
+      }
       const segment = this.ident("a name after '.'")
       segments.push(segment.value)
       end = segment.end
@@ -199,10 +253,12 @@ class Parser {
 
   private call(callee: Token): CallExpr {
     this.next() // (
-    const args: StringLit[] = []
-    if (this.peek().kind !== ')') {
+    const args: (StringLit | ObjectLit)[] = []
+    const opening = this.peek()
+    if (opening.kind === '{') throw new ExprSyntaxError(`the name comes first: ${callee.value}('name', { ... })`, opening.start)
+    if (opening.kind !== ')') {
       for (;;) {
-        args.push(this.string())
+        args.push(args.length === 0 ? this.string() : this.argument(callee.value, args[0]!, args.length))
         if (this.peek().kind !== ',') break
         this.next()
       }
@@ -211,6 +267,108 @@ class Parser {
     if (close.kind !== ')') throw new ExprSyntaxError(`expected ',' or ')', found ${describe(close)}`, close.start)
     this.next()
     return { kind: 'call', callee: callee.value, args, start: callee.start, end: close.end }
+  }
+
+  // An argument after the first: a string, or an object of named paths (an event's payload, D35). A
+  // bare path or literal second is a positional payload, which gets the named form as the fix.
+  private argument(callee: string, first: StringLit | ObjectLit, index: number): StringLit | ObjectLit {
+    const token = this.peek()
+    if (token.kind === '{') return this.object()
+    if (token.kind !== 'word' && token.kind !== '!') return this.string()
+    if (index > 1) throw new ExprSyntaxError(EXTRA_ARGUMENT_MESSAGE, token.start)
+    const name = first.kind === 'string' ? first.value : 'name'
+    const segments: string[] = []
+    if (token.kind === 'word' && isIdent(token.value) && !LITERAL_WORDS.has(token.value)) {
+      segments.push(token.value)
+      for (let i = 1; this.peek(i).kind === '.' && this.peek(i + 1).kind === 'word' && isIdent(this.peek(i + 1).value); i += 2) {
+        segments.push(this.peek(i + 1).value)
+      }
+    }
+    throw new ExprSyntaxError(positionalPayloadMessage(callee, name, segments), token.start)
+  }
+
+  private object(): ObjectLit {
+    const open = this.next() // {
+    const fields: ObjectField[] = []
+    for (;;) {
+      const token = this.peek()
+      if (token.kind === '}') break
+      if (token.kind === 'eof') throw new ExprSyntaxError("expected '}' to close the payload, found end of value", token.start)
+      if (token.kind === 'string') {
+        throw new ExprSyntaxError(`write field names without quotes: { ${isIdent(token.value) ? token.value : 'optionId'}: option.id }`, token.start)
+      }
+      const name = this.ident('a field name, such as optionId')
+      if (name.value === RESERVED_NAME) throw new ExprSyntaxError(`'${RESERVED_NAME}' isn't a valid field name (it's reserved)`, name.start)
+      if (fields.some((field) => field.name === name.value)) {
+        throw new ExprSyntaxError(`'${name.value}' appears twice in the payload; keep one`, name.start)
+      }
+      const colon = this.peek()
+      if (colon.kind === ',' || colon.kind === '}') {
+        throw new ExprSyntaxError(`write the value's path too, such as { ${name.value}: option.id }`, colon.start)
+      }
+      if (colon.kind !== ':') throw new ExprSyntaxError(`expected ':' after '${name.value}', found ${describe(colon)}`, colon.start)
+      this.next()
+      fields.push({ name: name.value, nameStart: name.start, value: this.payloadValue() })
+      const after = this.peek()
+      if (after.kind === ',') {
+        this.next()
+        continue
+      }
+      if (after.kind !== '}') throw new ExprSyntaxError(`expected ',' or '}', found ${describe(after)}`, after.start)
+    }
+    const close = this.next()
+    return { kind: 'object', fields, start: open.start, end: close.end }
+  }
+
+  // Payload values are paths into the row's item, data or route (D35); literals and the rest wait for
+  // the binding language.
+  private payloadValue(): PathExpr {
+    const token = this.peek()
+    const literal = token.kind === 'string' || (token.kind === 'word' && (/^[0-9]/.test(token.value) || LITERAL_WORDS.has(token.value)))
+    if (literal) throw new ExprSyntaxError('payload values are paths for now; have the host send the value as data', token.start)
+    if (token.kind === '!') throw new ExprSyntaxError("payload values are paths; '!' only works in conditions (m-if, m-show)", token.start)
+    if (token.kind === '{' || token.kind === '[') throw new ExprSyntaxError(PAYLOAD_LEAVES_MESSAGE, token.start)
+    const first = this.ident('a path, such as option.id')
+    if (this.peek().kind === '(') throw new ExprSyntaxError('payload values are paths, not calls', this.peek().start)
+    return this.path(first)
+  }
+
+  /** `member in members`, the value of m-for; every other form gets the message that names its fix. */
+  loop(): LoopExpr {
+    const first = this.peek()
+    if (first.kind === 'eof') throw new ExprSyntaxError(LOOP_USAGE, 0)
+    if (first.kind === '(') {
+      let indexed = false
+      for (let i = 1; this.peek(i).kind !== 'eof' && this.peek(i).kind !== ')'; i++) if (this.peek(i).kind === ',') indexed = true
+      throw new ExprSyntaxError(indexed ? NO_INDEX_MESSAGE : `write it without parentheses: ${LOOP_EXAMPLE}`, first.start)
+    }
+    if (first.kind === '{' || first.kind === '[') throw new ExprSyntaxError(DESTRUCTURING_MESSAGE, first.start)
+    if (first.kind === 'word' && first.value === 'in') throw new ExprSyntaxError(`name the item before 'in': ${LOOP_EXAMPLE}`, first.start)
+    const alias = this.ident(`a name for each item, as in ${LOOP_EXAMPLE}`)
+    if (alias.value === RESERVED_NAME) throw new ExprSyntaxError(`'${RESERVED_NAME}' isn't a valid name (it's reserved)`, alias.start)
+    const keyword = this.peek()
+    if (keyword.kind === ',') throw new ExprSyntaxError(NO_INDEX_MESSAGE, keyword.start)
+    if (keyword.kind === 'word' && keyword.value === 'of') {
+      throw new ExprSyntaxError(`use 'in': ${FOR_DIRECTIVE}="${alias.value} in ${this.sourceText(1) || 'members'}"`, keyword.start)
+    }
+    if (keyword.kind !== 'word' || keyword.value !== 'in') {
+      throw new ExprSyntaxError(`expected 'in' after '${alias.value}', found ${describe(keyword)}; ${LOOP_EXAMPLE}`, keyword.start)
+    }
+    this.next()
+    const source = this.peek()
+    if (source.kind === 'eof') throw new ExprSyntaxError(`expected a list after 'in', as in ${LOOP_EXAMPLE}`, source.start)
+    if (source.kind === 'word' && /^[0-9]/.test(source.value)) throw new ExprSyntaxError(RANGE_MESSAGE, source.start)
+    const path = this.path(this.ident(`a list after 'in', as in ${LOOP_EXAMPLE}`))
+    const rest = this.peek()
+    if (rest.kind !== 'eof') throw new ExprSyntaxError(SHAPED_LIST_MESSAGE, rest.start)
+    return { kind: 'loop', alias: alias.value, aliasStart: alias.start, source: path, start: alias.start, end: path.end }
+  }
+
+  /** The source text of the tokens from `ahead` on, for examples in messages. */
+  private sourceText(ahead: number): string {
+    const parts: string[] = []
+    for (let i = ahead; this.peek(i).kind !== 'eof'; i++) parts.push(this.peek(i).kind === 'string' ? JSON.stringify(this.peek(i).value) : this.peek(i).value)
+    return parts.join('').replace(/,/g, ', ')
   }
 
   private string(): StringLit {
@@ -235,7 +393,21 @@ export function parseExpression(source: string): ParseResult {
 }
 
 export type TextDirectiveResult = { ok: true; path: string[] } | { ok: false; message: string; offset: number }
-export type ClickDirectiveResult = { ok: true; event: string } | { ok: false; message: string; offset: number }
+/**
+ * A field of an emit's payload (D35), `optionId: option.id`: its name and the path that fills it, with
+ * the offsets of both in the directive value.
+ */
+export type PayloadField = { name: string; nameStart: number; path: string[]; pathStart: number; pathEnd: number }
+/** An emit's payload object: its fields in order, and where the object starts and ends. */
+export type EmitPayload = { fields: PayloadField[]; start: number; end: number }
+/** `payload` is there only when the emit passes one: `emit('vote', { optionId: option.id })`. */
+export type ClickDirectiveResult =
+  | { ok: true; event: string; payload?: EmitPayload }
+  | { ok: false; message: string; offset: number }
+/** `m-for="member in members"`: the alias, the list's path, and the offset of each in the value. */
+export type ForDirectiveResult =
+  | { ok: true; alias: string; aliasStart: number; path: string[]; pathStart: number }
+  | { ok: false; message: string; offset: number }
 
 /** What m-show, m-if and m-else-if test: the value at `path`, negated when written with `!`. */
 export type Condition = { path: string[]; negated: boolean }
@@ -304,23 +476,15 @@ export function parseConditionDirective(directive: string, value: string): Condi
   return { ok: true, condition: { path: operand.segments, negated: expr.kind === 'not' }, pathStart: operand.start }
 }
 
-const EXTRA_ARGUMENT_MESSAGE =
-  "emit takes exactly one argument, the event name; event payloads aren't supported yet, so declare one event per action"
+const EXTRA_ARGUMENT_MESSAGE = "emit takes the event name and at most one payload object: emit('vote', { optionId: option.id })"
 
-/** `m-on:click="emit('increment')"` → `'increment'`. */
+/**
+ * `m-on:click="emit('increment')"` → `'increment'`; `emit('vote', { optionId: option.id })` also gives
+ * the payload's fields (D35).
+ */
 export function parseClickDirective(value: string): ClickDirectiveResult {
   const result = parseExpression(value)
-  if (!result.ok) {
-    // `emit('like', 1)`: the parser stops at the 1 (call arguments are strings), but the real problem
-    // is the extra argument.
-    const [callee, open, first, comma, extra] = lexPrefix(value)
-    if (callee?.value === EMIT_FUNCTION && open?.kind === '(' && first?.kind === 'string' && comma?.kind === ',') {
-      let offset = extra?.start ?? comma.end
-      while (WHITESPACE.has(value.charAt(offset))) offset++
-      return { ok: false, message: EXTRA_ARGUMENT_MESSAGE, offset }
-    }
-    return result
-  }
+  if (!result.ok) return result
   const { expr } = result
   if (expr.kind !== 'call') {
     return { ok: false, message: `${CLICK_DIRECTIVE} needs emit('name'), for example emit('save')`, offset: expr.start }
@@ -329,11 +493,10 @@ export function parseClickDirective(value: string): ClickDirectiveResult {
     const hint = expr.args.length === 0 ? `; did you mean emit('${expr.callee}')?` : ''
     return { ok: false, message: `only emit('name') is supported for now${hint}`, offset: expr.start }
   }
-  const [arg, extra] = expr.args
-  if (arg === undefined) {
-    return { ok: false, message: "emit needs an event name, for example emit('save')", offset: expr.end - 1 }
+  const [arg, payload, extra] = expr.args
+  if (arg === undefined || arg.kind !== 'string') {
+    return { ok: false, message: "emit needs an event name, for example emit('save')", offset: arg?.start ?? expr.end - 1 }
   }
-  if (extra !== undefined) return { ok: false, message: EXTRA_ARGUMENT_MESSAGE, offset: extra.start }
   if (!isIdent(arg.value)) {
     return {
       ok: false,
@@ -341,5 +504,45 @@ export function parseClickDirective(value: string): ClickDirectiveResult {
       offset: arg.start + 1,
     }
   }
-  return { ok: true, event: arg.value }
+  if (payload?.kind === 'string') {
+    return { ok: false, message: positionalPayloadMessage(EMIT_FUNCTION, arg.value, []), offset: payload.start }
+  }
+  if (extra !== undefined) return { ok: false, message: EXTRA_ARGUMENT_MESSAGE, offset: extra.start }
+  if (payload === undefined) return { ok: true, event: arg.value }
+  const fields = payload.fields.map(({ name, nameStart, value: path }) => ({
+    name,
+    nameStart,
+    path: path.segments,
+    pathStart: path.start,
+    pathEnd: path.end,
+  }))
+  return { ok: true, event: arg.value, payload: { fields, start: payload.start, end: payload.end } }
+}
+
+/**
+ * `m-for="member in members"` → the alias `member` and the path `['members']`. The list may be a field
+ * of an outer row's item (`option in poll.options`); whether it's a list is resolveList's to say.
+ */
+export function parseForDirective(value: string): ForDirectiveResult {
+  // A character the tokenizer stops at ('|', '=>') after a whole loop starts a filter or an expression
+  // after the list: the tokens before it are parsed first, so that case gets the message for it.
+  let tokens: Token[]
+  let lexError: ExprSyntaxError | undefined
+  try {
+    tokens = tokenize(value)
+  } catch (error) {
+    if (!(error instanceof ExprSyntaxError)) throw error
+    lexError = error
+    tokens = [...lexPrefix(value), { kind: 'eof', value: '', start: error.offset, end: error.offset }]
+  }
+  try {
+    const loop = new Parser(tokens).loop()
+    if (lexError !== undefined) return { ok: false, message: SHAPED_LIST_MESSAGE, offset: lexError.offset }
+    return { ok: true, alias: loop.alias, aliasStart: loop.aliasStart, path: loop.source.segments, pathStart: loop.source.start }
+  } catch (error) {
+    if (!(error instanceof ExprSyntaxError)) throw error
+    // The parser ran out of tokens where the bad character was: that character is the problem.
+    if (lexError !== undefined && error.offset >= lexError.offset) return { ok: false, message: lexError.message, offset: lexError.offset }
+    return { ok: false, message: error.message, offset: error.offset }
+  }
 }

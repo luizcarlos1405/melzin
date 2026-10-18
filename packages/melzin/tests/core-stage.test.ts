@@ -28,6 +28,24 @@ test('events, link fields or reading the URL make it contracts', () => {
   expect(viewStage({ ...none, readsRoute: true })).toBe('contracts')
 })
 
+test("a link field inside a list's items makes it contracts; a list and its key don't (D34)", () => {
+  const items = { type: 'object' as const, properties: { handle: { type: 'string' as const } }, required: ['handle'] }
+  const list: MelzinSchema = { data: { type: 'object', properties: { members: { type: 'array', key: 'handle', items } } } }
+  expect(viewStage({ ...none, schemaBlock: true, schema: list })).toBe('states')
+  const linked: MelzinSchema = {
+    data: {
+      type: 'object',
+      properties: {
+        members: { type: 'array', key: 'handle', items: { ...items, properties: { ...items.properties, url: { type: 'string', route: 'profile' } } } },
+      },
+    },
+  }
+  expect(viewStage({ ...none, schemaBlock: true, schema: linked })).toBe('contracts')
+  expect(linkFields(linked)).toEqual([{ path: ['members', '[]', 'url'], route: 'profile' }])
+  const links: MelzinSchema = { data: { type: 'object', properties: { urls: { type: 'array', uniqueItems: true, items: { type: 'string', route: 'home' } } } } }
+  expect(viewStage({ ...none, schemaBlock: true, schema: links })).toBe('contracts')
+})
+
 test('linkFields lists every link field with its path', () => {
   const schema: MelzinSchema = {
     data: {

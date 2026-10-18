@@ -4,9 +4,14 @@ import {
   parseClickDirective,
   parseConditionDirective,
   parseExpression,
+  parseForDirective,
+  parseHrefDirective,
   parseTextDirective,
   tokenize,
 } from '../src/core/expr.ts'
+
+const POSITION = (path: string): string =>
+  `'${path}' picks an item by position: a list's items are shown with m-for; for one particular item, have the host send it as its own field, such as featured`
 
 describe('tokenize', () => {
   test('words, punctuation and strings with offsets', () => {
@@ -58,7 +63,8 @@ describe('parseExpression', () => {
 
   test('quotes of the other kind are plain characters inside a string', () => {
     const result = parseExpression(`f("it's")`)
-    expect(result.ok && result.expr.kind === 'call' && result.expr.args[0]?.value).toBe("it's")
+    const arg = result.ok && result.expr.kind === 'call' ? result.expr.args[0] : undefined
+    expect(arg?.kind === 'string' && arg.value).toBe("it's")
   })
 
   test('a leading ! negates a path or a call', () => {
@@ -79,7 +85,7 @@ describe('parseExpression', () => {
     ['user..name', "expected a name after '.', found '.'", 5],
     ['.user', "expected a name, found '.'", 0],
     ['1abc', "'1abc' isn't a valid name (use letters, digits and _, not starting with a digit)", 0],
-    ['user.2', "'2' isn't a valid name (use letters, digits and _, not starting with a digit)", 5],
+    ['user.2', "'user.2' picks an item by position: a list's items are shown with m-for; for one particular item, have the host send it as its own field, such as featured", 5],
     ['a b', "unexpected 'b'", 2],
     ['a-b', "unexpected character '-'", 1],
     ['count + 1', "unexpected character '+'", 6],
@@ -227,7 +233,7 @@ describe('parseClickDirective', () => {
     })
   })
 
-  test('exactly one argument', () => {
+  test('an event name, and at most a payload object', () => {
     expect(parseClickDirective('emit()')).toEqual({
       ok: false,
       message: "emit needs an event name, for example emit('save')",
@@ -235,7 +241,7 @@ describe('parseClickDirective', () => {
     })
     expect(parseClickDirective("emit('a', 'b')")).toEqual({
       ok: false,
-      message: "emit takes exactly one argument, the event name; event payloads aren't supported yet, so declare one event per action",
+      message: "a payload is an object of named fields: emit('a', { optionId: option.id })",
       offset: 10,
     })
   })
@@ -271,11 +277,151 @@ describe('diagnostics for common slips', () => {
     expect(describeCharacter('\u0007', 0)).toBe('U+0007')
   })
 
-  test('an extra non-string argument to emit is called an extra argument, not an unquoted string', () => {
-    const message =
-      "emit takes exactly one argument, the event name; event payloads aren't supported yet, so declare one event per action"
-    expect(parseClickDirective("emit('like', 1)")).toEqual({ ok: false, message, offset: 13 })
-    expect(parseClickDirective("emit('like', { id: 1 })")).toEqual({ ok: false, message, offset: 13 })
-    expect(parseClickDirective("emit('like', post.id)")).toEqual({ ok: false, message, offset: 13 })
+  test('a positional payload is shown in the named form, not called an unquoted string', () => {
+    expect(parseClickDirective("emit('like', 1)")).toEqual({
+      ok: false,
+      message: "a payload is an object of named fields: emit('like', { optionId: option.id })",
+      offset: 13,
+    })
+    expect(parseClickDirective("emit('like', post.id)")).toEqual({
+      ok: false,
+      message: "a payload is an object of named fields: emit('like', { postId: post.id })",
+      offset: 13,
+    })
+    expect(parseClickDirective("emit('like', { id: 1 })")).toEqual({
+      ok: false,
+      message: 'payload values are paths for now; have the host send the value as data',
+      offset: 19,
+    })
   })
+})
+
+describe('tokenize: brackets, braces and colons', () => {
+  test('are punctuation, for payload objects and better messages', () => {
+    expect(tokenize('{a:b}[]').map((token) => token.kind)).toEqual(['{', 'word', ':', 'word', '}', '[', ']', 'eof'])
+  })
+})
+
+describe('positional paths', () => {
+  test("a list item by position gets the fix in every directive", () => {
+    expect(parseTextDirective('members.0.name')).toEqual({ ok: false, message: POSITION('members.0'), offset: 8 })
+    expect(parseTextDirective('members[0].name')).toEqual({ ok: false, message: POSITION('members[0]'), offset: 7 })
+    expect(parseHrefDirective('members[1].url')).toMatchObject({ ok: false, message: POSITION('members[1]') })
+    expect(parseConditionDirective('m-if', '!members[0]')).toEqual({ ok: false, message: POSITION('members[0]'), offset: 8 })
+  })
+
+  test('other brackets say paths use dots', () => {
+    expect(parseTextDirective('user["name"]')).toEqual({ ok: false, message: "'[' isn't part of a path; paths join names with dots, such as user.name", offset: 4 })
+  })
+
+  test("conditions still name the operator for ':'", () => {
+    expect(parseConditionDirective('m-if', 'a: b')).toEqual({
+      ok: false,
+      message: "':' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes",
+      offset: 1,
+    })
+  })
+})
+
+describe('parseForDirective', () => {
+  test('alias in path, with offsets', () => {
+    expect(parseForDirective('member in members')).toEqual({ ok: true, alias: 'member', aliasStart: 0, path: ['members'], pathStart: 10 })
+    expect(parseForDirective('  option in poll.options ')).toEqual({ ok: true, alias: 'option', aliasStart: 2, path: ['poll', 'options'], pathStart: 12 })
+    expect(parseForDirective('\n  item\n  in\n  items\n')).toMatchObject({ ok: true, alias: 'item', path: ['items'] })
+  })
+
+  const index = "there's no index: style rows by position with Tailwind's first:, last:, odd: and nth-* variants, and identify them by the list's key"
+  const shaped = 'the host sends the list as it should show: filtered, sorted and cut to length'
+  const errors: [string, string, number][] = [
+    ['', 'm-for needs a name for each item and a list: m-for="member in members"', 0],
+    ['member of members', `use 'in': m-for="member in members"`, 7],
+    ['option of poll.options', `use 'in': m-for="option in poll.options"`, 7],
+    ['(member, index) in members', index, 0],
+    ['(member, index) of members', index, 0],
+    ['member, index in members', index, 6],
+    ['(value, key, index) in object', index, 0],
+    ['(member) in members', 'write it without parentheses: m-for="member in members"', 0],
+    ['{ name } in members', 'name the item and read its fields: member in members, then member.name', 0],
+    ['[a, b] in pairs', 'name the item and read its fields: member in members, then member.name', 0],
+    ['n in 3', 'the number of rows comes from the data: put the items in snapshots', 5],
+    ['n in 10', 'the number of rows comes from the data: put the items in snapshots', 5],
+    ['member in members | limit', shaped, 18],
+    ['member in members.slice(0, 3)', shaped, 23],
+    ['member in members.filter(m => m.active)', shaped, 24],
+    ['member in sortBy(members)', shaped, 16],
+    ['member in members, index', shaped, 17],
+    ['member in members track by member.id', shaped, 18],
+    ['member', `expected 'in' after 'member', found end of value; m-for="member in members"`, 6],
+    ['member.name in members', `expected 'in' after 'member', found '.'; m-for="member in members"`, 6],
+    ['member in', `expected a list after 'in', as in m-for="member in members"`, 9],
+    ['in members', `name the item before 'in': m-for="member in members"`, 0],
+    ['1st in members', "'1st' isn't a valid name (use letters, digits and _, not starting with a digit)", 0],
+    ['__proto__ in members', "'__proto__' isn't a valid name (it's reserved)", 0],
+    ['m in members.0', POSITION('members.0'), 13],
+    ["m in 'abc", 'unterminated string', 5],
+    ['m in members.', "expected a name after '.', found end of value", 13],
+    ['m in !members', "expected a list after 'in', as in m-for=\"member in members\", found '!'", 5],
+    ['m in a + b', shaped, 7],
+  ]
+  for (const [source, message, offset] of errors) {
+    test(`error: ${JSON.stringify(source)}`, () => {
+      expect(parseForDirective(source)).toEqual({ ok: false, message, offset })
+    })
+  }
+})
+
+describe('parseClickDirective: payloads (D35)', () => {
+  test('an object of named paths, with offsets', () => {
+    const value = "emit('vote', { optionId: option.id, label: option.label })"
+    expect(parseClickDirective(value)).toEqual({
+      ok: true,
+      event: 'vote',
+      payload: {
+        fields: [
+          { name: 'optionId', nameStart: 15, path: ['option', 'id'], pathStart: 25, pathEnd: 34 },
+          { name: 'label', nameStart: 36, path: ['option', 'label'], pathStart: 43, pathEnd: 55 },
+        ],
+        start: 13,
+        end: 57,
+      },
+    })
+  })
+
+  test('a trailing comma, an empty object, data and route paths', () => {
+    expect(parseClickDirective("emit('a', { x: y, })")).toMatchObject({ ok: true, payload: { fields: [{ name: 'x', path: ['y'] }] } })
+    expect(parseClickDirective("emit('a', {})")).toEqual({ ok: true, event: 'a', payload: { fields: [], start: 10, end: 12 } })
+    expect(parseClickDirective("emit('a', { id: route.params.id })")).toMatchObject({ ok: true, payload: { fields: [{ path: ['route', 'params', 'id'] }] } })
+  })
+
+  const errors: [string, string, number][] = [
+    ["emit('vote', option.id)", "a payload is an object of named fields: emit('vote', { optionId: option.id })", 13],
+    ["emit('vote', id)", "a payload is an object of named fields: emit('vote', { id: id })", 13],
+    ["emit('vote', true)", "a payload is an object of named fields: emit('vote', { optionId: option.id })", 13],
+    ["emit('vote', !x)", "a payload is an object of named fields: emit('vote', { optionId: option.id })", 13],
+    ["emit('vote', { optionId })", "write the value's path too, such as { optionId: option.id }", 24],
+    ["emit('vote', { optionId, label })", "write the value's path too, such as { optionId: option.id }", 23],
+    ["emit('vote', { optionId: 'pizza' })", 'payload values are paths for now; have the host send the value as data', 25],
+    ["emit('vote', { count: 1 })", 'payload values are paths for now; have the host send the value as data', 22],
+    ["emit('vote', { done: false })", 'payload values are paths for now; have the host send the value as data', 21],
+    ["emit('vote', { done: null })", 'payload values are paths for now; have the host send the value as data', 21],
+    ["emit('vote', { done: !option.done })", "payload values are paths; '!' only works in conditions (m-if, m-show)", 21],
+    ["emit('vote', { id: f(x) })", 'payload values are paths, not calls', 20],
+    ["emit('vote', { o: { id: x } })", 'payload values are paths to strings, numbers or booleans for now, such as option.id', 18],
+    ["emit('vote', { a: x, a: y })", "'a' appears twice in the payload; keep one", 21],
+    ["emit('vote', { 'a': x })", 'write field names without quotes: { a: option.id }', 15],
+    ["emit('vote', { a x })", "expected ':' after 'a', found 'x'", 17],
+    ["emit('vote', { a: x y })", "expected ',' or '}', found 'y'", 20],
+    ["emit('vote', { a: x", "expected ',' or '}', found end of value", 19],
+    ["emit('vote', {", "expected '}' to close the payload, found end of value", 14],
+    ["emit('vote', { __proto__: x })", "'__proto__' isn't a valid field name (it's reserved)", 15],
+    ["emit('vote', { a: x }, { b: y })", "emit takes the event name and at most one payload object: emit('vote', { optionId: option.id })", 23],
+    ["emit('vote', { a: x }, b)", "emit takes the event name and at most one payload object: emit('vote', { optionId: option.id })", 23],
+    ["emit('vote', { a: members[0].id })", POSITION('members[0]'), 25],
+    ["emit({ a: x })", "the name comes first: emit('name', { ... })", 5],
+  ]
+  for (const [source, message, offset] of errors) {
+    test(`error: ${JSON.stringify(source)}`, () => {
+      expect(parseClickDirective(source)).toEqual({ ok: false, message, offset })
+    })
+  }
 })

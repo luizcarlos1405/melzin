@@ -63,7 +63,7 @@ describe('parseViewHtml', () => {
   test('invalid schema is reported with core paths', () => {
     const parsed = parseViewHtml(view({ schema: { data: { type: 'object', properties: { a: { type: 'array' } } } }, body: '' }))
     expect(parsed.schema).toBeNull()
-    expect(parsed.issues).toEqual([{ message: "lists aren't supported yet; use a fixed number of fields such as first, second, third", path: 'data.properties.a' }])
+    expect(parsed.issues).toEqual([{ message: `a list needs 'items', the schema every item matches, such as "items": { "type": "string" }`, path: 'data.properties.a' }])
   })
 
   test('invalid snapshots JSON is an issue', () => {

@@ -56,7 +56,7 @@ test('issues: invalid JSON, schema issues and snapshot issues', async () => {
 
   const schema = await loadViewFile(join(fixtures, 'schema-issue.mel.html'))
   expect(schema.schema).toBeNull()
-  expect(schema.issues).toEqual([{ message: "lists aren't supported yet; use a fixed number of fields such as first, second, third", path: 'data.properties.tags' }])
+  expect(schema.issues).toEqual([{ message: `a list needs 'items', the schema every item matches, such as "items": { "type": "string" }`, path: 'data.properties.tags' }])
   // snapshot data isn't validated against an invalid schema
   expect(schema.snapshots).toEqual([{ name: 'zero', data: { count: 0 } }])
 

@@ -20,8 +20,9 @@ export type StageFacts = {
 }
 
 /**
- * Contracts once the view declares an event, has a link field or reads the URL; states once it has a
- * schema or snapshots; exploration before that: static HTML with its sample content inline.
+ * Contracts once the view declares an event, has a link field (in a list's items too) or reads the URL;
+ * states once it has a schema or snapshots; exploration before that: static HTML with its sample
+ * content inline. Lists and their keys are states-stage data (D34).
  */
 export function viewStage(facts: StageFacts): Stage {
   const events = Object.keys(facts.schema?.events ?? {}).length > 0

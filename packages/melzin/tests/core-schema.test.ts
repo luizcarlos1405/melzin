@@ -103,12 +103,12 @@ describe('validateSchema: rejected', () => {
     expect(issuesOf({ $schema: 'x' })).toEqual([{ message: "unknown keyword '$schema'", path: '["$schema"]' }])
   })
 
-  test('arrays are lists (#1), at the top and nested', () => {
+  test('data is an object, not a list', () => {
     expect(issuesOf({ data: { type: 'array', items: {} } })).toEqual([
-      { message: "lists aren't supported yet; use a fixed number of fields such as first, second, third", path: 'data' },
-    ])
-    expect(issuesOf({ data: { type: 'object', properties: { tags: { type: 'array', items: { type: 'string' } } } } })).toEqual([
-      { message: "lists aren't supported yet; use a fixed number of fields such as first, second, third", path: 'data.properties.tags' },
+      {
+        message: `'data' must be an object schema; put the list in a field: { "type": "object", "properties": { "items": { "type": "array", ... } } }`,
+        path: 'data',
+      },
     ])
   })
 
@@ -146,10 +146,10 @@ describe('validateSchema: rejected', () => {
 
   test('missing and unsupported types', () => {
     expect(issuesOf({ data: { type: 'object', properties: { a: {} } } })).toEqual([
-      { message: "missing 'type' (string, number, boolean or object)", path: 'data.properties.a' },
+      { message: "missing 'type' (string, number, boolean, object or array)", path: 'data.properties.a' },
     ])
     expect(issuesOf({ data: { type: 'object', properties: { a: { type: 'integer' } } } })).toEqual([
-      { message: `unsupported type "integer" (use 'number'); use string, number, boolean or object`, path: 'data.properties.a.type' },
+      { message: `unsupported type "integer" (use 'number'); use string, number, boolean, object or array`, path: 'data.properties.a.type' },
     ])
     expect(issuesOf({ data: { type: 'object', properties: { a: { type: ['string', 'null'] } } } })[0]?.path).toBe(
       'data.properties.a.type',
@@ -207,7 +207,10 @@ describe('validateSchema: rejected', () => {
       { message: 'an event must be an object such as {}, got boolean', path: 'events.save' },
     ])
     expect(issuesOf({ events: { save: { payload: { type: 'string' } } } })).toEqual([
-      { message: "event payloads aren't supported yet; declare one event per action, such as votePizza and voteTacos", path: 'events.save.payload' },
+      {
+        message: 'a payload is an object schema of named fields: { "type": "object", "properties": { "optionId": { "type": "string" } } }',
+        path: 'events.save.payload.type',
+      },
     ])
     expect(issuesOf({ events: { save: { foo: 1 } } })).toEqual([{ message: "unknown keyword 'foo'", path: 'events.save.foo' }])
   })

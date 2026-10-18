@@ -14,6 +14,7 @@ import {
   type DataBlockType,
   ELSE_DIRECTIVE,
   ELSE_IF_DIRECTIVE,
+  FOR_DIRECTIVE,
   HREF_DIRECTIVE,
   IF_DIRECTIVE,
   type Issue,
@@ -37,10 +38,10 @@ import {
   describeRouteRef,
   elementProblem,
   findRoute,
+  formatFieldPath,
   isInterElementWhitespace,
   isPlainObject,
   joinPath,
-  leafPaths,
   linkFields,
   matchRoute,
   parseClickDirective,
@@ -53,6 +54,8 @@ import {
   resolveField,
   resolvePath,
   routesForView,
+  schemaFields,
+  schemaPathOf,
   snapshotOwnPaths,
   suggest,
   validateRouteTable,
@@ -848,6 +851,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         checkHrefDirective(node, attr.value)
       } else if (kind.name === SHOW_DIRECTIVE) {
         show = { at, value: attr.value, condition: checkConditionDirective(node, SHOW_DIRECTIVE, attr.value) }
+      } else if (kind.name === FOR_DIRECTIVE) {
+        // m-for and the rows it repeats aren't checked yet: the core has parseForDirective and resolveList.
       } else if (role !== undefined) {
         error(at, `an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}`)
       } else if (kind.name === ELSE_DIRECTIVE) {
@@ -934,11 +939,11 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     for (const event of Object.keys(schema.events ?? {})) {
       if (!emitted.has(event) && !broken.click) warning(at(joinPath('events', event)), `event '${event}' is declared but nothing emits it`)
     }
-    const leaves = leafPaths(schema)
-    for (const leaf of leaves) {
+    const leaves = schemaFields(schema).filter(({ field }) => field.type !== 'object' && field.type !== 'array')
+    for (const { path } of leaves) {
+      const leaf = formatFieldPath(path)
       if (used.has(leaf) || broken.text || broken.condition) continue
-      const schemaPath = leaf.split('.').reduce((path, name) => joinPath(joinPath(path, 'properties'), name), 'data')
-      warning(at(schemaPath), `data field '${leaf}' is never used`)
+      warning(at(schemaPathOf(path)), `data field '${leaf}' is never used`)
     }
     if (leaves.length > 0 && snapshots.length === 0 && !snapshotsUnreadable) {
       warning(
@@ -1044,11 +1049,6 @@ function checkSnapshotNulls(value: unknown, snapshots: readonly Snapshot[], warn
   }
 }
 
-/** `['user', 'url']` → `data.properties.user.properties.url`, the field's path in the schema block. */
-function schemaFieldPath(path: readonly string[]): string {
-  return path.reduce((result, name) => joinPath(joinPath(result, 'properties'), name), 'data')
-}
-
 type RouteCheck = {
   context: ViewRouteContext
   /** Null when the schema has errors (those are reported already). */
@@ -1093,8 +1093,8 @@ function checkAgainstRoutes(check: RouteCheck): void {
 
   const links = linkFields(schema)
   for (const link of links) {
-    const offset = check.schemaAt(joinPath(schemaFieldPath(link.path), 'route'))
-    const field = link.path.join('.')
+    const offset = check.schemaAt(joinPath(schemaPathOf(link.path), 'route'))
+    const field = formatFieldPath(link.path)
     if (!present) {
       warning(offset, `link field '${field}' names route '${link.route}', but the project has no ${ROUTES_FILE}`)
     } else if (table !== null && findRoute(table, link.route) === undefined) {

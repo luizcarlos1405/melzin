@@ -20,11 +20,17 @@ function objectType(object: ObjectSchema, indent: string): string {
   const lines = ['{']
   for (const [name, field] of entries) {
     lines.push(...comment(field.description, inner))
-    const type = field.type === 'object' ? objectType(field, inner) : field.route !== undefined ? `Href<'${field.route}'>` : field.type
-    lines.push(`${inner}${name}${required.has(name) ? '' : '?'}: ${type}`)
+    lines.push(`${inner}${name}${required.has(name) ? '' : '?'}: ${fieldType(field, inner)}`)
   }
   lines.push(`${indent}}`)
   return lines.join('\n')
+}
+
+/** A field's type; a list (SPEC D34) is an array of its items' type, inline. */
+function fieldType(field: FieldSchema, indent: string): string {
+  if (field.type === 'object') return objectType(field, indent)
+  if (field.type === 'array') return `${fieldType(field.items, indent)}[]`
+  return field.route !== undefined ? `Href<'${field.route}'>` : field.type
 }
 
 function handlersType(events: MelzinSchema['events']): string {
@@ -40,7 +46,8 @@ function handlersType(events: MelzinSchema['events']): string {
 }
 
 function hasLinks(field: FieldSchema): boolean {
-  return field.type === 'object' ? Object.values(field.properties).some(hasLinks) : field.route !== undefined
+  if (field.type === 'object') return Object.values(field.properties).some(hasLinks)
+  return field.type === 'array' ? hasLinks(field.items) : field.route !== undefined
 }
 
 /**

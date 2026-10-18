@@ -123,11 +123,13 @@ describe('invalid schema', () => {
     expect(messages(checkSource(source))).toEqual(['error: invalid JSON in the melzin/schema block: the block is empty; it needs a JSON object'])
   })
 
-  test('event payloads are rejected', () => {
+  test('an event payload is an object schema', () => {
     const source = page(CLEAN_BODY, {
       schema: '{ "data": { "type": "object", "properties": { "count": { "type": "number" } } }, "events": { "increment": { "payload": {} } } }',
     })
-    expect(messages(checkSource(source))).toEqual(["error: schema events.increment.payload: event payloads aren't supported yet; declare one event per action, such as votePizza and voteTacos"])
+    expect(messages(checkSource(source))).toEqual([
+      'error: schema events.increment.payload: a payload is an object schema of named fields: { "type": "object", "properties": { "optionId": { "type": "string" } } }',
+    ])
   })
 })
 
@@ -157,7 +159,7 @@ describe('markup', () => {
     const source = page(`<p m-text="count"></p><button m-on:click="save()">x</button><button m-on:click="emit('increment', 'x')">+</button>`)
     expect(messages(checkSource(source))).toEqual([
       "error: m-on:click: only emit('name') is supported for now; did you mean emit('save')?",
-      "error: m-on:click: emit takes exactly one argument, the event name; event payloads aren't supported yet, so declare one event per action",
+      "error: m-on:click: a payload is an object of named fields: emit('increment', { optionId: option.id })",
     ])
   })
 

@@ -31,6 +31,8 @@ export const SHOW_DIRECTIVE = 'm-show'
 export const IF_DIRECTIVE = 'm-if'
 export const ELSE_IF_DIRECTIVE = 'm-else-if'
 export const ELSE_DIRECTIVE = 'm-else'
+/** Repeats its element once per item of a list (SPEC D34): `m-for="member in members"`. */
+export const FOR_DIRECTIVE = 'm-for'
 export const CLICK_DIRECTIVE = 'm-on:click'
 /** A link's URL, from a link field (SPEC D23). The only m-bind for now. */
 export const HREF_DIRECTIVE = 'm-bind:href'
@@ -40,6 +42,7 @@ export const SUPPORTED_DIRECTIVES = [
   IF_DIRECTIVE,
   ELSE_IF_DIRECTIVE,
   ELSE_DIRECTIVE,
+  FOR_DIRECTIVE,
   CLICK_DIRECTIVE,
   HREF_DIRECTIVE,
 ] as const
@@ -72,6 +75,8 @@ export const FOREIGN_DIRECTIVE_HINTS: Readonly<Record<string, DirectiveName>> = 
   'x-if': IF_DIRECTIVE,
   'v-else-if': ELSE_IF_DIRECTIVE,
   'v-else': ELSE_DIRECTIVE,
+  'v-for': FOR_DIRECTIVE,
+  'x-for': FOR_DIRECTIVE,
   'v-on:click': CLICK_DIRECTIVE,
   '@click': CLICK_DIRECTIVE,
   'x-on:click': CLICK_DIRECTIVE,
@@ -85,15 +90,31 @@ export const NAME_HINTS: Readonly<Record<string, string>> = {
   $emit: "use emit('name') instead of Vue's $emit",
 }
 
-// `m-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href`, for messages.
+// `m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href`, for messages.
 const DIRECTIVE_LIST = SUPPORTED_DIRECTIVES.join(', ').replace(/, ([^,]+)$/, ' and $1')
 
 export const FOREIGN_SYNTAX_MESSAGE = `Vue/Alpine syntax isn't supported; Melzin has ${DIRECTIVE_LIST}`
 export const UNSUPPORTED_DIRECTIVE_MESSAGE = `not supported yet; Melzin supports only ${DIRECTIVE_LIST}`
 
+/** For a <template> with m-for, v-for or x-for (core/markup.ts): where an m-for goes instead. */
+export const TEMPLATE_FOR_MESSAGE = "put m-for on the element to repeat; <template> isn't supported"
+
+/** Vue's `:key` and its spellings: rows are keyed by the list's key, which the schema declares (D34). */
+export const KEY_BINDING_MESSAGE = 'keys live in the schema: add "key": "<field>" to the list, such as "key": "id"'
+const KEY_BINDINGS = new Set(['m-bind:key', ':key', 'v-bind:key', 'x-bind:key'])
+
+/** Why m-if, m-else-if and m-else can't go on an m-for element (`directive` names the one used). */
+export function forChainMessage(directive: string): string {
+  return `${directive} can't go on an element with ${FOR_DIRECTIVE}: wrap the list in an element with ${directive}, or put the condition inside the row; to show only some items, have the host filter the list`
+}
+
+/** For a path that picks a list item by position, such as `members.0.name` or `members[0].name`. */
+export function positionMessage(path: string): string {
+  return `'${path}' picks an item by position: a list's items are shown with ${FOR_DIRECTIVE}; for one particular item, have the host send it as its own field, such as featured`
+}
+
 // What to do instead, per unsupported directive (docs/authoring.md §7 has the same table).
 const UNSUPPORTED_HINTS: readonly [RegExp, string][] = [
-  [/^m-for$/, 'lists come later; use a fixed number of fields such as first, second, third, with m-if on the optional ones'],
   [/^m-(bind|class|style)(:|$)/, 'other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else'],
   [/^m-model$/, "forms and inputs aren't supported yet"],
   [/^m-html$/, 'only plain text, through m-text'],
@@ -118,9 +139,16 @@ export type AttributeKind =
  */
 export function classifyAttribute(name: string): AttributeKind {
   if ((SUPPORTED_DIRECTIVES as readonly string[]).includes(name)) return { kind: 'directive', name: name as DirectiveName }
-  const suggestion = FOREIGN_DIRECTIVE_HINTS[name]
+  if (KEY_BINDINGS.has(name)) {
+    return name.startsWith(DIRECTIVE_PREFIX)
+      ? { kind: 'unsupported', message: `'${name}': ${KEY_BINDING_MESSAGE}` }
+      : { kind: 'foreign', message: `'${name}' is Vue/Alpine syntax; ${KEY_BINDING_MESSAGE}` }
+  }
+  const suggestion = Object.hasOwn(FOREIGN_DIRECTIVE_HINTS, name) ? FOREIGN_DIRECTIVE_HINTS[name] : undefined
   if (suggestion !== undefined) {
-    return { kind: 'foreign', suggestion, message: `'${name}' is Vue/Alpine syntax; use ${suggestion}` }
+    // Alpine's x-for only works on a <template>, which views don't have.
+    const use = name === 'x-for' ? `${suggestion} on the element to repeat (<template> isn't supported)` : suggestion
+    return { kind: 'foreign', suggestion, message: `'${name}' is Vue/Alpine syntax; use ${use}` }
   }
   if (name.startsWith('v-') || name.startsWith('x-') || name.startsWith('@') || name.startsWith(':')) {
     return { kind: 'foreign', message: `'${name}': ${FOREIGN_SYNTAX_MESSAGE}` }

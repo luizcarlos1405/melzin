@@ -272,7 +272,7 @@ describe('directive warnings', () => {
 
   test('foreign and unsupported directives are warned and ignored', () => {
     mountBody(`<p v-text="count"></p><button @click="go"></button><a m-bind:title="url"></a><p m-html="count"></p><p :title="x"></p>`)
-    const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href'
+    const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href'
     expect(warnings).toEqual([
       "<p>: 'v-text' is Vue/Alpine syntax; use m-text; ignored",
       "<button>: '@click' is Vue/Alpine syntax; use m-on:click; ignored",
@@ -408,7 +408,7 @@ describe('invalid schema throws', () => {
       message = (error as Error).message
     }
     expect(message).toContain("internal state (ui) isn't supported yet; let the host send that state as data")
-    expect(message).toContain("data.properties.items: lists aren't supported yet; use a fixed number of fields such as first, second, third")
+    expect(message).toContain(`data.properties.items: a list needs 'items', the schema every item matches, such as "items": { "type": "string" }`)
     expect(root.childNodes.length).toBe(0)
   })
 

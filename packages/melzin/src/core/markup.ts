@@ -3,7 +3,7 @@
 // the rest; the checker reports every rule as an error. Element and attribute names are expected as
 // parsers give them: lowercase for HTML, case-adjusted for SVG (`attributeName`).
 
-import { CLICK_DIRECTIVE } from './constants.ts'
+import { CLICK_DIRECTIVE, FOR_DIRECTIVE, TEMPLATE_FOR_MESSAGE } from './constants.ts'
 
 export const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
 
@@ -38,6 +38,9 @@ const HTML_ONLY: Readonly<Record<string, MarkupProblem>> = {
   },
 }
 
+/** The loop directives a <template> may carry: Melzin's and the Vue and Alpine spellings. */
+const TEMPLATE_LOOPS = [FOR_DIRECTIVE, 'v-for', 'x-for']
+
 /**
  * Why an element can't be in a view's body, or undefined when it's fine. `attribute` reads one of
  * the element's attributes (null when missing).
@@ -49,6 +52,10 @@ export function elementProblem(
 ): MarkupProblem | undefined {
   if (Object.hasOwn(ANY_NAMESPACE, localName)) return ANY_NAMESPACE[localName]
   if (namespace === HTML_NAMESPACE || namespace === null) {
+    // Vue and Alpine repeat a <template>; Melzin repeats the element itself.
+    if (localName === 'template' && TEMPLATE_LOOPS.some((name) => attribute(name) !== null)) {
+      return { message: TEMPLATE_FOR_MESSAGE, drop: true }
+    }
     return Object.hasOwn(HTML_ONLY, localName) ? HTML_ONLY[localName] : undefined
   }
   // SVG animation can rewrite a link's href after the fact (to a javascript: URL, say).

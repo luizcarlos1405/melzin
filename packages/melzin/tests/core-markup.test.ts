@@ -13,6 +13,19 @@ describe('elementProblem', () => {
     }
   })
 
+  test('a <template> with a loop says where m-for goes', () => {
+    for (const name of ['m-for', 'v-for', 'x-for']) {
+      const attribute = (attr: string): string | null => (attr === name ? 'member in members' : null)
+      expect(elementProblem('template', HTML_NAMESPACE, attribute)).toEqual({
+        message: "put m-for on the element to repeat; <template> isn't supported",
+        drop: true,
+      })
+    }
+    expect(elementProblem('template', HTML_NAMESPACE, none)?.message).toBe(
+      "<template> isn't supported; its content would never be bound. Write the markup directly",
+    )
+  })
+
   test('<form> is reported but not dropped', () => {
     expect(elementProblem('form', HTML_NAMESPACE, none)).toEqual({
       message: `<form> isn't supported yet; use <button type="button"> with m-on:click instead`,
