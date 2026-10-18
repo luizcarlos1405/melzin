@@ -1,0 +1,17 @@
+{
+  "routes": {
+    "members": {
+      "path": "/",
+      "view": "members",
+      "description": "Everyone in the demo",
+      "query": { "as": { "description": "Who is looking; nobody is signed in without it" } },
+      "code": "eager"
+    },
+    "profile": {
+      "path": "/u/:handle",
+      "view": "profile",
+      "description": "Someone's profile, with the follow button",
+      "query": { "as": { "description": "Who is looking; nobody is signed in without it" } }
+    }
+  }
+}

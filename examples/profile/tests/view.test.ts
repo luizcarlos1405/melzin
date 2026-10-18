@@ -5,7 +5,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { mountSource } from 'melzin'
-import { type Network, demoNetwork, toViewModel } from '../server.ts'
+import { type Network, demoNetwork, toViewModel } from '../model.ts'
 import type { Data, Handlers } from '../views/profile.types.ts'
 
 const source = await Bun.file(join(import.meta.dir, '..', 'views', 'profile.mel.html')).text()

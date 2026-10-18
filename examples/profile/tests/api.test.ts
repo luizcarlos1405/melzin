@@ -6,7 +6,8 @@ import { connect } from 'node:net'
 import { join } from 'node:path'
 import { validateData } from 'melzin/core'
 import { loadViewFile } from '@melzin/cli/tools'
-import { createProfileServer, demoNetwork, toViewModel } from '../server.ts'
+import { demoNetwork, toMembersModel, toViewModel } from '../model.ts'
+import { createProfileServer } from '../server.ts'
 import type { Data } from '../views/profile.types.ts'
 
 let server: ReturnType<typeof createProfileServer>
@@ -96,6 +97,14 @@ describe('profile API', () => {
     expect((await profile('/api/profiles/bruno?as=ana')).viewer?.following).toBe(false)
   })
 
+  test('GET /api/members is the members page as someone sees it', async () => {
+    const response = await fetch(`${base}/api/members?as=ana`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(toMembersModel(demoNetwork(), 'ana') as never)
+    expect(await (await fetch(`${base}/api/members`)).json()).toEqual(toMembersModel(demoNetwork(), null) as never)
+    expect((await fetch(`${base}/api/members?as=nobody`)).status).toBe(400)
+  })
+
   test('view files carry the sandbox CSP', async () => {
     const response = await fetch(`${base}/views/profile.mel.html`)
     expect(response.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'")
@@ -104,7 +113,7 @@ describe('profile API', () => {
 
 describe('static routes', () => {
   test('view files are served verbatim', async () => {
-    for (const name of ['profile.mel.html', 'scenarios.mel.html']) {
+    for (const name of ['profile.mel.html', 'members.mel.html']) {
       const response = await fetch(`${base}/views/${name}`)
       expect(response.status).toBe(200)
       expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
@@ -136,15 +145,17 @@ describe('static routes', () => {
     expect(css).toContain('--color-canvas')
   })
 
-  test('/ serves the page with the bundled client', async () => {
-    const response = await fetch(`${base}/`)
-    expect(response.status).toBe(200)
-    const html = await response.text()
-    expect(html).toContain('id="profile"')
-    expect(html).toMatch(/<script[^>]+type="module"/)
+  test('every route serves the page with the bundled client', async () => {
+    for (const path of ['/', '/?as=ana', '/u/ana', '/u/someone-new?as=bruno']) {
+      const response = await fetch(`${base}${path}`)
+      expect({ path, status: response.status }).toEqual({ path, status: 200 })
+      const html = await response.text()
+      expect(html).toContain('id="app"')
+      expect(html).toMatch(/<script[^>]+type="module"/)
+    }
   })
 
   test('unknown routes are 404', async () => {
-    expect((await fetch(`${base}/nope`)).status).toBe(404)
+    for (const path of ['/nope', '/u', '/u/ana/extra']) expect({ path, status: (await fetch(`${base}${path}`)).status }).toEqual({ path, status: 404 })
   })
 })

@@ -4,16 +4,19 @@ import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { validateData } from 'melzin/core'
 import { loadViewFile, type LoadedView } from '@melzin/cli/tools'
-import { type Network, countLabel, demoNetwork, initials, joinedLabel, toViewModel } from '../server.ts'
+import { type Network, countLabel, demoNetwork, initials, joinedLabel, toMembersModel, toViewModel } from '../model.ts'
 
 const PROFILE_VIEW = join(import.meta.dir, '..', 'views', 'profile.mel.html')
+const MEMBERS_VIEW = join(import.meta.dir, '..', 'views', 'members.mel.html')
 
-async function loadProfile(): Promise<LoadedView> {
-  const view = await loadViewFile(PROFILE_VIEW)
+async function loadView(path: string): Promise<LoadedView> {
+  const view = await loadViewFile(path)
   expect(view.issues).toEqual([])
   expect(view.schema).not.toBeNull()
   return view
 }
+
+const loadProfile = (): Promise<LoadedView> => loadView(PROFILE_VIEW)
 
 const LONG_HANDLE = 'maria_aparecida_dos_santos_albuquerque_vasconcelos'
 
@@ -74,16 +77,63 @@ describe('profile contract', () => {
       'very long everything': [longNetwork(), LONG_HANDLE, 'ana'],
     }
     expect(snapshots.map((snapshot) => snapshot.name)).toEqual(Object.keys(states))
-    for (const { name, data } of snapshots) {
+    for (const { name, data, route } of snapshots) {
       const [network, handle, viewer] = states[name]!
       expect({ name, data }).toEqual({ name, data: toViewModel(network, handle, viewer) as never })
+      // The snapshot's URL is the one that shows that state: /u/<handle>?as=<viewer>.
+      expect({ name, route }).toEqual({ name, route: { params: { handle }, ...(viewer === null ? {} : { query: { as: viewer } }) } })
     }
+  })
+})
+
+describe('members contract', () => {
+  test('the page, seen by nobody and by everyone, matches the schema', async () => {
+    const { schema } = await loadView(MEMBERS_VIEW)
+    const network = demoNetwork()
+    for (const viewer of [null, ...network.people.keys()]) {
+      expect({ viewer, issues: validateData(schema, toMembersModel(network, viewer)) }).toEqual({ viewer, issues: [] })
+    }
+  })
+
+  test('the snapshots are states the adapter can produce', async () => {
+    const { snapshots } = await loadView(MEMBERS_VIEW)
+    // Three people, one with a very long name and a huge following, looking at the page themselves.
+    const long = longNetwork()
+    long.people.delete('ana')
+    long.people.get('bruno')!.followersElsewhere = 0
+    long.follows = new Set([`${LONG_HANDLE}>bruno`])
+    const states: Record<string, [Network, string | null]> = {
+      'nobody signed in': [demoNetwork(), null],
+      'browsing as Ana': [demoNetwork(), 'ana'],
+      'very long names': [long, LONG_HANDLE],
+    }
+    expect(snapshots.map((snapshot) => snapshot.name)).toEqual(Object.keys(states))
+    for (const { name, data, route } of snapshots) {
+      const [network, viewer] = states[name]!
+      expect({ name, data }).toEqual({ name, data: toMembersModel(network, viewer) as never })
+      expect({ name, route }).toEqual({ name, route: viewer === null ? undefined : { query: { as: viewer } } })
+    }
+  })
+})
+
+describe('toMembersModel', () => {
+  test('the first three people by handle, with links that keep who is looking', () => {
+    const page = toMembersModel(demoNetwork(), 'bruno')
+    expect(page.first).toEqual({ name: 'Ana Souza', handle: 'ana', initials: 'AS', followers: '18.2K followers', url: '/u/ana?as=bruno' as never })
+    expect([page.second.handle, page.third.handle]).toEqual(['bruno', 'carla'])
+    expect(page.third.followers).toBe('0 followers')
+    expect(toMembersModel(demoNetwork(), null).second.url).toBe('/u/bruno' as never)
   })
 })
 
 describe('toViewModel', () => {
   test('nobody signed in: no viewer at all', () => {
     expect(toViewModel(demoNetwork(), 'bruno', null)).not.toHaveProperty('viewer')
+  })
+
+  test('the link back to the members keeps who is looking', () => {
+    expect<string | undefined>(toViewModel(demoNetwork(), 'bruno', null)?.membersUrl).toBe('/')
+    expect<string | undefined>(toViewModel(demoNetwork(), 'bruno', 'ana b')?.membersUrl).toBe('/?as=ana+b')
   })
 
   test('follows both ways', () => {

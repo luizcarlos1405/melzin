@@ -9,6 +9,7 @@
       "data": {
         "type": "object",
         "properties": {
+          "membersUrl": { "type": "string", "route": "members", "description": "Back to the members page, as the same viewer" },
           "user": {
             "type": "object",
             "properties": {
@@ -43,7 +44,7 @@
             "required": ["isSelf", "following", "followsYou"]
           }
         },
-        "required": ["user", "stats"]
+        "required": ["membersUrl", "user", "stats"]
       },
       "events": {
         "follow": { "description": "The viewer wants to follow this profile" },
@@ -56,6 +57,7 @@
     {
       "signed out": {
         "data": {
+          "membersUrl": "/",
           "user": {
             "name": "Bruno Lima",
             "handle": "bruno",
@@ -67,10 +69,12 @@
             "joined": "Joined March 2021"
           },
           "stats": { "posts": "312", "followers": "2,481", "following": "190" }
-        }
+        },
+        "route": { "params": { "handle": "bruno" } }
       },
       "follows you": {
         "data": {
+          "membersUrl": "/?as=ana",
           "user": {
             "name": "Bruno Lima",
             "handle": "bruno",
@@ -83,10 +87,12 @@
           },
           "stats": { "posts": "312", "followers": "2,481", "following": "190" },
           "viewer": { "isSelf": false, "following": false, "followsYou": true }
-        }
+        },
+        "route": { "params": { "handle": "bruno" }, "query": { "as": "ana" } }
       },
       "following": {
         "data": {
+          "membersUrl": "/?as=bruno",
           "user": {
             "name": "Ana Souza",
             "handle": "ana",
@@ -99,10 +105,12 @@
           },
           "stats": { "posts": "1,204", "followers": "18.2K", "following": "312" },
           "viewer": { "isSelf": false, "following": true, "followsYou": false }
-        }
+        },
+        "route": { "params": { "handle": "ana" }, "query": { "as": "bruno" } }
       },
       "your own profile": {
         "data": {
+          "membersUrl": "/?as=ana",
           "user": {
             "name": "Ana Souza",
             "handle": "ana",
@@ -115,17 +123,27 @@
           },
           "stats": { "posts": "1,204", "followers": "18.2K", "following": "312" },
           "viewer": { "isSelf": true, "following": false, "followsYou": false }
-        }
+        },
+        "route": { "params": { "handle": "ana" }, "query": { "as": "ana" } }
       },
       "empty profile": {
         "data": {
-          "user": { "name": "Carla Mendes", "handle": "carla", "initials": "CM", "verified": false, "joined": "Joined September 2026" },
+          "membersUrl": "/?as=ana",
+          "user": {
+            "name": "Carla Mendes",
+            "handle": "carla",
+            "initials": "CM",
+            "verified": false,
+            "joined": "Joined September 2026"
+          },
           "stats": { "posts": "0", "followers": "0", "following": "1" },
           "viewer": { "isSelf": false, "following": false, "followsYou": false }
-        }
+        },
+        "route": { "params": { "handle": "carla" }, "query": { "as": "ana" } }
       },
       "very long everything": {
         "data": {
+          "membersUrl": "/?as=ana",
           "user": {
             "name": "Maria Aparecida dos Santos Albuquerque de Oliveira e Vasconcelos Bragança",
             "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos",
@@ -138,6 +156,10 @@
           },
           "stats": { "posts": "123.5M", "followers": "98.8M", "following": "1.2M" },
           "viewer": { "isSelf": false, "following": false, "followsYou": true }
+        },
+        "route": {
+          "params": { "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos" },
+          "query": { "as": "ana" }
         }
       }
     }
@@ -145,6 +167,14 @@
 </head>
 <body>
   <main class="px-4 py-8 sm:py-14">
+    <nav class="mx-auto mb-4 w-full max-w-xl" aria-label="Back">
+      <a class="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-medium text-stone-600 hover:bg-stone-200/60 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600" m-bind:href="membersUrl">
+        <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M15 18l-6-6 6-6"></path>
+        </svg>
+        Members
+      </a>
+    </nav>
     <article class="mx-auto w-full max-w-xl overflow-hidden rounded-3xl bg-white shadow-xl shadow-brand-950/10 ring-1 ring-stone-900/5">
       <div class="h-28 bg-linear-to-br from-brand-300 via-brand-500 to-brand-700 sm:h-36" aria-hidden="true"></div>
 

@@ -7,7 +7,7 @@
     "dev": "bun server.ts",
     "start": "NODE_ENV=production bun server.ts",
     "check": "melzin check",
-    "types": "melzin types views/profile.mel.html",
+    "types": "melzin types routes.json",
     "shell": "melzin shell",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
