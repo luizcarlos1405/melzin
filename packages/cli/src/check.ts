@@ -1063,13 +1063,12 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   // m-for element is never part of one, so it ends the chain before it.
   const checkElement = (node: Element, context: Context, chain: Chain | undefined, after: Element | undefined): Chain | undefined => {
     const offset = startOf(node) ?? 0
-    const nameOf = attributeName
     const attributeAt = (name: string): number => node.sourceCodeLocation?.attrs?.[name]?.startOffset ?? offset
     // The m-for first, whatever the attribute order: the element's own directives apply per row.
-    const loop = node.attrs.find((attr) => nameOf(attr) === FOR_DIRECTIVE)
+    const loop = node.attrs.find((attr) => attributeName(attr) === FOR_DIRECTIVE)
     // A Vue or Alpine loop is an error of its own; its rows are read like a broken m-for's, so paths
     // through its alias wait for the m-for that replaces it.
-    const foreignLoop = loop === undefined ? node.attrs.find((attr) => FOREIGN_LOOPS.has(nameOf(attr))) : undefined
+    const foreignLoop = loop === undefined ? node.attrs.find((attr) => FOREIGN_LOOPS.has(attributeName(attr))) : undefined
     let row = context
     if (loop !== undefined) {
       row = checkForDirective(node, loop.value, attributeAt(FOR_DIRECTIVE), context)
@@ -1083,7 +1082,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     let role: { directive: ChainDirective; at: number; value: string; condition: Condition | undefined } | undefined
     let show: { at: number; value: string; condition: Condition | undefined } | undefined
     for (const attr of node.attrs) {
-      const name = nameOf(attr)
+      const name = attributeName(attr)
       const at = attributeAt(name)
       const kind = classifyAttribute(name)
       if (kind.kind === 'plain') {
