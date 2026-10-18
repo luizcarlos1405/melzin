@@ -979,11 +979,20 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 
 ## 13. Why this could beat "just let the AI write React"
 
+- **The design never goes stale.** In a design-first workflow (a design in pen.dev or Figma, then an AI
+  writes the code), the design stops matching the product the first time the code changes without it,
+  and a few iterations later nobody trusts it. Here the design is the product, so every change after
+  launch is still a design change, reviewed by looking at every state before and after (#50) and at the
+  contract diff (§9.3). Over a product's life, that's worth more than skipping the first implementation.
 - **Checking is cheap.** A view with no side effects can be type-checked against its schema, rendered in
   every snapshot at every screen size, fed generated states and reviewed from screenshots by a model.
   When AI output is cheap, checking it is the bottleneck, and that's Melzin's advantage.
 - **Nothing is lost in translation.** Design-to-code tools struggle with going from code to design and
   back. Here there's only one artifact.
+- **Plain files on disk.** A view is an HTML file in the repository: any agent edits it with ordinary
+  file tools, git versions, diffs and merges it, and many files and projects can be worked on at once.
+  Design tools keep the open document inside the app. With pen.dev, for example, the AI edits what the
+  app holds in memory, which it can't save to disk itself, and only one file is active at a time.
 - **The contract is explicit and diffable.** After a design change, the backend work becomes routine,
   and an AI can do it.
 - **States become something you can browse.** Anyone can look at every state. A production bug report
@@ -1115,3 +1124,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   programming would start and stays the design tool past it). Notes on D1 and D4, complications #61–#63
   (exploration, themes while exploring, designs that ship as code) and Q13.
 - 2026-10-17: D30 (snapshots extend other snapshots) and Q14 on its form; planned in POC.md §11.
+- 2026-10-17: §13 leads with the design that never goes stale and adds plain files on disk; the README's
+  Why section follows.

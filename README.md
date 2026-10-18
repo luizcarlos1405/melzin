@@ -23,16 +23,23 @@ every state and the front end you ship. Nothing gets handed off or translated be
 
 ## Why
 
-- **One file, two jobs.** The preview and production render the same file with the same runtime, so the
-  design can't drift from the product.
+- **The design never goes stale.** With a design tool, the design stops matching the product the first
+  time the code changes without it, and a few iterations later nobody trusts it. In Melzin the design is
+  the product: the preview and production render the same file with the same runtime, so every change
+  after launch is still a design change, and what you review is what ships.
+- **Explore first, wire up last.** Compare directions in plain HTML, bind data and add sample states once
+  one wins, then declare events and connect the backend. Each stage grows the same file, so the contract
+  never gets in the way of exploring. A screen too interactive to build this way still gets the first
+  two stages: a reviewed design, and every state to build the code from.
 - **A typed contract between UI and backend.** Each view declares the data it needs and the events it
   emits. The backend feeds data in and handles events, and generated types make the compiler catch a
   missing handler or data of the wrong shape.
 - **Every state, visible.** Views carry named snapshots: empty, typical, very long text, huge numbers. The
   preview shell renders them all side by side, and you can edit any of them live.
 - **Made for AI authors, checkable by machines.** The format is plain HTML, Tailwind and Vue-like
-  directives that models already know. Bindings are data, never code, so a checker can verify a view and
-  explain each mistake.
+  directives that models already know. Views are plain files in your repository, so any agent can edit
+  them, many at a time, with ordinary file tools, and git diffs them; no design app has to be running.
+  Bindings are data, never code, so a checker can verify a view and explain each mistake.
 
 ## A quick look
 
