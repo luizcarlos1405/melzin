@@ -300,6 +300,13 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.card-base {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .card-action {
   color: var(--text-muted);
   font-size: 12px;

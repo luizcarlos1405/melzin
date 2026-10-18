@@ -540,7 +540,9 @@ function createCard(view: LoadedView, version: LoadedVersion, snapshot: Snapshot
   const editedBadge = h('span', { class: 'edited', text: 'edited' })
   editedBadge.hidden = true
 
-  const head = h('header', { class: 'card-head' }, h('h2', { class: 'card-title', text: name, title: name }), statusBadge, h('span', { class: 'spacer' }))
+  // A snapshot that extends another (SPEC D30) says which; its editor shows the merged data.
+  const base = snapshot?.extends === undefined ? null : h('span', { class: 'card-base', text: `extends ${snapshot.extends}`, title: `Builds on '${snapshot.extends}' and sets only what differs` })
+  const head = h('header', { class: 'card-head' }, h('h2', { class: 'card-title', text: name, title: name }), base, statusBadge, h('span', { class: 'spacer' }))
   if (snapshot !== null && state.snapshot === null) {
     // In a comparison, alone means this version too.
     const changes: Partial<ShellState> = compare ? { snapshot: snapshot.name, alt: version.key } : { snapshot: snapshot.name }

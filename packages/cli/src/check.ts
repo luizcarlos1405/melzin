@@ -25,6 +25,7 @@ import {
   SHOW_DIRECTIVE,
   SNAPSHOTS_BLOCK_TYPE,
   type Snapshot,
+  type SnapshotOwnPaths,
   type Stage,
   TEXT_DIRECTIVE,
   VIEW_FILE_SUFFIX,
@@ -37,6 +38,7 @@ import {
   elementProblem,
   findRoute,
   isInterElementWhitespace,
+  isPlainObject,
   joinPath,
   leafPaths,
   linkFields,
@@ -51,6 +53,7 @@ import {
   resolveField,
   resolvePath,
   routesForView,
+  snapshotOwnPaths,
   suggest,
   validateRouteTable,
   validateSchema,
@@ -590,6 +593,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   const snapshotsBlock = blocks.get(SNAPSHOTS_BLOCK_TYPE)
   let snapshotsUnreadable = false
   let snapshotsValid = true
+  // What each snapshot sets itself, rather than inherits from the one it extends (D30).
+  let snapshotOwn: (name: string) => SnapshotOwnPaths = () => snapshotOwnPaths(undefined)
   if (snapshotsBlock !== undefined) {
     const parsed = parseBlock(snapshotsBlock, { rootPath: 'snapshots', bracketTopLevel: true })
     if (parsed.ok) {
@@ -609,6 +614,9 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         error(snapshotsBlock.textStart + locate(parsed.locations, issue.path, 0), `${where}: ${issue.message}`)
         issues.push(issue)
       }
+      checkSnapshotNulls(parsed.value, snapshots, (path, message) => warning(snapshotsBlock.textStart + locate(parsed.locations, path, 0), `${path}: ${message}`))
+      const entries = isPlainObject(parsed.value) ? parsed.value : {}
+      snapshotOwn = (name) => snapshotOwnPaths(Object.hasOwn(entries, name) ? entries[name] : undefined)
       snapshotsValid = result.issues.length === 0
     } else {
       snapshotsUnreadable = true
@@ -978,6 +986,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       schemaAt: (path) => (schemaBlock === undefined ? 0 : schemaBlock.textStart + locate(schemaLocations, path, 0)),
       snapshots: snapshotsValid && !snapshotsUnreadable ? snapshots : [],
       snapshotAt: (path) => (snapshotsBlock === undefined ? 0 : snapshotsBlock.textStart + locate(snapshotLocations, path, 0)),
+      snapshotOwn,
       routeRefs,
       staticLinks,
       error,
@@ -995,6 +1004,46 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   return { diagnostics, view: { title: title ?? '', description: description ?? '', stage, schema, snapshots, issues } }
 }
 
+/**
+ * Warns about a `null` that removes nothing (D30): null removes what a snapshot inherits from the one it
+ * extends, so in a snapshot that extends none, or for a field its base doesn't have, it's a mistake,
+ * likely a typo. `value` is the parsed block, `snapshots` the resolved ones.
+ */
+function checkSnapshotNulls(value: unknown, snapshots: readonly Snapshot[], warn: (path: string, message: string) => void): void {
+  if (!isPlainObject(value)) return
+  for (const snapshot of snapshots) {
+    const entry = value[snapshot.name]
+    if (!isPlainObject(entry)) continue
+    // A broken 'extends' is an error already; its nulls can wait until it resolves.
+    if (entry.extends !== undefined && snapshot.extends === undefined) continue
+    const base = snapshot.extends === undefined ? undefined : snapshots.find((item) => item.name === snapshot.extends)
+    if (snapshot.extends !== undefined && base === undefined) continue
+    const inherited: Record<string, unknown> = base === undefined ? {} : { data: base.data, route: base.route }
+    const walk = (node: Record<string, unknown>, segments: string[], path: string): void => {
+      for (const [key, child] of Object.entries(node)) {
+        const childPath = joinPath(path, key)
+        if (isPlainObject(child)) {
+          walk(child, [...segments, key], childPath)
+        } else if (child === null) {
+          if (base === undefined) {
+            warn(childPath, 'null removes a field the snapshot inherits, and this one extends no other; leave the field out')
+            continue
+          }
+          const parent = valueAt(inherited, segments)
+          if (isPlainObject(parent) && Object.hasOwn(parent, key)) continue
+          const keys = isPlainObject(parent) ? Object.keys(parent) : []
+          warn(childPath, `'${base.name}' has no '${key}' here, so null removes nothing${suggest(key, keys)}`)
+        }
+      }
+    }
+    const prefix = `snapshots[${JSON.stringify(snapshot.name)}]`
+    for (const key of ['data', 'route']) {
+      const part = entry[key]
+      if (isPlainObject(part)) walk(part, [key], `${prefix}.${key}`)
+    }
+  }
+}
+
 /** `['user', 'url']` → `data.properties.user.properties.url`, the field's path in the schema block. */
 function schemaFieldPath(path: readonly string[]): string {
   return path.reduce((result, name) => joinPath(joinPath(result, 'properties'), name), 'data')
@@ -1008,6 +1057,7 @@ type RouteCheck = {
   /** Empty when the snapshots have errors. */
   snapshots: Snapshot[]
   snapshotAt: (path: string) => number
+  snapshotOwn: (name: string) => SnapshotOwnPaths
   routeRefs: { ref: RouteRef; offset: number }[]
   staticLinks: { href: string; offset: number }[]
   error: (offset: number, message: string) => void
@@ -1055,35 +1105,51 @@ function checkAgainstRoutes(check: RouteCheck): void {
 
   if (table === null) return
 
-  // Snapshots show real URLs: each link field's value must be a URL of its route.
-  for (const snapshot of snapshots) {
-    const base = `snapshots[${JSON.stringify(snapshot.name)}]`
+  // What's wrong with each snapshot's URLs, by path relative to the snapshot (`data.authorUrl`, '' for
+  // the whole snapshot) and the text after that path.
+  type Finding = { relative: string; severity: Severity; text: string }
+  const findingsOf = (snapshot: Snapshot): Finding[] => {
+    const found: Finding[] = []
+    // Snapshots show real URLs: each link field's value must be a URL of its route.
     for (const link of links) {
       const value = valueAt(snapshot.data, link.path)
       const route = findRoute(table, link.route)
       if (typeof value !== 'string' || route === undefined) continue
       const match = value.startsWith('/') && !value.startsWith('//') ? matchRoute(table, value) : null
       if (match?.route.name === link.route) continue
-      const path = link.path.reduce((result, name) => joinPath(result, name), `${base}.data`)
       const other = match === null ? '' : `; it's a URL of route '${match.route.name}'`
-      error(check.snapshotAt(path), `${path}: '${value}' isn't a URL of route '${route.name}' (${route.path})${other}`)
+      const relative = link.path.reduce((result, name) => joinPath(result, name), 'data')
+      found.push({ relative, severity: 'error', text: `: '${value}' isn't a URL of route '${route.name}' (${route.path})${other}` })
     }
-    if (shownBy.length === 0) continue
+    if (shownBy.length === 0) return found
     const params = snapshot.route?.params ?? {}
     for (const name of Object.keys(params)) {
       if (shownBy.some((route) => route.params.includes(name))) continue
-      warning(check.snapshotAt(`${base}.route.params.${name}`), `${base}.route.params.${name}: no route that shows this view has a :${name} parameter`)
+      found.push({ relative: `route.params.${name}`, severity: 'warning', text: `: no route that shows this view has a :${name} parameter` })
     }
     const query = snapshot.route?.query ?? {}
     for (const name of Object.keys(query)) {
       if (shownBy.some((route) => route.query.includes(name))) continue
-      warning(check.snapshotAt(`${base}.route.query.${name}`), `${base}.route.query.${name}: no route that shows this view declares the query parameter '${name}'`)
+      found.push({ relative: `route.query.${name}`, severity: 'warning', text: `: no route that shows this view declares the query parameter '${name}'` })
     }
     // A parameter the view shows needs a value in every snapshot, or the snapshot shows a gap.
     const missing = [...new Set(check.routeRefs.flatMap(({ ref }) => (ref.kind === 'param' && !Object.hasOwn(params, ref.name) ? [ref.name] : [])))]
     if (missing.length > 0) {
       const example = missing.map((name) => `"${name}": "..."`).join(', ')
-      warning(check.snapshotAt(base), `${base} has no ${missing.map((name) => `route.params.${name}`).join(', ')}, which the view shows; add "route": { "params": { ${example} } }`)
+      found.push({ relative: '', severity: 'warning', text: ` has no ${missing.map((name) => `route.params.${name}`).join(', ')}, which the view shows; add "route": { "params": { ${example} } }` })
+    }
+    return found
+  }
+  const findings = new Map(snapshots.map((snapshot) => [snapshot.name, findingsOf(snapshot)]))
+  for (const snapshot of snapshots) {
+    const own = check.snapshotOwn(snapshot.name)
+    // A problem the base has too, in a value this snapshot inherits, is the base's to report (D30).
+    const inherited = snapshot.extends === undefined ? [] : (findings.get(snapshot.extends) ?? [])
+    const prefix = `snapshots[${JSON.stringify(snapshot.name)}]`
+    for (const finding of findings.get(snapshot.name) ?? []) {
+      if (!own.sets(finding.relative) && inherited.some((other) => other.relative === finding.relative && other.text === finding.text)) continue
+      const path = finding.relative === '' ? prefix : `${prefix}.${finding.relative}`
+      ;(finding.severity === 'error' ? error : warning)(check.snapshotAt(path), `${path}${finding.text}`)
     }
   }
 
