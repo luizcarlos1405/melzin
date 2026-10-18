@@ -131,8 +131,9 @@ Grammar: `path := ident ('.' ident)*`. Spaces around the value are allowed.
 - The element must be empty in the source: no text and no child elements. Sample values go in
   snapshots (P4). To mix fixed text with a value, bind an empty `<span>`, as in the last line above.
 - The runtime sets the element's `textContent` to `String(value)`. A missing value shows the field's
-  `default`, or nothing. To leave a value out, omit the field: snapshots and the generated types don't
-  accept `null` (the runtime treats `null` like a missing value, but don't rely on it). Numbers show as
+  `default`, or nothing. To leave a value out, omit the field: the generated types don't accept `null`
+  (the runtime treats `null` like a missing value, but don't rely on it), and in snapshots `null` only
+  removes a field a snapshot inherits (§5). Numbers show as
   plain digits (`1234567`) and booleans as `true` or `false`, so send preformatted strings when the
   screen needs `1,234,567`, `$42.50` or `3 items`.
 - `m-text` can't go on elements without content, such as `<input>`, `<img>` or `<br>`.
@@ -295,7 +296,7 @@ shows them. Names can be any text.
 
 - Each `data` must match the schema: required fields present, right types, no unknown fields (this
   catches typos). Optional fields may be left out; the frame then shows the default. Numbers must be
-  finite and values can't be `null`.
+  finite. `null` only removes a field the snapshot inherits (below).
 - Besides `data`, a snapshot may set the URL it stands for, for views that read `route` or show as a
   page: `"route": { "params": { "handle": "ana" }, "query": { "as": "bruno" } }`, strings only (§12). A
   missing `data` means `{}`.
@@ -310,6 +311,49 @@ shows them. Names can be any text.
 - Give snapshots names with words in them. A name that is a whole number (`"0"`, `"10"`) is listed
   before all the others, whatever its place in the file (a JavaScript rule), and the checker warns
   about it. Write `"0 items"` or `"zero"`.
+
+### Extending another snapshot
+
+A snapshot can start from another one and set only what differs, with `"extends"`. States that share
+most of their data then really share it: change the base, and every snapshot built on it follows.
+
+```json
+{
+  "follows you": {
+    "data": {
+      "user": { "name": "Bruno Lima", "bio": "Backend engineer." },
+      "viewer": { "isSelf": false, "following": false, "followsYou": true }
+    },
+    "route": { "params": { "handle": "bruno" }, "query": { "as": "ana" } }
+  },
+  "signed out": { "extends": "follows you", "data": { "viewer": null }, "route": { "query": null } },
+  "following back": { "extends": "follows you", "data": { "viewer": { "following": true } } },
+  "very long name": {
+    "extends": "follows you",
+    "data": { "user": { "name": "Maria Aparecida dos Santos Albuquerque de Oliveira e Vasconcelos Bragança" } }
+  }
+}
+```
+
+A snapshot's own `data` and `route` merge into its base's, the way JSON Merge Patch (RFC 7396) merges
+a patch:
+
+- Objects merge field by field: the fields a snapshot sets replace the base's, and the others come from
+  the base. `"following back"` keeps Bruno, his URL, `isSelf` and `followsYou`, and changes `following`.
+- `null` removes a field. It's how a snapshot makes an optional field missing: `"signed out"` has no
+  `viewer`, and its URL has no `?as=`. A required field can't be removed, and a `null` that removes
+  nothing gets a warning: a field the base doesn't have (often a typo), or any `null` in a snapshot that
+  extends none.
+- Any other value replaces the base's whole, lists included.
+- A snapshot can extend one that extends another, defined before or after it. Extending itself, a name
+  the block doesn't have, or a cycle is an error.
+- The checker checks each snapshot once merged. A problem in a value a snapshot inherits is reported
+  once, at the snapshot that sets it.
+- In the shell, a card names the snapshot it extends, and its state editor shows the merged data.
+
+Extend a snapshot for states that differ in a few fields: the same profile seen by someone else, the
+same order once it's delayed, or a typical state with one very long value. Keep unrelated states, such
+as another person's profile, whole.
 
 ## 6. Styling
 
@@ -391,8 +435,8 @@ JSON. The exit code is 1 when there are errors. Fix every error and every warnin
 prints `0 errors, 0 warnings`. Warnings flag a declared event nothing emits, a data field nothing
 displays or tests, text inside an `m-text` element, a view with data but no snapshots, an element
 behind a condition that no snapshot shows, a condition on a required object (it always holds), a
-snapshot named with a whole number, a literal `{{ }}`, a missing `<title>`, attributes on `<body>` and
-a `<name>.types.ts` that no longer matches the schema. With a `routes.json`, the checker also checks it
+snapshot named with a whole number, a `null` in a snapshot that removes nothing, a literal `{{ }}`, a
+missing `<title>`, attributes on `<body>` and a `<name>.types.ts` that no longer matches the schema. With a `routes.json`, the checker also checks it
 and each view against it (§12). "Nothing emits it" and "never used" wait until
 the broken bindings are fixed, since a broken binding is often the missing one, and "no snapshot shows
 this element" waits until the snapshots match the schema.
@@ -497,6 +541,8 @@ and desktop sizes, fix what looks wrong, repeat.
 | `<a href="/u/ana">` built for one person | a link field the source fills: `m-bind:href="author.url"` |
 | `m-text="route.handle"` | `m-text="route.params.handle"` (or `route.query.<name>`, `route.name`) |
 | a data field named `route` | another name: `route` is the URL |
+| a snapshot that repeats another one's data to change a field | `"extends": "<other>"` and only the field that changes (§5) |
+| `"bio": null` in a snapshot that extends none | leave the field out; `null` removes what a snapshot inherits (§5) |
 | `explore/plans.mel.html`, `explore/current/plans.mel.html` | a folder per alternative: `explore/calm/plans.mel.html` (§13) |
 | a schema and bindings in a first draft | static HTML with the sample content inline; bind it once a direction wins (§13) |
 | the losing alternatives left in `explore/` | move the winner into `views/` and delete the rest (§13) |

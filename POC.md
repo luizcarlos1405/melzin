@@ -6,8 +6,9 @@
 
 **Status:** built, and M3's AI authoring trial passed (§10). Since then, conditionals and a second
 example app have been added (§14), routing: the route table, links, the URL input, the standalone
-host and pages in the shell (§15), and design in stages: alternatives in `explore/` side by side in the
-shell, several device sizes at once and each view's stage (§16). The code is a Bun workspace: the Melzin packages in
+host and pages in the shell (§15), design in stages: alternatives in `explore/` side by side in the
+shell, several device sizes at once and each view's stage (§16), and snapshots that extend a base
+(§17). The code is a Bun workspace: the Melzin packages in
 `packages/melzin` and `packages/cli` and example apps in `examples/` (§7, §14). It follows
 [SPEC.md](SPEC.md); references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
@@ -150,7 +151,8 @@ The profile card's schema shows nesting and a default:
 
 ### Snapshots
 
-- Each snapshot is a named, complete state with a `data` object. A `ui` object comes later.
+- Each snapshot is a named, complete state with a `data` object. A `ui` object comes later. (Since
+  §17, a snapshot can also extend another and list only what differs.)
 - Snapshots must match the schema. Unknown fields are errors, which catches typos.
 - A view without snapshots shows once in the shell, with empty data.
 
@@ -395,7 +397,7 @@ reuses the binding table, the shared parser and the host API.
 | Next | SPEC |
 |---|---|
 | `m-show`, `m-if` and `m-else`: *built, with `m-else-if` (§14)* | #8, #9 |
-| Snapshots that extend a base snapshot and override what differs | D30, #34, Q14 |
+| Snapshots that extend a base snapshot and override what differs: *built (§17)* | D30, #34, Q14 |
 | `m-bind`, including `m-bind:class` with literal classes | #8, #11, #52 |
 | `m-for` with keys and empty states | #1, §9.1 |
 | Internal `ui` state and state operations in handlers | D5, #46 |
@@ -728,3 +730,82 @@ Made for this step; SPEC #61 keeps what's still open.
 - **Device sizes share one card,** with one state editor, so an edit shows at every size at once.
 - **No CSS cache.** Each frame builds its CSS on request (about 14 ms; thirty at once take about 0.3 s),
   so nothing can go stale.
+
+## 17. After the POC: snapshots that extend a base
+
+Built on 2026-10-17, from SPEC D30, in the form Q14 leans to. Only the snapshots changed: the core
+resolves them, so the runtime, the shell and the checker all see merged snapshots.
+
+### Format
+
+```json
+{
+  "follows you": {
+    "data": {
+      "membersUrl": "/?as=ana",
+      "user": { "name": "Bruno Lima", "handle": "bruno" },
+      "viewer": { "isSelf": false, "following": false, "followsYou": true }
+    },
+    "route": { "params": { "handle": "bruno" }, "query": { "as": "ana" } }
+  },
+  "signed out": {
+    "extends": "follows you",
+    "data": { "membersUrl": "/", "viewer": null },
+    "route": { "query": null }
+  }
+}
+```
+
+- `extends` names another snapshot of the block, before or after it in the file.
+- The snapshot's `data` and `route` merge into its base's like JSON Merge Patch (RFC 7396): objects
+  merge field by field, `null` removes a field, and anything else replaces the base's whole.
+- Chains are fine. Extending itself, a name the block doesn't have, a value that isn't a name or a
+  cycle is an error. Such a snapshot still shows in the shell with what it sets itself, and its data is
+  checked once its chain resolves.
+
+### Core
+
+- `parseSnapshots` resolves every snapshot (memoized, catching cycles) and checks it once merged. A
+  problem it shares with its base, in a value it inherits, is reported only at the base, so a mistake in
+  a base shows once instead of in every snapshot built on it. A `null` on a required field says "the
+  schema requires this field, so null can't remove it", at the `null`.
+- `melzin/core` exports `mergePatch` (RFC 7396) and `snapshotOwnPaths` (what a snapshot sets itself,
+  as opposed to what it inherits). Merged snapshots share no objects, and a `__proto__` key stays an
+  ordinary key.
+- `Snapshot` gained `extends`.
+
+### Checker and shell
+
+- Problems in `extends` point at its key, like every snapshot problem.
+- New warnings for a `null` that removes nothing: a field the base doesn't have, with a suggestion when
+  it looks like a typo, or any `null` in a snapshot that extends none.
+- The route checks (link values, URL parameters) follow the data's rule: a problem in an inherited
+  value is reported at the base.
+- A card in the shell shows `extends <base>` next to its name. Its state editor shows the merged data,
+  and Reset goes back to it.
+
+### Examples
+
+In the profile example, "signed out" and "very long everything" extend "follows you", and "your own
+profile" extends "following"; profile.mel.html is 26 lines shorter. The members page's "browsing as
+Ana" extends "nobody signed in" and changes only its links and URL, and the poll's "very long question"
+extends "close race" and sets only the question. The contract tests, which compare each snapshot with
+what the adapter produces for its state, pass unchanged.
+
+### Decisions
+
+Made for this step; SPEC Q14 can still revisit them.
+
+- **JSON Merge Patch, as Q14 leans** (P9), with `extends` as in `tsconfig.json`. Changing one list item
+  means restating the list.
+- **The whole snapshot merges,** `route` included: a state that drops `?as=` sets
+  `"route": { "query": null }`.
+- **`null` means "don't inherit this".** In a snapshot that extends none it removes nothing, so it's a
+  warning (leave the field out) rather than the type error it was: the data is valid either way.
+- **A mistake is reported where it's made.** A snapshot isn't held to what it inherits; fixing the base
+  fixes every snapshot built on it.
+- **Order doesn't matter,** as with names: a snapshot can extend one further down, so the file keeps the
+  order the shell shows.
+- **Every snapshot shows.** There are no hidden bases; a base is a real state, like "follows you".
+- **A broken chain doesn't stop the preview.** The snapshot shows with what it sets itself, and its data
+  waits to be checked, instead of piling up "missing field" errors that the broken `extends` explains.

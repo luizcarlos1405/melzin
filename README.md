@@ -197,6 +197,8 @@ Since then:
 - [x] Design in stages: alternatives in `explore/` side by side in the shell, each with its own theme if
   it needs one, every render at several device sizes at once, and each view's stage (exploration,
   states or contracts) read from its file
+- [x] Snapshots that extend another and set only what differs, merged like JSON Merge Patch, so states
+  share their common data
 
 ## Roadmap
 
@@ -208,7 +210,7 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 
 **First real prototype: a profile page**, growing from [examples/profile](examples/profile/).
 - [x] `m-show`, `m-if`, `m-else-if` and `m-else`
-- [ ] Snapshots that extend a base snapshot and override only what differs
+- [x] Snapshots that extend a base snapshot and override only what differs
 - [ ] `m-bind` for attributes, including `m-bind:class` with literal Tailwind classes
 - [ ] `m-for` with keys and empty states
 - [ ] Internal UI state (open menus, selected tabs, drafts) and state operations in handlers

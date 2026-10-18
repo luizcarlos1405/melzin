@@ -3,8 +3,8 @@
 > Design is implementation.
 
 **Status:** design record, started 2026-10-16. The proof of concept described in [POC.md](POC.md) is
-built, and so are conditionals, routing and design in stages (POC.md §14–§16); everything beyond them is
-still design.
+built, and so are conditionals, routing, design in stages and snapshots that extend a base (POC.md
+§14–§17); everything beyond them is still design.
 
 Every numbered item keeps its number: decisions (D1, D2, ...), principles (P1, ...), complications
 (#1, ...) and open questions (Q1, ...). New items are appended; settled ones stay in place with a note.
@@ -174,7 +174,7 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   pen.dev or any other design tool would (#63).
 - **D30. Snapshots extend other snapshots.** A snapshot can name a base snapshot and list only what
   differs, so states don't repeat their shared data, and a change to that data reaches every snapshot
-  built on it (#34). The exact form is Q14.
+  built on it (#34). The exact form is Q14. *Built in the form Q14 leans to (POC.md §17).*
 - **D31. Design alternatives live in `explore/`.** Each alternative is a folder, `explore/<name>/`, next
   to `views/`, and its views stand in for the views with the same file name, so one folder can hold a
   single screen or every screen of a direction. The shell shows every version of a view side by side,
@@ -801,7 +801,7 @@ place the type appears (#59).
     user in production (P8).
 34. **Snapshot upkeep:** a base state plus overrides, updating snapshots when the schema changes, and the
     explosion of possible combinations. *Settled in part by D30: snapshots extend a base and override
-    what differs (Q14).*
+    what differs (Q14), built in POC.md §17.*
 35. **Version mismatch at deploy:** the new UI expects a field the deployed backend doesn't send yet (P3,
     §9.3).
 36. **Adapter and contract tests:** generated types, contract tests, an adapter the AI keeps up to date.
@@ -943,8 +943,8 @@ Conditionals (`m-if`, `m-else-if`, `m-else`, `m-show`) were built ahead of this 
 provisional subset: a condition is a path, optionally negated with `!`, tested for truthiness
 (POC.md §14). The battle can still change it.
 
-Snapshots that extend a base (D30) don't depend on the language either, so they can be built at any
-time; POC.md §11 has them next.
+Snapshots that extend a base (D30) didn't depend on the language either, and are built, in the form
+Q14 leans to (POC.md §17).
 
 **After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
 (#37).
@@ -994,7 +994,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   Melzin's types have no `null` so far, so that's how a snapshot makes an optional field missing:
   `"signed out": { "extends": "follows you", "data": { "viewer": null } }`. The `extends` key names
   the base, as in `tsconfig.json`; chains are fine, cycles are errors, and the checker validates each
-  snapshot once it's resolved. Changing one list item means restating the list (D30).
+  snapshot once it's resolved. Changing one list item means restating the list (D30). *Built as this
+  lean (POC.md §17); not settled yet.*
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -1150,3 +1151,5 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-17: D31–D33 (alternatives as folders in `explore/`, each with its own theme if it needs one,
   and a view's stage inferred from its file), built in the shell with several device sizes at once
   (POC.md §16). Settles Q13 and #62, and #61 in part.
+- 2026-10-17: snapshots that extend a base (D30) built as Q14's lean: JSON Merge Patch with `extends`
+  (POC.md §17).
