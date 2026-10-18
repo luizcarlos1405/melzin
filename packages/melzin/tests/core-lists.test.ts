@@ -374,6 +374,35 @@ describe('paths with an m-for alias', () => {
     expect(resolvePath(schema, ['member', 'name', 'first'], scope)).toEqual({ ok: false, message: "'member.name' is a string and has no fields" })
   })
 
+  test("an item's field written without the alias gets it, innermost row first", () => {
+    expect(resolvePath(schema, ['name'], scope)).toEqual({ ok: false, message: "unknown field 'name' (did you mean 'member.name'?)" })
+    expect(resolvePath(schema, ['handel'], scope)).toEqual({ ok: false, message: "unknown field 'handel' (did you mean 'member.handle'?)" })
+    // A close data field still wins over a close item field, but not over an exact one.
+    expect(resolvePath(schema, ['titel'], scope)).toEqual({ ok: false, message: "unknown field 'titel' (did you mean 'title'?)" })
+    const polls = resolveList(schema, 'poll', ['polls'])
+    const options = polls.ok ? resolveList(schema, 'option', ['poll', 'options'], polls.scope) : polls
+    if (!options.ok) throw new Error(options.message)
+    expect(resolvePath(schema, ['id'], options.scope)).toEqual({ ok: false, message: "unknown field 'id' (did you mean 'option.id'?)" })
+    expect(resolvePath(schema, ['nope'], scope)).toEqual({ ok: false, message: "unknown field 'nope'" })
+  })
+
+  test('a list read through its name inside its own row points at the alias', () => {
+    expect(resolveField(schema, ['members', 'name'], scope)).toEqual({
+      ok: false,
+      message: "'members' is a list, and this row reads one of its items as 'member': member.name",
+    })
+    expect(resolveField(schema, ['members', 'xyz'], scope)).toEqual({
+      ok: false,
+      message: "'members' is a list, and its items have no field 'xyz'; this row reads one of them as 'member'",
+    })
+    const tags = resolveList(schema, 'feature', ['features'])
+    if (!tags.ok) throw new Error(tags.message)
+    expect(resolveField(schema, ['features', 'name'], tags.scope)).toEqual({
+      ok: false,
+      message: "'features' is a list of strings, and this row reads one of them as 'feature'",
+    })
+  })
+
   test('the alias of a list of strings is the leaf itself', () => {
     const tags = resolveList(schema, 'feature', ['features'])
     if (!tags.ok) throw new Error(tags.message)
@@ -428,6 +457,22 @@ describe('paths with an m-for alias', () => {
       ok: false,
       message: "'members.0' picks an item by position: a list's items are shown with m-for; for one particular item, have the host send it as its own field, such as featured",
     })
+    // A misspelled item field gets the right one; a field the items don't have gets no made-up one.
+    expect(resolveField(schema, ['members', 'nmae'])).toEqual({
+      ok: false,
+      message: `'members' is a list; read its items' fields in a row: m-for="member in members", then member.name`,
+    })
+    expect(resolveField(schema, ['members', 'xyz'])).toEqual({
+      ok: false,
+      message: `'members' is a list, and its items have no field 'xyz'; read their fields in a row: m-for="member in members"`,
+    })
+  })
+
+  test('a misspelled length, or another word for a count, gets .length', () => {
+    for (const segment of ['lenght', 'Length', 'legnth', 'size', 'count']) {
+      expect(resolveField(schema, ['members', segment])).toEqual({ ok: false, message: `unknown field 'members.${segment}' (did you mean 'members.length'?)` })
+    }
+    expect(resolveField(schema, ['features', 'lenght'])).toEqual({ ok: false, message: "unknown field 'features.lenght' (did you mean 'features.length'?)" })
   })
 
   test('scopes are maps: an alias named like an Object.prototype member is a plain key', () => {
@@ -460,8 +505,32 @@ describe('resolveList', () => {
     expect(resolveList(schema, 'poll', ['poll', 'options'], polls.scope)).toEqual({
       ok: false,
       at: 'alias',
-      message: "'poll' is already the item of the m-for over 'polls' around this one; pick another name",
+      message: "'poll' is already the item of the m-for over 'polls' around this one; pick another name, such as option",
     })
+  })
+
+  test('the suggested name is free: not the alias, route, a data field or an alias in scope', () => {
+    const taken = valid({
+      data: {
+        type: 'object',
+        properties: {
+          member: { type: 'string' },
+          item: { type: 'string' },
+          stuff: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+          members: club.data.properties.members,
+        },
+      },
+    })
+    expect(resolveList(taken, 'item', ['stuff'])).toMatchObject({ message: "'item' is already a data field; pick another name, such as entry" })
+    expect(resolveList(taken, 'item', ['members'])).toMatchObject({ message: "'item' is already a data field; pick another name, such as entry" })
+    expect(resolveList(taken, 'member', ['members'])).toMatchObject({ message: "'member' is already a data field; pick another name, such as entry" })
+    const crowded = valid({
+      data: {
+        type: 'object',
+        properties: { item: { type: 'string' }, entry: { type: 'string' }, itemItem: { type: 'string' }, items: { type: 'array', uniqueItems: true, items: { type: 'string' } } },
+      },
+    })
+    expect(resolveList(crowded, 'item', ['items'])).toMatchObject({ message: "'item' is already a data field; pick another name" })
   })
 
   test('the path leads to a list', () => {

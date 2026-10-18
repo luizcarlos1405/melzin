@@ -736,14 +736,73 @@ export function validateData(schema: MelzinSchema | null | undefined, data: unkn
   return issues
 }
 
-/** Why a path can't go on past a list: it reads the list's items' fields without a row to read them in. */
-function throughList(prefix: string, list: ListSchema, segment: string): string {
+/**
+ * A name for one item of the list at `list` that is free where its m-for goes: not `taken` (the name
+ * the author picked), `route`, a top-level data field or an alias in scope. Undefined when none is.
+ */
+function freeAlias(schema: MelzinSchema | null | undefined, list: string, scope: Scope | undefined, taken = ''): string | undefined {
+  const candidates = [itemName(list), 'item', 'entry', ...(taken === '' ? [] : [`${taken}Item`])]
+  return candidates.find((name) =>
+    name !== taken && name !== ROUTE_INPUT && !(schema?.data !== undefined && Object.hasOwn(schema.data.properties, name)) && !scope?.has(name))
+}
+
+/** The alias in scope (innermost first) whose rows go over the list at `path`, a field path. */
+function aliasOver(path: readonly string[], scope: Scope | undefined): string | undefined {
+  const entries = [...(scope ?? [])].reverse()
+  return entries.find(([, entry]) => entry.path.length === path.length && entry.path.every((segment, i) => segment === path[i]))?.[0]
+}
+
+// Other words for a list's count, which is `length` (D34).
+const COUNT_WORDS = new Set(['size', 'count'])
+
+/**
+ * Why a path can't go on past a list (`segments[i]` comes after it): it reads the list's items' fields
+ * without a row to read them in, or misspells `length`.
+ */
+function throughList(schema: MelzinSchema | null | undefined, segments: readonly string[], i: number, list: ListSchema, scope: Scope | undefined): string {
+  const prefix = segments.slice(0, i).join('.')
+  const segment = segments[i]!
   if (/^[0-9]+$/.test(segment)) return positionMessage(`${prefix}.${segment}`)
+  const properties = list.items.type === 'object' ? Object.keys(list.items.properties) : []
+  const exact = properties.includes(segment)
+  if (!exact && (COUNT_WORDS.has(segment) || suggest(segment, ['length']) !== '')) {
+    return `unknown field '${prefix}.${segment}' (did you mean '${prefix}.length'?)`
+  }
   const last = prefix.slice(prefix.lastIndexOf('.') + 1)
-  const alias = itemName(last)
+  const inRow = aliasOver(fieldPathOf(segments.slice(0, i), scope), scope)
+  const alias = inRow ?? freeAlias(schema, last, scope) ?? itemName(last)
   const loop = `${FOR_DIRECTIVE}="${alias} in ${prefix}"`
-  if (list.items.type !== 'object') return `'${prefix}' is ${describeField(list)}; show each one in a row: ${loop}, then m-text="${alias}"`
-  return `'${prefix}' is a list; read its items' fields in a row: ${loop}, then ${alias}.${segment}`
+  if (list.items.type !== 'object') {
+    const what = describeField(list)
+    return inRow === undefined
+      ? `'${prefix}' is ${what}; show each one in a row: ${loop}, then m-text="${alias}"`
+      : `'${prefix}' is ${what}, and this row reads one of them as '${alias}'`
+  }
+  // The item's field the path meant: the one it names, or the closest one.
+  let field = exact ? segment : undefined
+  if (field === undefined) suggest(segment, properties, (best) => (field = best))
+  if (field === undefined) {
+    const where = inRow === undefined ? `read their fields in a row: ${loop}` : `this row reads one of them as '${alias}'`
+    return `'${prefix}' is a list, and its items have no field '${segment}'; ${where}`
+  }
+  return inRow === undefined
+    ? `'${prefix}' is a list; read its items' fields in a row: ${loop}, then ${alias}.${field}`
+    : `'${prefix}' is a list, and this row reads one of its items as '${alias}': ${alias}.${field}`
+}
+
+/** ` (did you mean 'member.name'?)` for a field of a row's item written without the row's alias, innermost row first. */
+function suggestItemField(segment: string, scope: Scope, exact: boolean): string {
+  for (const [alias, entry] of [...scope].reverse()) {
+    const { items } = entry.list
+    if (items.type !== 'object') continue
+    if (exact) {
+      if (Object.hasOwn(items.properties, segment)) return ` (did you mean '${alias}.${segment}'?)`
+      continue
+    }
+    const hint = suggest(segment, Object.keys(items.properties), (best) => `${alias}.${best}`)
+    if (hint !== '') return hint
+  }
+  return ''
 }
 
 /**
@@ -761,7 +820,7 @@ export function resolveField(schema: MelzinSchema | null | undefined, segments: 
     const sofar = segments.slice(0, i + 1).join('.')
     const before = segments.slice(0, i).join('.')
     if (node.type === 'array') {
-      if (segment !== 'length') return { ok: false, message: throughList(before, node, segment) }
+      if (segment !== 'length') return { ok: false, message: throughList(schema, segments, i, node, scope) }
       if (i < segments.length - 1) return { ok: false, message: `'${sofar}' is a number and has no fields` }
       return { ok: true, field: { type: 'number' }, required, length: node }
     }
@@ -771,9 +830,13 @@ export function resolveField(schema: MelzinSchema | null | undefined, segments: 
     const child: FieldSchema | undefined = Object.hasOwn(node.properties, segment) ? node.properties[segment] : undefined
     if (child === undefined) {
       const prefix = segments.slice(0, i).map((s) => `${s}.`).join('')
-      // At the start of a path, the aliases in scope are names too.
-      const names = i === 0 && scope !== undefined ? [...Object.keys(node.properties), ...scope.keys()] : Object.keys(node.properties)
-      let hint = suggest(segment, names, (best) => prefix + best) || suggestNested(segment, node, prefix)
+      // At the start of a path, the aliases in scope are names too, and a row's item has fields.
+      const start = i === 0 && scope !== undefined ? scope : undefined
+      const names = start === undefined ? Object.keys(node.properties) : [...Object.keys(node.properties), ...start.keys()]
+      let hint = (start === undefined ? '' : suggestItemField(segment, start, true)) ||
+        suggest(segment, names, (best) => prefix + best) ||
+        suggestNested(segment, node, prefix) ||
+        (start === undefined ? '' : suggestItemField(segment, start, false))
       if (i === 0 && segment === 'data' && segments.length > 1 && resolveField(schema, segments.slice(1), scope).ok) {
         hint = ` (paths start inside data: use '${segments.slice(1).join('.')}')`
       }
@@ -825,17 +888,17 @@ export type ResolvedList =
  */
 export function resolveList(schema: MelzinSchema | null | undefined, alias: string, segments: readonly string[], scope?: Scope): ResolvedList {
   const name = segments.join('.')
-  const other = itemName(segments.at(-1) ?? '')
-  const instead = other === alias ? 'item' : other
+  const free = freeAlias(schema, segments.at(-1) ?? '', scope, alias)
+  const pick = `pick another name${free === undefined ? '' : `, such as ${free}`}`
   if (alias === ROUTE_INPUT) {
-    return { ok: false, at: 'alias', message: `'${alias}' is already the URL input; pick another name, such as ${instead}` }
+    return { ok: false, at: 'alias', message: `'${alias}' is already the URL input; ${pick}` }
   }
   const outer = scope?.get(alias)
   if (outer !== undefined) {
-    return { ok: false, at: 'alias', message: `'${alias}' is already the item of the ${FOR_DIRECTIVE} over '${formatFieldPath(outer.path)}' around this one; pick another name` }
+    return { ok: false, at: 'alias', message: `'${alias}' is already the item of the ${FOR_DIRECTIVE} over '${formatFieldPath(outer.path)}' around this one; ${pick}` }
   }
   if (schema?.data !== undefined && Object.hasOwn(schema.data.properties, alias)) {
-    return { ok: false, at: 'alias', message: `'${alias}' is already a data field; pick another name, such as ${instead}` }
+    return { ok: false, at: 'alias', message: `'${alias}' is already a data field; ${pick}` }
   }
   if (segments[0] === ROUTE_INPUT) {
     return { ok: false, at: 'path', message: `'${name}' is the URL input, which has no lists; ${FOR_DIRECTIVE} goes over a list field ("type": "array")` }

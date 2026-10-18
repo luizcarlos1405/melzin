@@ -78,7 +78,7 @@ describe('paths inside rows', () => {
 
   test('an inner alias must differ from the outer ones', () => {
     expect(check(LIST.replace('tag in member.tags" m-text="tag"', 'member in member.tags" m-text="member"'))).toEqual([
-      "error: m-for: 'member' is already the item of the m-for over 'members' around this one; pick another name",
+      "error: m-for: 'member' is already the item of the m-for over 'members' around this one; pick another name, such as tag",
     ])
   })
 

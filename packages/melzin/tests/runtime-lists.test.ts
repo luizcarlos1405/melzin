@@ -445,7 +445,7 @@ describe('broken lists', () => {
     mountBody('<div m-for="member in members"><span m-for="member in member.tags"></span></div>', { members: [member('ana', 'Ana', { tags: ['a'] })] })
     expect(children($('div'))).toEqual(['#m-for'])
     expect(warnings).toEqual([
-      `<span m-for="member in member.tags">: 'member' is already the item of the m-for over 'members' around this one; pick another name; shows no rows`,
+      `<span m-for="member in member.tags">: 'member' is already the item of the m-for over 'members' around this one; pick another name, such as tag; shows no rows`,
     ])
   })
 
