@@ -12,6 +12,7 @@ import {
   DEVICE_MAX,
   DEVICE_MIN,
   type Device,
+  type FrameStatus,
   type ShellState,
   type Version,
   ZOOM_STEPS,
@@ -23,6 +24,8 @@ import {
   formatPayload,
   formatTime,
   frameUrl,
+  missingPage,
+  pageReady,
   parseDataJson,
   parseDevices,
   parseShellState,
@@ -54,8 +57,6 @@ type LoadedVersion = VersionEntry & { title: string; snapshots: Snapshot[]; issu
 type LoadedView = { name: string; route: Route | null; all: VersionEntry[]; versions: LoadedVersion[] }
 
 type WarningEntry = { count: number; badge: HTMLElement; item: HTMLLIElement; update: boolean }
-
-type FrameStatus = 'loading' | 'ready' | 'error'
 
 /** One render: an iframe at one device size. */
 type Frame = { device: Device; wrap: HTMLElement; iframe: HTMLIFrameElement; status: FrameStatus }
@@ -131,7 +132,10 @@ let loaded: LoadedView | null = null
 let cards: Card[] = []
 let loadToken = 0
 let editorIds = 0
-/** True when a version's file couldn't be fetched: the page is then ready with an error. */
+/**
+ * True when the page can't show what its URL asks for: an unknown view, route, alternative or
+ * snapshot, or a version's file that couldn't be fetched. The page is then ready with an error.
+ */
 let loadFailed = false
 /** Links to a variation of the current state ("Open alone"), refreshed when the state changes. */
 let stateLinks: { el: HTMLAnchorElement; changes: Partial<ShellState> }[] = []
@@ -341,9 +345,13 @@ function setFrameStatus(card: Card, frame: Frame, status: FrameStatus): void {
   const overall = cardStatus(card)
   card.statusBadge.className = `status status-${overall}`
   card.statusBadge.textContent = overall === 'loading' ? 'loading' : overall === 'ready' ? 'live' : 'error'
-  if (cards.length > 0 && cards.every((item) => item.frames.every((each) => each.status !== 'loading'))) {
-    document.body.dataset.melzinReady = loadFailed ? 'error' : 'true'
-  }
+  markReady()
+}
+
+/** Sets `data-melzin-ready` on `<body>` once no frame is loading (SPEC §8). */
+function markReady(): void {
+  const ready = pageReady(loadFailed, cards.flatMap((card) => card.frames.map((frame) => frame.status)))
+  if (ready !== undefined) document.body.dataset.melzinReady = ready
 }
 
 function renderWarningCount(card: Card): void {
@@ -728,7 +736,8 @@ function renderCards(view: LoadedView): HTMLElement[] {
   const extra: HTMLElement[] = []
   const compare = view.versions.length > 1
   let rows = snapshotRows(view.versions.map((version) => version.snapshots.map((snapshot) => snapshot.name)))
-  if (state.snapshot !== null) {
+  // With no version to show (an unknown alternative, already reported), no snapshot can be found either.
+  if (state.snapshot !== null && view.versions.length > 0) {
     const wanted = state.snapshot
     if (!rows.includes(wanted)) {
       const names = rows.filter((row) => row !== null).map((row) => `'${row}'`).join(', ') || 'none'
@@ -736,6 +745,7 @@ function renderCards(view: LoadedView): HTMLElement[] {
       if (view.versions.some((version) => version.issues.some((issue) => issue.path?.startsWith('snapshots')))) lines.push('The snapshots block has problems; see above.')
       const files = view.versions.length === 1 ? versionPath(view.versions[0]!) : view.name
       extra.push(notice('error', `${files} has no snapshot named '${wanted}'`, lines, { text: 'Show all snapshots', changes: { snapshot: null } }))
+      loadFailed = true
       rows = []
     } else {
       rows = [wanted]
@@ -768,7 +778,8 @@ function renderCards(view: LoadedView): HTMLElement[] {
   canvas.style.gridTemplateColumns = compare ? `repeat(${view.versions.length}, max-content)` : ''
   canvas.classList.toggle('single', cards.length === 1)
   applyLayout()
-  if (cards.length === 0) document.body.dataset.melzinReady = loadFailed ? 'error' : 'true'
+  // With cards, the attribute waits for their frames.
+  markReady()
   return extra
 }
 
@@ -823,20 +834,12 @@ async function loadCurrentView(): Promise<void> {
   }
   if (picked === undefined) {
     // Keep the requested name in the URL: once the file exists, a refresh shows it (D3).
-    if (views.length === 0 && exploringNames().length === 0) {
-      emptyState('No views yet', 'Add a *.mel.html file to the views folder, or alternatives to explore/<alternative>/, then reload.', 'nap')
-    } else if (state.route !== null) {
-      const route = routesEntry.routes.find((item) => item.name === state.route)
-      const pages = routesEntry.routes.map((item) => item.name).join(', ') || 'none'
-      if (route === undefined) emptyState(`No route named '${state.route}'`, `Routes: ${pages}. Pick a page or a view above.`)
-      else emptyState(`Route '${route.name}' shows '${route.view}', which isn't in the views folder`, 'Add the view, or fix routes.json, then reload.')
-    } else {
-      const available = [...views.map((view) => view.name), ...exploringNames()].join(', ')
-      emptyState(`No view named '${state.view}'`, `Available: ${available}. Pick one above, or add the file and reload.`)
-    }
+    const missing = missingPage(state, [...views.map((view) => view.name), ...exploringNames()], routesEntry.routes)
+    emptyState(missing.title, missing.text, missing.mood)
+    loadFailed = missing.failed
     viewPicker.value = ''
     notices.replaceChildren(...pageNotices)
-    document.body.dataset.melzinReady = 'true'
+    markReady()
     return
   }
   const { name, route, all } = picked
@@ -851,6 +854,7 @@ async function loadCurrentView(): Promise<void> {
     if (match === undefined) {
       const keys = all.map((version) => `'${version.key}'`).join(', ')
       pageNotices.push(notice('error', `'${name}' has no version named '${state.alt}'`, [`Versions: ${keys}`], { text: 'Show all versions', changes: { alt: null } }))
+      loadFailed = true
       shown = []
     } else {
       shown = [match]

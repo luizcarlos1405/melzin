@@ -28,6 +28,8 @@ import {
   formatTime,
   PAYLOAD_MAX,
   frameUrl,
+  missingPage,
+  pageReady,
   parseDataJson,
   parseDevice,
   parseDevices,
@@ -223,6 +225,54 @@ describe('versions of a view (SPEC D31)', () => {
     expect(snapshotRows([[], ['typical']])).toEqual([null, 'typical'])
     expect(snapshotRows([[], []])).toEqual([null])
     expect(snapshotRows([])).toEqual([])
+  })
+})
+
+describe('ready state (SPEC §8)', () => {
+  test('pageReady waits for every frame, then is "error" when the page or a frame failed', () => {
+    expect(pageReady(false, ['ready', 'loading'])).toBeUndefined()
+    expect(pageReady(true, ['error', 'loading'])).toBeUndefined()
+    expect(pageReady(false, ['ready', 'ready'])).toBe('true')
+    // A frame that failed (an invalid schema, a file that didn't load) is "error" alone, and so is the page.
+    expect(pageReady(false, ['ready', 'error'])).toBe('error')
+    // Cards for the snapshots that exist, next to a version that didn't load.
+    expect(pageReady(true, ['ready'])).toBe('error')
+    // No frames: an unknown view, route, alternative or snapshot, or a project with no views yet.
+    expect(pageReady(true, [])).toBe('error')
+    expect(pageReady(false, [])).toBe('true')
+  })
+
+  test('missingPage: an unknown view or route fails, a project with no views yet is ready', () => {
+    const routes = [{ name: 'home', view: 'inbox' }, { name: 'ghost', view: 'gone' }]
+    expect(missingPage({ view: null, route: null }, [], [])).toEqual({
+      title: 'No views yet',
+      text: 'Add a *.mel.html file to the views folder, or alternatives to explore/<alternative>/, then reload.',
+      mood: 'nap',
+      failed: false,
+    })
+    // A URL for a screenshot that names a view or route the project doesn't have yet.
+    expect(missingPage({ view: 'order', route: null }, [], [])).toMatchObject({ title: 'No views yet', mood: 'nap', failed: true })
+    expect(missingPage({ view: null, route: 'home' }, [], [])).toMatchObject({ title: 'No views yet', mood: 'nap', failed: true })
+    expect(missingPage({ view: 'missing', route: null }, ['inbox', 'settings'], routes)).toEqual({
+      title: "No view named 'missing'",
+      text: 'Available: inbox, settings. Pick one above, or add the file and reload.',
+      mood: 'oops',
+      failed: true,
+    })
+    expect(missingPage({ view: null, route: 'nope' }, ['inbox'], routes)).toEqual({
+      title: "No route named 'nope'",
+      text: 'Routes: home, ghost. Pick a page or a view above.',
+      mood: 'oops',
+      failed: true,
+    })
+    expect(missingPage({ view: null, route: 'nope' }, ['inbox'], [])).toMatchObject({ text: 'Routes: none. Pick a page or a view above.', failed: true })
+    // The route wins over the view, as in the shell's URL.
+    expect(missingPage({ view: 'inbox', route: 'ghost' }, ['inbox'], routes)).toEqual({
+      title: "Route 'ghost' shows 'gone', which isn't in the views folder",
+      text: 'Add the view, or fix routes.json, then reload.',
+      mood: 'oops',
+      failed: true,
+    })
   })
 })
 

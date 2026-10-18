@@ -275,6 +275,50 @@ export function snapshotRows(lists: readonly (readonly string[])[]): (string | n
   return lists.some((list) => list.length === 0) ? [null, ...names] : names
 }
 
+/**
+ * What the shell shows when the URL's view or route can't be picked. `nap` when there's simply
+ * nothing to show yet, `oops` when something went wrong. `failed` makes the page's
+ * `data-melzin-ready` "error": every case but a project with no views yet whose URL names none.
+ */
+export type MissingPage = { title: string; text: string; mood: 'nap' | 'oops'; failed: boolean }
+
+/**
+ * The page for a URL whose view or route isn't there. `views` are the names the shell lists (in
+ * views/ and explore/), `routes` the routes it lists.
+ */
+export function missingPage(
+  asked: { view: string | null; route: string | null },
+  views: readonly string[],
+  routes: readonly { name: string; view: string }[],
+): MissingPage {
+  if (views.length === 0) {
+    // A screenshot of this page for a URL that names a view or route would look fine by mistake.
+    const failed = asked.view !== null || asked.route !== null
+    return { title: 'No views yet', text: 'Add a *.mel.html file to the views folder, or alternatives to explore/<alternative>/, then reload.', mood: 'nap', failed }
+  }
+  if (asked.route !== null) {
+    const route = routes.find((item) => item.name === asked.route)
+    const pages = routes.map((item) => item.name).join(', ') || 'none'
+    if (route === undefined) return { title: `No route named '${asked.route}'`, text: `Routes: ${pages}. Pick a page or a view above.`, mood: 'oops', failed: true }
+    return { title: `Route '${route.name}' shows '${route.view}', which isn't in the views folder`, text: 'Add the view, or fix routes.json, then reload.', mood: 'oops', failed: true }
+  }
+  return { title: `No view named '${asked.view}'`, text: `Available: ${views.join(', ')}. Pick one above, or add the file and reload.`, mood: 'oops', failed: true }
+}
+
+/** A frame of the shell: loading, showing its view, or showing why it couldn't (the frame alone is then "error"). */
+export type FrameStatus = 'loading' | 'ready' | 'error'
+
+/**
+ * The shell page's `data-melzin-ready` (SPEC §8), or undefined while a frame is still loading.
+ * `"error"` when the page couldn't show what its URL asks for (`failed`: an unknown view, route,
+ * alternative or snapshot, or a file that didn't load) or a frame failed, as it then would alone;
+ * `"true"` otherwise. A page with no frames and nothing failed is ready: a project with no views yet.
+ */
+export function pageReady(failed: boolean, frames: readonly FrameStatus[]): 'true' | 'error' | undefined {
+  if (frames.includes('loading')) return undefined
+  return failed || frames.includes('error') ? 'error' : 'true'
+}
+
 /** `14:03:27.042` in local time, for the event log. */
 export function formatTime(date: Date): string {
   const pad = (n: number, width = 2) => String(n).padStart(width, '0')
