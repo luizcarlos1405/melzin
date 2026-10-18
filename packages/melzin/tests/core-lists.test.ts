@@ -372,6 +372,34 @@ describe('snapshots with lists', () => {
     )
     expect(result.issues).toEqual([{ message: "missing required field 'name'", path: 'snapshots["base"].data.members[0].name' }])
   })
+
+  // Patching one item of a base's list is the likely cause of these, so they say lists replace whole.
+  test("setting one item of the base's list gets the reminder that lists replace whole", () => {
+    const three = [{ handle: 'ana', name: 'Ana' }, { handle: 'bo', name: 'Bo' }, { handle: 'cy', name: 'Cy' }]
+    const result = parseSnapshots(
+      {
+        base: { data: { members: three, polls: [{ id: 1, options: [{ id: 'a' }, { id: 'b' }] }] } },
+        'one item': { extends: 'base', data: { members: [{ handle: 'bo', bio: 'Hi' }] } },
+        'by index': { extends: 'base', data: { members: { '1': { bio: 'Hi' } } } },
+        'inner list': { extends: 'base', data: { polls: [{ id: 1, options: [{ length: 2 }, { id: 'b' }] }] } },
+        // A wrong type, or a list the base doesn't have, isn't that mistake.
+        'wrong type': { extends: 'base', data: { members: [{ handle: 'bo', name: 3 }] } },
+        alone: { data: { members: [{ handle: 'bo' }], polls: [] } },
+      },
+      schema,
+    )
+    const replaces = "this list replaces the whole list in 'base', so restate every field of each item (docs/authoring.md §5)"
+    expect(result.issues).toEqual([
+      { message: `missing required field 'name'; ${replaces}`, path: 'snapshots["one item"].data.members[0].name' },
+      {
+        message: "expected a list, got object; a list can't be patched item by item: restate the whole list from 'base', with the change (docs/authoring.md §5)",
+        path: 'snapshots["by index"].data.members',
+      },
+      { message: `missing required field 'id'; ${replaces}`, path: 'snapshots["inner list"].data.polls[0].options[0].id' },
+      { message: 'expected string, got number', path: 'snapshots["wrong type"].data.members[0].name' },
+      { message: "missing required field 'name'", path: 'snapshots["alone"].data.members[0].name' },
+    ])
+  })
 })
 
 describe('paths with an m-for alias', () => {

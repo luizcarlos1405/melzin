@@ -84,6 +84,35 @@ export function snapshotOwnPaths(entry: unknown): SnapshotOwnPaths {
   }
 }
 
+/**
+ * Where a snapshot's own value takes the place of a list its base has (D30, D36), in joinPath form such
+ * as `data.members`: lists replace whole, so a value there is the whole list, never a patch of it.
+ */
+function replacedLists(own: unknown, base: unknown, path: string, found: string[]): string[] {
+  if (Array.isArray(base)) {
+    if (own !== null && own !== undefined) found.push(path)
+  } else if (isPlainObject(own) && isPlainObject(base)) {
+    for (const [key, value] of Object.entries(own)) if (Object.hasOwn(base, key)) replacedLists(value, base[key], joinPath(path, key), found)
+  }
+  return found
+}
+
+/**
+ * An issue in a list a snapshot sets over its base's, with the reminder that lists replace whole when
+ * it's the symptom of patching one item: an object where the list goes, or an item missing a required
+ * field. Other issues stay as they are.
+ */
+function withListHint(issue: Issue, lists: readonly string[], base: string): Issue {
+  const path = issue.path ?? ''
+  if (lists.includes(path) && issue.message.startsWith('expected a list, got object')) {
+    return { ...issue, message: `${issue.message}; a list can't be patched item by item: restate the whole list from '${base}', with the change (docs/authoring.md §5)` }
+  }
+  if (lists.some((list) => path.startsWith(`${list}[`)) && issue.message.startsWith('missing required field')) {
+    return { ...issue, message: `${issue.message}; this list replaces the whole list in '${base}', so restate every field of each item (docs/authoring.md §5)` }
+  }
+  return issue
+}
+
 /** `snapshots["a few clicks"]`, the start of every issue path about that snapshot. */
 function snapshotPath(name: string): string {
   return `snapshots[${JSON.stringify(name)}]`
@@ -218,10 +247,13 @@ export function parseSnapshots(
     const own = snapshotOwnPaths(entry)
     // A problem the base has too, in a value this snapshot inherits, is the base's to report.
     const inherited = base === undefined ? [] : check(base).issues
+    const lists = base === undefined ? [] : replacedLists(entry.data, resolve(base).body.data, 'data', [])
     for (const issue of issues) {
       const relative = issue.path ?? ''
       if (!own.sets(relative) && inherited.some((other) => other.path === issue.path && other.message === issue.message)) continue
-      const message = own.removes(relative) ? "the schema requires this field, so null can't remove it" : issue.message
+      const message = own.removes(relative)
+        ? "the schema requires this field, so null can't remove it"
+        : base === undefined ? issue.message : withListHint(issue, lists, base).message
       report(name, { message, path: relative === '' ? path : `${path}.${relative}` })
     }
     if (data === null) continue
