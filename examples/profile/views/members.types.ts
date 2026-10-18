@@ -3,7 +3,7 @@ import type { Href } from 'melzin'
 
 export type Data = {
   /** Everyone in the demo, in the order to show */
-  members: {
+  members: readonly {
     name: string
     /** Without the @ */
     handle: string

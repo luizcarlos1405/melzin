@@ -2,7 +2,7 @@
 export type Data = {
   question: string
   /** The choices, in the order to show */
-  options: {
+  options: readonly {
     /** What the vote event sends back, like "pizza" */
     id: string
     /** Like "Pizza" */

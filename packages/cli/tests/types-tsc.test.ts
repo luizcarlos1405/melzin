@@ -141,6 +141,29 @@ const hosts: Host[] = [
       })`,
   },
   {
+    // Lists are readonly arrays: the runtime only reads data, so readonly arrays and `as const` fit.
+    file: 'poll-readonly.ts',
+    types: 'poll',
+    errors: [],
+    body: `
+      type Option = { readonly id: string; readonly label: string; readonly votes: number; readonly mine: boolean }
+      const options: readonly Option[] = [{ id: 'a', label: 'A', votes: 0, mine: false }]
+      const tags: ReadonlyArray<string> = ['food']
+      const view = await mount<Data, Handlers>(el, '/v', { data: { question: 'Lunch?', options, tags }, on: { vote() {}, pick() {}, reset() {} } })
+      const frozen = { question: 'Lunch?', options: [{ id: 'a', label: 'A', votes: 3, mine: true, note: 'hot' }], tags: ['food', 'fast'] } as const
+      view.update(frozen)
+      const first: string | undefined = view.data.options[0]?.label
+      void first`,
+  },
+  {
+    file: 'poll-readonly-wrong-item.ts',
+    types: 'poll',
+    errors: ['TS2322'],
+    body: `
+      const view = await mount<Data, Handlers>(el, '/v', { data: { question: 'Q', options: [] }, on: { vote() {}, pick() {}, reset() {} } })
+      view.update({ question: 'Q', options: [{ id: 'a', label: 'A', votes: '3', mine: false }] } as const)`,
+  },
+  {
     file: 'poll-wrong-payload.ts',
     types: 'poll',
     errors: ['TS2322'],

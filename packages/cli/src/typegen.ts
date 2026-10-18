@@ -40,10 +40,13 @@ function objectType(object: ObjectSchema | PayloadSchema, indent: string): strin
   return lines.join('\n')
 }
 
-/** A field's type; a list (SPEC D34) is an array of its items' type, inline. */
+/**
+ * A field's type; a list (SPEC D34) is a readonly array of its items' type, inline. The runtime only
+ * reads data, so a host may pass readonly arrays and `as const` data; mutable arrays still fit.
+ */
 function fieldType(field: FieldSchema, indent: string): string {
   if (field.type === 'object') return objectType(field, indent)
-  if (field.type === 'array') return `${fieldType(field.items, indent)}[]`
+  if (field.type === 'array') return `readonly ${fieldType(field.items, indent)}[]`
   return field.route !== undefined ? `Href<'${field.route}'>` : field.type
 }
 
