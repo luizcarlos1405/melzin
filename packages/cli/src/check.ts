@@ -469,6 +469,47 @@ function tagOffset(source: string, document: DefaultTreeAdapterTypes.Document, t
 // Literal `{{ ... }}` in text: Vue/Alpine interpolation, which Melzin shows as is.
 const MUSTACHE_RE = /\{\{[\s\S]*?\}\}/
 
+/** Vue's and Alpine's loop attributes, which Melzin writes as m-for. */
+const FOREIGN_LOOPS = new Set(['v-for', 'x-for'])
+
+/**
+ * The item's name and the list of a Vue or Alpine loop, read loosely, for the m-for to write instead:
+ * `(member, i) in members` → `member`, `members`. Either is undefined when the value doesn't say.
+ */
+function looseLoop(value: string): { alias: string | undefined; list: string | undefined } {
+  const parsed = parseForDirective(value)
+  if (parsed.ok) return { alias: parsed.alias, list: parsed.path.join('.') }
+  const alias = /^\s*\(?\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(value)?.[1]
+  const list = /\s(?:in|of)\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*$/.exec(value)?.[1]
+  return { alias, list }
+}
+
+/** `prefix:name` for namespaced attributes (xlink:href), else the name. */
+function attributeName(attr: { prefix?: string; name: string }): string {
+  return attr.prefix ? `${attr.prefix}:${attr.name}` : attr.name
+}
+
+/**
+ * What the directives on an element the runtime drops, and on everything inside it (a <template>'s
+ * content too), would do: send events, or read data. Those wait, like broken bindings, until the element
+ * is fixed, since its error is often why they look unused.
+ */
+function droppedBindings(node: Element): { sends: boolean; reads: boolean } {
+  const found = { sends: false, reads: false }
+  const visit = (element: Element): void => {
+    for (const attr of element.attrs) {
+      const name = attributeName(attr)
+      if (classifyAttribute(name).kind === 'plain') continue
+      if (/^(?:m-on:|v-on:|x-on:|@)/.test(name)) found.sends = true
+      else found.reads = true
+    }
+    const content = 'content' in element ? (element as DefaultTreeAdapterTypes.Template).content.childNodes : []
+    for (const child of [...element.childNodes, ...content]) if (isElement(child)) visit(child)
+  }
+  visit(node)
+  return found
+}
+
 // Names JavaScript orders before every other key ("0", "10"), whatever the order in the file.
 const INDEX_NAME_RE = /^(0|[1-9][0-9]{0,8})$/
 
@@ -654,8 +695,9 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   // `members` (a list an m-for or a .length condition uses), `members[].name`, `tags[]`.
   const used = new Set<string>()
   const emitted = new Set<string>()
-  // A broken binding would also show up as "never used" or "nothing emits it"; skip those then.
-  const broken = { text: false, click: false, condition: false, loop: false, payload: false }
+  // A broken binding would also show up as "never used" or "nothing emits it"; skip those then. `markup`
+  // is for bindings inside an element the runtime drops (a <template>), whose error is reported alone.
+  const broken = { text: false, click: false, condition: false, loop: false, payload: false, markup: false }
   // For the checks against the route table: what the view reads from the URL, and its static links.
   const routeRefs: { ref: RouteRef; offset: number }[] = []
   const staticLinks: { href: string; offset: number }[] = []
@@ -793,10 +835,12 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     const expr = parseExpression(value)
     const arg = expr.ok && expr.expr.kind === 'call' ? expr.expr.args[0] : undefined
     const eventAt = arg === undefined ? 0 : arg.start + 1
-    if (!Object.hasOwn(events, parsed.event)) {
+    const declared = Object.hasOwn(events, parsed.event)
+    if (!declared) {
+      // Often a typo of a declared event, which then isn't "emitted" either: that waits too.
+      broken.click = true
       const hint = suggest(parsed.event, Object.keys(events)) || (schemaState === 'valid' ? ` (add "${parsed.event}": {} to the schema's events)` : '')
       error(at(eventAt), `${CLICK_DIRECTIVE}: event '${parsed.event}' isn't declared in the schema's events${hint}${noSchemaHint}`)
-      return
     }
     // The payload (D35): each value uses what it reads, and the whole must fit the event's payload.
     const fields = parsed.payload?.fields ?? []
@@ -812,6 +856,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         useField(field.path, context.scope)
       }
     }
+    if (!declared) return // the payload is checked once the event is declared
     const issues = payloadIssues(checked, parsed.event, parsed.payload, eventAt, context.scope)
     if (issues.length > 0) broken.payload = true
     for (const issue of issues) error(at(issue.offset), `${CLICK_DIRECTIVE}: ${issue.message}`)
@@ -912,8 +957,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
 
   // m-for (D34): returns the context of the element's own directives and of everything inside it, the
   // rows; `attributeAt` is where the attribute starts. A broken m-for shows no rows, so it has no loop
-  // gate. One with m-if, m-else-if or m-else is an error of its own (checkElement), and is checked as if
-  // the condition were around it, so the rows' paths still are.
+  // gate. One with m-if, m-else-if or m-else is an error of its own (checkElement); the rows' paths, and
+  // the condition's, are still checked.
   const checkForDirective = (element: Element, value: string, attributeAt: number, context: Context): Context => {
     const { start, exact } = valueStart(element, FOR_DIRECTIVE, value)
     const at = (offset: number): number => (exact ? start + offset : start)
@@ -960,11 +1005,23 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   // m-for element is never part of one, so it ends the chain before it.
   const checkElement = (node: Element, context: Context, chain: Chain | undefined): Chain | undefined => {
     const offset = startOf(node) ?? 0
-    const nameOf = (attr: { prefix?: string; name: string }): string => (attr.prefix ? `${attr.prefix}:${attr.name}` : attr.name)
+    const nameOf = attributeName
     const attributeAt = (name: string): number => node.sourceCodeLocation?.attrs?.[name]?.startOffset ?? offset
     // The m-for first, whatever the attribute order: the element's own directives apply per row.
     const loop = node.attrs.find((attr) => nameOf(attr) === FOR_DIRECTIVE)
-    const row = loop === undefined ? context : checkForDirective(node, loop.value, attributeAt(FOR_DIRECTIVE), context)
+    // A Vue or Alpine loop is an error of its own; its rows are read like a broken m-for's, so paths
+    // through its alias wait for the m-for that replaces it.
+    const foreignLoop = loop === undefined ? node.attrs.find((attr) => FOREIGN_LOOPS.has(nameOf(attr))) : undefined
+    let row = context
+    if (loop !== undefined) {
+      row = checkForDirective(node, loop.value, attributeAt(FOR_DIRECTIVE), context)
+    } else if (foreignLoop !== undefined) {
+      broken.loop = true
+      // As for an m-for: when the loop reads as one, only its alias waits; else any path that isn't data.
+      const parsed = parseForDirective(foreignLoop.value)
+      const aliases = new Set([...(context.lenient?.aliases ?? []), ...(parsed.ok ? [parsed.alias] : [])])
+      row = { ...context, inRow: true, lenient: { aliases, unknown: parsed.ok ? (context.lenient?.unknown ?? false) : true } }
+    }
     let role: { directive: ChainDirective; at: number; value: string; condition: Condition | undefined } | undefined
     let show: { at: number; value: string; condition: Condition | undefined } | undefined
     for (const attr of node.attrs) {
@@ -976,6 +1033,11 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         if (attribute !== undefined) error(at, attribute.message)
         else if (name === 'href' && (node.tagName === 'a' || node.tagName === 'area')) staticLinks.push({ href: attr.value, offset: at })
         if (name === 'id' && row.inRow) warning(at, 'every row gets the same id; ids must be unique in a page')
+      } else if (kind.kind === 'foreign' && FOREIGN_LOOPS.has(name)) {
+        // The m-for to write, with the loop's own names: m-for="member in members".
+        const { alias, list } = looseLoop(attr.value)
+        const example = list === undefined ? FOR_DIRECTIVE : `${FOR_DIRECTIVE}="${alias ?? itemName(list.split('.').at(-1)!)} in ${list}"`
+        error(at, kind.message.replace(`use ${FOR_DIRECTIVE}`, `use ${example}`))
       } else if (kind.kind === 'foreign' || kind.kind === 'unsupported') {
         error(at, kind.message)
       } else if (kind.name === TEXT_DIRECTIVE) {
@@ -990,6 +1052,9 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         // checked first, above
       } else if (loop !== undefined && isChainDirective(kind.name)) {
         error(at, forChainMessage(kind.name))
+        // Still resolved, in the row, so a typo is reported and what it reads counts as used; it decides
+        // nothing for the snapshot coverage.
+        if (kind.name !== ELSE_DIRECTIVE) checkConditionDirective(node, kind.name, attr.value, row)
       } else if (role !== undefined) {
         error(at, `an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}`)
       } else if (kind.name === ELSE_DIRECTIVE) {
@@ -1064,7 +1129,13 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         : { message: `the ${blockType} block belongs in <head>`, drop: true }
       if (problem !== undefined) {
         error(offset, problem.message)
-        if (problem.drop) continue // the runtime drops it, content included
+        if (problem.drop) {
+          // The runtime drops it, content included.
+          const inside = droppedBindings(node)
+          if (inside.sends) broken.click = true
+          if (inside.reads) broken.markup = true
+          continue
+        }
       }
       chain = checkElement(node, context, chain)
     }
@@ -1080,7 +1151,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     // Leaves and lists, each one before the fields inside it. A list nothing uses is reported alone, not
     // with each of its items' fields; objects only hold fields.
     const fields = schemaFields(schema)
-    const silenced = broken.text || broken.condition || broken.loop || broken.payload
+    const silenced = broken.text || broken.condition || broken.loop || broken.payload || broken.markup
     const unusedLists: string[][] = []
     for (const { path, field } of fields) {
       if (field.type === 'object' || silenced) continue

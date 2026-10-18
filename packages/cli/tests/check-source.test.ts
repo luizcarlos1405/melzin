@@ -163,10 +163,18 @@ describe('markup', () => {
     ])
   })
 
-  test('<template> is an error, and its content (never bound by the runtime) is not counted as used', () => {
-    expect(messages(checkSource(page(`<button m-on:click="emit('increment')">+</button><template><p m-text="count"></p></template>`)))).toEqual([
+  test("<template> is an error, and bindings in its content (never bound by the runtime) wait like broken ones", () => {
+    const template = 'error: <template> isn\'t supported; to group elements, wrap them in one element, such as <div class="contents">'
+    // Wrapped in an element as the message says, the content shows 'count' and emits 'increment'.
+    expect(messages(checkSource(page(`<template><p m-text="count"></p><button m-on:click="emit('increment')">+</button></template>`)))).toEqual([template])
+    // Content that sends nothing doesn't hide an event nothing emits, and plain content hides nothing.
+    expect(messages(checkSource(page(`<template><p m-text="count"></p></template>`)))).toEqual([
+      "warning: event 'increment' is declared but nothing emits it",
+      template,
+    ])
+    expect(messages(checkSource(page(`<button m-on:click="emit('increment')">+</button><template><p>Plain</p></template>`)))).toEqual([
       "warning: data field 'count' is never used",
-      'error: <template> isn\'t supported; to group elements, wrap them in one element, such as <div class="contents">',
+      template,
     ])
   })
 

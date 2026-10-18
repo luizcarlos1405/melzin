@@ -118,6 +118,53 @@ describe('a broken m-for', () => {
   })
 })
 
+describe('loops and bindings the runtime would not run', () => {
+  const PICK = { ...SCHEMA, events: { pick: { payload: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'] } } } }
+  const PICK_ROW = `${ROW}<button m-on:click="emit('pick', { handle: member.handle })">Pick</button>`
+
+  test("a Vue or Alpine loop is its only error, with the m-for to write; paths through its alias wait", () => {
+    for (const loop of ['v-for="member in members"', 'v-for="(member, i) in members"', 'v-for="member of members"']) {
+      expect(check(`<h1 m-text="title"></h1><ul><li ${loop}>${PICK_ROW}</li></ul>`, PICK)).toEqual([
+        `error: 'v-for' is Vue/Alpine syntax; use m-for="member in members"`,
+      ])
+    }
+    expect(check(`<h1 m-text="title"></h1><ul><li x-for="member in members">${PICK_ROW}</li></ul>`, PICK)).toEqual([
+      `error: 'x-for' is Vue/Alpine syntax; use m-for="member in members" on the element to repeat (<template> isn't supported)`,
+    ])
+    // Like a broken m-for: other paths are still checked when the loop reads as one...
+    expect(check(`<h1 m-text="title"></h1><ul><li v-for="member in members"><span m-text="titel"></span>${PICK_ROW}</li></ul>`, PICK)).toEqual([
+      `error: 'v-for' is Vue/Alpine syntax; use m-for="member in members"`,
+      "error: m-text: unknown field 'titel' (did you mean 'title'?)",
+    ])
+    // ...and without the item's name, the m-for names one after the list, and any path that doesn't start
+    // with a data field waits (here 'name' and 'titel').
+    expect(check(`<h1 m-text="title"></h1><ul><li v-for="{ name } in members"><span m-text="name"></span><i m-text="titel"></i></li></ul>`)).toEqual([
+      `error: 'v-for' is Vue/Alpine syntax; use m-for="member in members"`,
+    ])
+  })
+
+  test('m-if on the m-for element is still resolved in the row: a typo is reported, and what it reads is used', () => {
+    const body = LIST.replace('<li m-for="member in members">', '<li m-for="member in members" m-if="member.verified">').replace('<b m-show="member.verified">✓</b>', '')
+    const chain = "error: m-if can't go on an element with m-for: wrap the list in an element with m-if, or put the condition inside the row; to show only some items, have the host filter the list"
+    expect(check(body)).toEqual([chain])
+    expect(check(body.replace('m-if="member.verified"', 'm-if="member.verifed"'))).toEqual([chain, "error: m-if: unknown field 'member.verifed' (did you mean 'member.verified'?)"])
+  })
+
+  test('a <template> loop is its only error: what its content reads and emits waits for the fix', () => {
+    for (const loop of ['m-for', 'v-for', 'x-for']) {
+      expect(check(`<h1 m-text="title"></h1><ul><template ${loop}="member in members"><li>${PICK_ROW}</li></template></ul>`, PICK)).toEqual([
+        "error: put m-for on the element to repeat; <template> isn't supported",
+      ])
+    }
+  })
+
+  test("an emit of an undeclared event is its only error: its payload's paths count as used, and the declared event waits", () => {
+    const body = `<h1 m-text="title"></h1><ul><li m-for="member in members">${PICK_ROW.replace("'pick'", "'pik'").replace('<span m-text="member.name"></span>', '')}</li></ul>`
+    const named = body.replace('{ handle: member.handle }', '{ handle: member.handle, name: member.name }')
+    expect(check(named, PICK)).toEqual([`error: m-on:click: event 'pik' isn't declared in the schema's events (did you mean 'pick'?)`])
+  })
+})
+
 describe('nested lists', () => {
   const POLLS = {
     data: {
