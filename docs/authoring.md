@@ -13,7 +13,9 @@ front end that runs in production. A host (a web page, or the preview shell) mou
 checker rejects anything that would (§2), and the runtime drops it before the view reaches the page.
 
 - The view shows data through `m-text`, shows elements only when a condition holds through `m-if`,
-  `m-else-if`, `m-else` and `m-show`, and sends events through `m-on:click`.
+  `m-else-if`, `m-else` and `m-show`, sends events through `m-on:click` and links to other pages
+  through `m-bind:href`.
+- In an app, a view can also read the URL it's shown at as `route` (§3, §12).
 - The schema in the file declares the data the view needs and the events it sends.
 - Snapshots in the file are named sample states. The shell renders one frame per snapshot.
 
@@ -105,9 +107,10 @@ A literal `{{ name }}` in the text gets a warning: it isn't Melzin syntax and wo
 
 ## 3. Directives
 
-There are six: `m-text` shows a value, `m-if`, `m-else-if`, `m-else` and `m-show` show an element only
-when a condition holds, and `m-on:click` sends an event. Values are parsed, never evaluated: no
-JavaScript, no operators, no `{{ }}`. Attribute names are case-insensitive; values are case-sensitive.
+There are seven: `m-text` shows a value, `m-if`, `m-else-if`, `m-else` and `m-show` show an element
+only when a condition holds, `m-on:click` sends an event, and `m-bind:href` sets a link's URL from a
+link field. Values are parsed, never evaluated: no JavaScript, no operators, no `{{ }}`. Attribute names
+are case-insensitive; values are case-sensitive.
 
 An *identifier* is a letter or `_`, then letters, digits or `_` (`[A-Za-z_][A-Za-z0-9_]*`). So `count`,
 `itemsLabel` and `total_2` are identifiers; `2nd`, `go-now` and `$emit` are not.
@@ -133,6 +136,8 @@ Grammar: `path := ident ('.' ident)*`. Spaces around the value are allowed.
 - `m-text` can't go on elements without content, such as `<input>`, `<img>` or `<br>`.
 - Several elements may bind the same path.
 - Paths start inside `data`: write `m-text="post.title"`, not `m-text="data.post.title"`.
+- Paths that start with `route` read the URL instead (§12): `route.name`, `route.params.<name>` and
+  `route.query.<name>`. They're always strings, empty when the URL doesn't have them.
 
 ### `m-if`, `m-else-if`, `m-else` and `m-show`
 
@@ -188,6 +193,9 @@ missing.
 - The runtime treats a condition it can't use (an unknown field, say) as false, with a warning, so a
   broken `m-if` hides its element instead of showing it to everyone.
 
+- Conditions can test the URL too: `m-if="route.query.tab"` holds while the URL has a non-empty
+  `?tab=` (§12).
+
 ### `m-on:click="emit('event')"`
 
 Grammar: exactly one call `emit('name')` with one string literal in single or double quotes. The name
@@ -204,6 +212,25 @@ is an identifier and must be declared in the schema's `events`. Spaces between t
   `emit('like')`.
 - Several elements may emit the same event. An element may have both `m-text` and `m-on:click`.
 - Use `<button type="button">`. Forms aren't supported, and a button inside a form would submit it.
+
+### `m-bind:href="path"`
+
+Grammar: a path, like `m-text`'s. It must name a *link field*: a string field whose schema names the
+route it links to (§4).
+
+```html
+<a m-bind:href="author.profileUrl" class="font-medium hover:underline">Ana Souza</a>
+```
+
+- Views never build URLs: the source sends each link ready-made, through the app's `href` helper
+  (§12). So there's no `m-bind:href="'/u/' + handle"`, and no binding to a plain string field.
+- Only on `<a>` and `<area>`, and not together with a static `href` on the same link.
+- While the field is missing, the link has no `href` at all. `javascript:`, `vbscript:` and `data:`
+  URLs never reach the link.
+- Links to fixed pages need no field: write the URL, `<a href="/settings">`. The checker warns when
+  such a link matches no route (§12).
+- Links stay real links: they open in a new tab, can be copied, and the app switches screens without
+  reloading when they lead to one of its routes.
 
 ## 4. Schema
 
@@ -239,10 +266,13 @@ It's a strict subset of JSON Schema. Any other keyword is an error.
 |---|---|
 | top level | `data`, `events`, `description` |
 | object (`data` itself and nested objects) | `type: "object"`, `properties` (required), `required`, `description` |
-| leaf | `type`: `"string"`, `"number"` or `"boolean"`; `default`; `description` |
+| leaf | `type`: `"string"`, `"number"` or `"boolean"`; `default`; `description`; on strings, `route` |
 | each event | `{}` or `{ "description": "..." }` |
 
-- Property and event names are identifiers (`__proto__` is reserved).
+- Property and event names are identifiers (`__proto__` is reserved). `route` is reserved at the top
+  of `data`, since views read the URL under that name.
+- `"route": "profile"` makes a string field a link field: a URL of that route in `routes.json`, for
+  `m-bind:href`. A link field can't have a `default`.
 - Entries in `required` must exist in `properties`. Fields not listed are optional.
 - `default` must match the field's type. It is what production shows when the value is missing; it is
   not sample data (P4).
@@ -264,7 +294,11 @@ shows them. Names can be any text.
 - Each `data` must match the schema: required fields present, right types, no unknown fields (this
   catches typos). Optional fields may be left out; the frame then shows the default. Numbers must be
   finite and values can't be `null`.
-- `data` is the only key in a snapshot. A missing `data` means `{}`.
+- Besides `data`, a snapshot may set the URL it stands for, for views that read `route` or show as a
+  page: `"route": { "params": { "handle": "ana" }, "query": { "as": "bruno" } }`, strings only (§12). A
+  missing `data` means `{}`.
+- In snapshots, link fields hold real URLs of their route (`"/u/ana"`); the checker matches them
+  against `routes.json`.
 - Every view with data fields needs snapshots. Make them hostile, not just pretty (P8): very long
   text, zero, huge numbers, every optional field missing. They are how you find where the layout
   breaks.
@@ -315,7 +349,9 @@ Don't try these; the checker rejects them. POC.md §11 lists when each comes in.
 | Not yet | What to do now |
 |---|---|
 | Lists (`m-for`, `"type": "array"`) | A fixed number of fields: `first`, `second`, `third`, with `m-if` on the optional ones |
-| Attribute and class bindings (`m-bind`, `:href`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else` |
+| Attribute and class bindings other than links (`m-bind:class`, `:title`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else` |
+| Layouts shared by several pages, nested routes | Each route shows one whole view; repeat the shared part in each |
+| Route paths with wildcards, optional or partial segments (`*`, `:id?`, `/@:handle`) | Literal segments and whole-segment parameters: `/u/:handle` |
 | Comparisons and `&&`, `\|\|` in conditions | A boolean the host computes: `m-if="hasVotes"` |
 | Event payloads, `emit('x', ...)` | One event per action: `votePizza`, `voteTacos` |
 | Events other than click, modifiers | Clicks only, on buttons |
@@ -333,7 +369,7 @@ Run commands from the project root. In a project that depends on Melzin, use `bu
 ### Check
 
 ```
-bunx melzin check                          # every view in views/
+bunx melzin check                          # every view in views/, and routes.json
 bunx melzin check views/order.mel.html  # some files
 ```
 
@@ -354,7 +390,8 @@ prints `0 errors, 0 warnings`. Warnings flag a declared event nothing emits, a d
 displays or tests, text inside an `m-text` element, a view with data but no snapshots, an element
 behind a condition that no snapshot shows, a condition on a required object (it always holds), a
 snapshot named with a whole number, a literal `{{ }}`, a missing `<title>`, attributes on `<body>` and
-a `<name>.types.ts` that no longer matches the schema. "Nothing emits it" and "never used" wait until
+a `<name>.types.ts` that no longer matches the schema. With a `routes.json`, the checker also checks it
+and each view against it (§12). "Nothing emits it" and "never used" wait until
 the broken bindings are fixed, since a broken binding is often the missing one, and "no snapshot shows
 this element" waits until the snapshots match the schema.
 
@@ -369,7 +406,8 @@ bunx melzin types views/order.mel.html
 This writes `views/order.types.ts` with a `Data` and a `Handlers` type for the host. It refuses to write
 while the view has checker errors, and prints `views/order.types.ts is up to date` when nothing
 changed. Run it again after every schema change; until you do, `melzin check` warns that the types file
-is out of date.
+is out of date. In an app, `bunx melzin types routes.json` writes `routes.types.ts` and the types of
+every view a route shows (§12).
 
 ### Preview
 
@@ -378,7 +416,8 @@ bunx melzin shell            # http://127.0.0.1:4321
 bunx melzin shell --port 4400 --views views --theme theme.css
 ```
 
-The shell lists every view, renders one frame per snapshot through the production runtime and CSS,
+The shell lists the routes of `routes.json` as pages, and every view. It renders one frame per snapshot
+through the production runtime and CSS,
 and shows for each frame the data as editable JSON, an event log and the runtime's warnings. Clicking
 a link in a frame doesn't follow it; it shows up in the event log. Refresh the page after editing a
 file; edits in the shell are temporary. A red banner lists problems in the schema and snapshots
@@ -395,6 +434,7 @@ The URL holds the state, so you can open a precise render:
 | Parameter | Meaning |
 |---|---|
 | `view` | the file name without `.mel.html`, `order` (or the whole file name). Not the `<title>` |
+| `route` | a route's name, `profile`: its view as that page, with a URL bar per frame (§12). Wins over `view` |
 | `device` | `WxH` with each side from 120 to 4096, such as `375x812`, or `phone`, `tablet`, `desktop` (375×812, 768×1024, 1280×800). Other values are ignored, with a notice |
 | `zoom` | 0.25 to 2 |
 | `snapshot` | show only this snapshot, URL-encoded: `a%20few%20clicks` |
@@ -445,6 +485,11 @@ and desktop sizes, fix what looks wrong, repeat.
 | a snapshot with `"nmae"` | the exact field name; the checker suggests it |
 | a snapshot that skips a level: `{ "title": "..." }` | the full shape: `{ "post": { "title": "..." } }` |
 | `"type": "integer"`, `"enum"`, `"minLength"` | `"type": "number"` or `"string"`, no constraints yet |
+| `:href="url"`, `v-bind:href` | `m-bind:href="url"`, with `url` a link field |
+| `m-bind:href="profileUrl"` on a plain string field | give the field `"route": "profile"`; the source fills it with `href()` |
+| `<a href="/u/ana">` built for one person | a link field the source fills: `m-bind:href="author.url"` |
+| `m-text="route.handle"` | `m-text="route.params.handle"` (or `route.query.<name>`, `route.name`) |
+| a data field named `route` | another name: `route` is the URL |
 
 ## 10. Worked example
 
@@ -666,3 +711,119 @@ Bun.serve({
 
 `examples/poll/` in this repository is a complete app built this way, with an API, a contract test and API
 tests.
+
+## 12. Routes, links and apps
+
+A whole app built with Melzin has a route table, `routes.json` at the project root, and a small host
+that runs it: the URL picks a route, the route picks a view, and the app's *source* loads its data and
+handles its events (SPEC §7).
+
+### routes.json
+
+```json
+{
+  "routes": {
+    "members": { "path": "/", "view": "members", "query": { "as": {} }, "code": "eager" },
+    "profile": { "path": "/u/:handle", "view": "profile", "query": { "as": { "description": "Who is looking" } } }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| route name | an identifier; links and the source use it |
+| `path` | URLPattern syntax: literal segments and whole-segment `:name` parameters, such as `/u/:handle/posts/:id`. No trailing `/` (except `/` itself) |
+| `view` | the view's file name without `.mel.html` |
+| `query` | the query parameters the route reads, each `{}` or `{ "description": "..." }`. Others in the URL are ignored |
+| `code` | when the view's file loads: `eager` (with the first page), `prefetch` (in the background after it; the default) or `lazy` (when a link to the route is hovered, focused or touched) |
+| `data` | `stale-while-revalidate` (the default: show the last data for that URL at once, then refresh it) or `network-only` (always load). `offline` isn't supported yet |
+| `description` | a comment, copied into the generated types |
+
+- Routes match in table order, case-sensitively: `/u/new` before `/u/:handle`. Two routes whose paths
+  match the same URLs are an error.
+- Parameters arrive decoded (`/u/ana%20b` → `ana b`), as strings.
+- A view can be shown by several routes. Each route shows one whole view: there are no shared layouts
+  yet.
+
+### The URL in a view
+
+A view reads the URL it's shown at as `route`, next to its data:
+
+```html
+<p m-if="route.query.as">Browsing as @<span m-text="route.query.as"></span></p>
+<p m-else>Nobody is signed in</p>
+```
+
+- `route.name`, `route.params.<name>` and `route.query.<name>`, in `m-text` and in conditions. It's
+  read-only, and needs no schema entry.
+- Every route that shows the view must have that parameter (`:handle`) or declare that query parameter;
+  the checker says which route doesn't.
+- Prefer data for what the backend knows anyway (the user's handle); use `route` for what only the URL
+  says, like who is looking or which tab is open.
+- Snapshots set the URL they stand for with `"route"` (§5). The checker warns about a snapshot that
+  lacks a parameter the view shows.
+
+### Links
+
+Link fields (`"route": "profile"` in the schema) hold URLs the source builds with the app's `href`
+helper, and views bind them with `m-bind:href` (§3). Static links (`href="/"`) work as they are. Clicking
+a link to a route switches screens without reloading; other links behave as usual.
+
+### Check, types and the shell
+
+- `melzin check` checks `routes.json` (its rules, and that each route's view exists) and each view
+  against it: `route.*` the routes have, link fields that name real routes, snapshot link values that
+  are URLs of their route, and static links that match no route (a warning).
+- `melzin types routes.json` writes `routes.types.ts`, with each route's `params`, `query`, `data` and
+  `handlers`, and the types of the views it shows. Link fields are typed `Href<'profile'>`: only the
+  `href` helper makes those, so a hand-built URL fails `tsc`.
+- The shell lists the routes as pages. A page renders its view's snapshots, each with a URL bar showing
+  the URL from the snapshot's `route`; edit it to try another URL. Clicking a link to a route logs a
+  `navigate` event instead of following it.
+
+### The app
+
+```ts
+import { hrefs, startApp } from 'melzin'
+import routes from './routes.json'
+import type { Routes } from './routes.types.ts'
+
+const href = hrefs<Routes>(routes)
+
+await startApp<Routes>(document.querySelector('#app')!, {
+  routes,
+  source: {
+    members: {
+      load: async ({ query }, { signal }) => (await fetch(`/api/members?as=${query.as ?? ''}`, { signal })).json(),
+    },
+    profile: {
+      load: async ({ params }, { signal }) => (await fetch(`/api/profiles/${params.handle}`, { signal })).json(),
+      on: {
+        follow: async (_payload, page) => page.update(await (await fetch(`/api/follows/${page.route.params.handle}`, { method: 'PUT' })).json()),
+        signIn: (_payload, page) => page.navigate(href('profile', { handle: page.route.params.handle }, { as: 'ana' })),
+      },
+    },
+  },
+  // Optional: runs before every navigation. Return false to stay, or a URL to go there instead.
+  navigate: (to, from) => undefined,
+})
+```
+
+- **The source** has a `load` and, when the view has events, an `on` handler per event, for every
+  route. `load` gets the route (`name`, `params`, `query`, `url`) and an abort signal; it returns the
+  view's data. Where it gets it is up to the app: a server's API (a remote source), IndexedDB or any
+  other local store (a local source, for offline-first apps), or constants. Melzin only types the
+  contract.
+- **Handlers** get the payload (`undefined` for now) and the page: `page.route`, `page.data`,
+  `page.update(data)`, `page.navigate(url)` and `page.reload()`. A page the user has left ignores
+  `update`.
+- **Navigation** (link clicks, back and forward, `page.navigate`, `app.navigate`) goes through the
+  `navigate` hook. The first page doesn't. A URL that matches no route leaves the app with a normal
+  page load.
+- The server sends the same page (with the app's script) for every route's URL, and the view files at
+  `/views/<view>.mel.html` (`viewUrl` changes that).
+- A URL with no route, or a loader that fails, shows a plain message for now: not-found and error pages
+  aren't designed yet.
+
+`examples/profile/` is a complete app: two routes, a remote and a local source, and tests that run the
+whole app without a server.

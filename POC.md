@@ -5,7 +5,8 @@
 > working button.
 
 **Status:** built, and M3's AI authoring trial passed (§10). Since then, conditionals and a second
-example app have been added (§14). The code is a Bun workspace: the Melzin packages in
+example app have been added (§14), and routing: the route table, links, the URL input, the standalone
+host and pages in the shell (§15). The code is a Bun workspace: the Melzin packages in
 `packages/melzin` and `packages/cli` and example apps in `examples/` (§7, §14). It follows
 [SPEC.md](SPEC.md); references such as D9, P1 or #46 point there. The guide for authors is
 [docs/authoring.md](docs/authoring.md).
@@ -401,7 +402,7 @@ reuses the binding table, the shared parser and the host API.
 | Stable IDs and schema diffs | #13, #3, §9.3, §9.4 |
 | Components: views inside views, schemas composed with `$ref` | D16–D19, #12, §9.5 |
 | A custom element that dispatches DOM events | D7, §7 |
-| The standalone host | D11, #51 |
+| The standalone host: *built, with the route table, links and pages in the shell (§15)* | D11, D20–D27, #31, #51 |
 | Events linked to snapshots in the shell | P6, #43 |
 | Generated hostile states and a screenshot CLI | P8, §8 |
 | Stripping snapshots from production builds | D8 |
@@ -518,3 +519,110 @@ Made for this step. The binding-language battle (SPEC §11) can still revisit th
   preflight, a class such as `flex` would override `hidden`. Vue does the same.
 - **Snapshot coverage is a warning**, like the other P8 checks: a view in progress can have a branch
   without a snapshot yet.
+
+## 15. After the POC: routing
+
+Built on 2026-10-17, from SPEC D20–D27, settled on paper the same day. It turns the profile example
+into an app with two pages. As with conditionals, it grows the existing pieces: the shared core gained
+the route table, `mount` gained a directive and an input, and a new `startApp` wraps `mount` (§12).
+
+### Format
+
+**routes.json**, at the project root (D21):
+
+```json
+{
+  "routes": {
+    "members": { "path": "/", "view": "members", "query": { "as": {} }, "code": "eager" },
+    "profile": { "path": "/u/:handle", "view": "profile", "query": { "as": {} } }
+  }
+}
+```
+
+- A route has a name (an identifier), a `path`, a `view` (its file name without `.mel.html`), optional
+  `query` parameters, a `code` policy (`eager`, `prefetch` by default, `lazy`), a `data` policy
+  (`stale-while-revalidate` by default, `network-only`) and a `description` (D24).
+- Paths are URLPattern syntax (D22), its simplest part only: literal segments and whole-segment `:name`
+  parameters. Routes match in table order, case-sensitively; parameters are decoded. A test checks
+  that matching agrees with the browser's `URLPattern`.
+
+**Link fields** (D23): a string field with `"route": "<name>"` in the schema. Views bind it with
+`m-bind:href="path"`, the only `m-bind` so far, on `<a>` and `<area>`. The generated types make the
+field `Href<'<name>'>`, which only the `href` helper returns.
+
+**The URL input** (D27): `route.name`, `route.params.<name>` and `route.query.<name>` in `m-text` and in
+conditions. `route` is reserved at the top of `data`. Snapshots may set
+`"route": { "params": { ... }, "query": { ... } }`.
+
+### Runtime
+
+- `mount` takes a `route` option, `view.setRoute(route)` replaces it, and `m-bind:href` sets or removes
+  `href` from a link field. `javascript:`, `vbscript:` and `data:` URLs are dropped with a warning.
+- `startApp(root, { routes, source, navigate?, viewUrl?, loadView?, onWarning? })` is the standalone
+  host (§7 of SPEC). The URL picks the route, the route's view is fetched and mounted with the data
+  from `source.<route>.load(route, { signal })`, and its events go to `source.<route>.on`. Handlers get
+  the payload and the page: `route`, `data`, `update`, `navigate`, `reload`, and `current`.
+- Navigation (D25): clicks on links to routes (left button, no modifier keys, no `target`, no
+  `download`), back and forward, and `navigate()` all go through the optional `navigate` hook, which
+  may return `false` to stay or a URL to go elsewhere (redirects go through the hook too; ten in a row
+  stop). The URL changes first, as with a normal link; then the data loads and the screen swaps. A URL
+  with no route leaves the app with a normal page load.
+- Loading (D24): `eager` views load with the first page, `prefetch` ones when the browser is idle after
+  it, `lazy` ones on intent (a link hovered, focused or touched). Intent also prefetches the data of
+  `stale-while-revalidate` routes. Those routes keep their last data per URL: navigating back shows it
+  at once and refreshes it; data a prefetch just loaded shows without a second load.
+- Scroll: to the top (or to the `#hash`) after a new navigation, and back to where it was on back and
+  forward.
+- `hrefs<Routes>(routes)` builds URLs from the table, typed by the generated `Routes`.
+
+### Checker and types
+
+`melzin check` checks routes.json with the views (by default when it exists): its own rules, that each
+route's view exists, and each view against it: `route.params` and `route.query` that every route showing
+the view has, link fields that name real routes, snapshot link values that are URLs of their route,
+snapshot routes and the parameters a view shows, and static links that match no route (a warning).
+`melzin types routes.json` writes `routes.types.ts` (each route's `params`, `query`, `data` and
+`handlers`) and the types of the views it shows; `melzin check` warns when it's out of date. A tsc test
+shows a typed source rejecting a hand-built link, a link to the wrong route, a missing handler and a
+missing route.
+
+### Shell
+
+The view picker lists the routes as pages above the views (`?route=profile`, D26). A page renders its
+view's snapshots, each card with a URL bar that shows the URL from the snapshot's `route` and accepts
+another URL of the same route, which reaches the view through `setRoute`. A click on a link to a route
+shows as `navigate → profile /u/ana` in the event log (D25). `/__melzin/api/routes` lists the routes,
+or the problems in routes.json.
+
+### Profile example
+
+Now two pages: the members at `/` (three fixed slots, since lists aren't built; "Browsing as" from
+`route.query.as`; links that try each scenario) and the profile at `/u/:handle`, with a link back. The
+adapter moved to `model.ts`, with no server in it, so `source.ts` has two sources over one contract
+(D20): `remoteSource()` asks the server's API, and `localSource(network)` runs the adapter in the
+browser, as an offline-first app would over IndexedDB. The client uses the remote one; a new app test
+runs the whole app on the local one in happy-dom. Checked by hand in a real browser: the screens switch
+without a reload, follow and unfollow update the page, back and forward work, and the shell lists the
+pages, logs navigations and applies edited URLs.
+
+### Decisions
+
+Made for this step; SPEC's open items (§7) can still revisit them.
+
+- **`routes.json` at the project root,** next to `theme.css`, one per project.
+- **Only whole-segment parameters.** Matching and building URLs are a few lines that also run on the
+  server (the example's server registers one route per path), and the checker can say exactly which
+  URLPattern feature isn't supported yet.
+- **Link fields are `"route": "<name>"` on a string field,** not a new type. Without a route table, a
+  link field and `route.*` paths are warnings, not errors, so a view can be written before its route.
+- **`route` needs no declaration in the view.** The checker checks it against the routes that show the
+  view; a view no route shows gets a warning.
+- **The History API, not the Navigation API.** The `navigate` hook follows the Navigation API's model
+  (one event for every navigation, a default the app can override), but the host listens to clicks and
+  `popstate`, which every browser has. Back and forward can't be cancelled before they happen; a hook
+  that returns `false` puts the current page's URL back.
+- **The host doesn't set `document.title`, and has no not-found or error pages:** a URL with no route
+  or a failing loader shows a plain message. Page titles, error pages, focus after navigation and view
+  transitions are still open.
+- **`offline` waits** for the generated service worker; the checker says so. So do server rendering
+  and the static source's prerendering.

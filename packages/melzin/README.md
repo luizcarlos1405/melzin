@@ -16,6 +16,19 @@ const view = await mount(document.querySelector('#app')!, '/views/counter.mel.ht
 only what changed: text, and elements behind conditions. Generated types make a missing handler or wrong
 data a compile error.
 
+A whole app adds a route table and runs it with `startApp`: the URL picks the view, the app's source
+loads its data and handles its events, and links switch pages without reloading.
+
+```ts
+import { startApp } from 'melzin'
+import routes from './routes.json'
+
+await startApp(document.querySelector('#app')!, {
+  routes,
+  source: { home: { load: async () => (await fetch('/api/home')).json() } },
+})
+```
+
 The `melzin` command (check, types, preview shell, CSS) is in [`@melzin/cli`](https://www.npmjs.com/package/@melzin/cli).
 The view format and the plan are in the [main repository](https://github.com/luizcarlos1405/melzin).
 

@@ -333,7 +333,7 @@ to add a screen; the checker catches the drift (a route to a missing view, a dea
 doesn't need folders either: the `$ref` graph (D17) already says which views each route needs.
 
 **Links** (D23). The schema marks a field as a link to a route, the source fills it with a generated
-helper such as `href.profile({ handle })`, and the view binds it:
+helper such as `href('profile', { handle })`, and the view binds it:
 `<a m-bind:href="authorUrl">`. Links keep their native behavior (open in a new tab, copy link,
 crawlers), and the host intercepts the ones that stay inside the app.
 
@@ -848,8 +848,8 @@ place the type appears (#59).
 
 The ⚑ items change what the file means, so getting one wrong means migrating every file later. The rest
 can be added without breaking anything. Settle the ⚑ items on paper first; put off animations,
-translation, server rendering, form polish and theming. Routing's shape is on paper (D20–D24, §7); it
-gets built later, and shared frames across routes (#60) wait until then.
+translation, server rendering, form polish and theming. Routing (D20–D27, §7) is built (POC.md §15);
+shared frames across routes (#60) wait.
 
 **Next on paper:** the language inside `m-` attributes. It's ⚑ and gates the first prototype. To settle:
 
@@ -1039,3 +1039,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-17: D25–D27 (navigation as one built-in `navigate` event, routes shown in the shell like
   views, the URL as a third input `route`). Added navigation and URL notes to §7 and routes to §8,
   with a follow mode, an app map, simulated loading states and live frames under "Later".
+- 2026-10-17: routing built (POC.md §15): routes.json, link fields and `m-bind:href`, the `route` input,
+  `startApp` with sources and the `navigate` hook, loading policies, and routes in the shell. The profile
+  example became a routed app.

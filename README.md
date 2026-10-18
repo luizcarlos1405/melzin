@@ -94,6 +94,10 @@ The view never changes its own data. It emits `increment`, the host decides what
    directives once, and from then on touches only what changed: the text whose value changed and the
    elements whose condition flipped.
 
+A whole app adds `routes.json`, a route table that maps URLs to views, and calls `startApp` with a
+*source*: the code that loads each page's data and handles its events, whether it asks a server or reads
+a local database. Links switch pages without reloading, and the shell lists the routes as pages.
+
 Rendering happens in the browser for now; server-side rendering is on the roadmap.
 
 ## Try it
@@ -122,8 +126,8 @@ bun run dev        # the app, on http://localhost:3000
 bun run shell      # the preview shell for its views, on http://127.0.0.1:4321
 ```
 
-`examples/profile` works the same way, on http://localhost:3002: a member profile whose follow button
-depends on who is looking.
+`examples/profile` works the same way, on http://localhost:3002: a small routed app, a members page and
+a profile whose follow button depends on who is looking.
 
 More commands:
 
@@ -135,6 +139,7 @@ More commands:
 | `packages/cli` | `bun run example:counter` | the counter's production page, on http://localhost:3001 |
 | `examples/poll` | `bun run types` | regenerates `views/poll.types.ts` |
 | `examples/profile` | `bun run dev` | the profile app, on http://localhost:3002 |
+| `examples/profile` | `bun run types` | regenerates `routes.types.ts` and the views' types |
 
 The CLI has four commands: `check`, `types`, `shell` and `css`. Run `bunx melzin --help` in `examples/poll/` to
 see their usage.
@@ -142,13 +147,13 @@ see their usage.
 ## What's in the repository
 
 ```
-packages/melzin/      `melzin`: the runtime (mount, update, destroy) and the shared core
+packages/melzin/      `melzin`: the runtime (mount, update, destroy, startApp) and the shared core
 packages/cli/         `@melzin/cli`: checker, type generator, CSS builder, preview shell
   views/              example views (hello, profile card, counter)
   examples/counter/   a production page that mounts the counter
 examples/             apps that use Melzin as a package; each folder is its own workspace
   poll/               a poll with a small Bun backend, contract tests and API tests
-  profile/            a profile with a follow button driven by conditionals, and view tests
+  profile/            a routed app: members and profiles, a remote and a local source, view and app tests
 docs/authoring.md     the view format and its rules, for whoever writes views
 SPEC.md               the design record: decisions, principles and a numbered list of hard problems
 POC.md                what the proof of concept builds, how, and what comes next
@@ -175,6 +180,10 @@ Since then:
   shows an element behind a condition
 - [x] A second example app: a member profile whose follow button depends on who is looking, with view
   tests that mount the real view in happy-dom
+- [x] Routing: a route table in `routes.json`, links bound to link fields with `m-bind:href`, the URL as
+  a `route` input, and `startApp`, a standalone host with pluggable sources, one `navigate` hook and
+  per-route loading policies. The checker, the generated types and the shell know the routes, and the
+  profile example is now a routed app
 
 ## Roadmap
 
@@ -207,13 +216,15 @@ built. Conditionals came first, with a provisional syntax: a path, optionally ne
 
 **Embedding and hosting.**
 - [ ] A custom element, so views embed in React, Vue or plain HTML
-- [ ] A standalone host: a declared route table picks the screen, and a pluggable source serves its data
-  and handles its events. The source can run at build time (static sites), on a server, or on the device
-  (offline-first apps)
-- [ ] Per-route lazy loading, background prefetching and a generated service worker
-- [ ] Frames shared across routes, such as an app shell with navigation
-- [ ] Routes in the shell as pages, each shown in many snapshots, with the URL as a `route` input any
+- [x] A standalone host: a declared route table picks the screen, and a pluggable source serves its data
+  and handles its events
+- [x] Per-route lazy loading and background prefetching
+- [x] Routes in the shell as pages, each shown in many snapshots, with the URL as a `route` input any
   view can read
+- [ ] A generated service worker and the `offline` data policy
+- [ ] A static source that prerenders every route at build time
+- [ ] Frames shared across routes, such as an app shell with navigation
+- [ ] Page titles, not-found and error pages, focus after navigation and view transitions
 - [ ] Server-side rendering and hydration
 - [ ] Production builds that strip snapshots
 
