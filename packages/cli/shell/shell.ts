@@ -1,54 +1,73 @@
-// The preview shell: lists the project's routes (as pages, SPEC D26) and views, renders one frame per
-// snapshot at a device size and zoom, and plays the mock host's UI for each frame (state editor, URL,
-// event log, warnings). All state worth sharing lives in the URL (see state.ts), so a refresh reloads
-// everything from the files (D3).
+// The preview shell: lists the project's routes (as pages, SPEC D26) and views, renders one card per
+// snapshot, with a frame per device size, at a zoom, and plays the mock host's UI for each card (state
+// editor, URL, event log, warnings). A view with design alternatives in explore/ shows every version
+// side by side, one column each (SPEC D31). All state worth sharing lives in the URL (see state.ts), so
+// a refresh reloads everything from the files (D3).
 
 import { type Issue, type Route, type Snapshot, parseViewHtml } from 'melzin'
-import { matchPath, matchRoute } from 'melzin/core'
+import { CURRENT_VERSION, type Stage, matchPath, matchRoute } from 'melzin/core'
 import { type FrameMessage, isFrameMessage, setDataMessage, setRouteMessage } from './protocol.ts'
 import {
+  DEVICE_CHOICES,
   DEVICE_MAX,
   DEVICE_MIN,
-  DEVICE_PRESETS,
   type Device,
   type ShellState,
+  type Version,
   ZOOM_STEPS,
   deviceLabel,
-  findPreset,
+  deviceName,
+  devicesLabel,
   formatData,
-  formatDevice,
+  formatDevices,
   formatTime,
   frameUrl,
   parseDataJson,
-  parseDevice,
+  parseDevices,
   parseShellState,
   routeCardUrl,
+  sameDevice,
   serializeShellState,
+  snapshotRows,
   stepZoom,
   viewFileUrl,
+  viewVersions,
   zoomLabel,
 } from './state.ts'
 // Zin, the Melzin bee. Bun's bundler turns these imports into asset URLs.
 import zinOps from './zin-ops.svg'
 import zinSoneca from './zin-soneca.svg'
 
-type ViewEntry = { name: string; file: string; url: string; title: string }
+type ViewEntry = { name: string; file: string; url: string; title: string; description: string; stage: Stage }
+type AlternativeEntry = { name: string; theme: boolean; views: ViewEntry[] }
+type ExploreEntry = { alternatives: AlternativeEntry[]; problems: string[] }
 type RoutesEntry = { present: boolean; routes: Route[]; problems: string[] }
 
-/** `route` is set when the view shows as that route's page. */
-type LoadedView = { entry: ViewEntry; route: Route | null; title: string; snapshots: Snapshot[]; issues: Issue[] }
+/** A version of the picked view (SPEC D31) and the file it renders. */
+type VersionEntry = Version & { entry: ViewEntry }
+
+/** A version once its file is loaded. `events` is true when its schema declares any. */
+type LoadedVersion = VersionEntry & { title: string; snapshots: Snapshot[]; issues: Issue[]; events: boolean }
+
+/** `route` is set when the view shows as that route's page. `versions` are the ones shown, out of `all`. */
+type LoadedView = { name: string; route: Route | null; all: VersionEntry[]; versions: LoadedVersion[] }
 
 type WarningEntry = { count: number; badge: HTMLElement; item: HTMLLIElement; update: boolean }
 
-type CardStatus = 'loading' | 'ready' | 'error'
+type FrameStatus = 'loading' | 'ready' | 'error'
+
+/** One render: an iframe at one device size. */
+type Frame = { device: Device; wrap: HTMLElement; iframe: HTMLIFrameElement; status: FrameStatus }
 
 type Card = {
-  /** null for the single card of a view without snapshots. */
+  version: LoadedVersion
+  /** null for the single card of a version without snapshots. */
   snapshot: Snapshot | null
+  /** The route the card shows its view as (SPEC D26), or null. */
+  route: Route | null
+  /** One per device size, sharing the card's state, URL and logs. */
+  frames: Frame[]
   root: HTMLElement
-  wrap: HTMLElement
-  iframe: HTMLIFrameElement
-  status: CardStatus
   statusBadge: HTMLElement
   editor: HTMLTextAreaElement
   editorError: HTMLElement
@@ -89,6 +108,8 @@ function byId<T extends HTMLElement>(id: string): T {
 }
 
 const viewPicker = byId<HTMLSelectElement>('view-picker')
+const altControl = byId<HTMLElement>('alt-control')
+const altPicker = byId<HTMLSelectElement>('alt-picker')
 const devicePicker = byId<HTMLSelectElement>('device-picker')
 const zoomPicker = byId<HTMLSelectElement>('zoom-picker')
 const zoomIn = byId<HTMLButtonElement>('zoom-in')
@@ -103,11 +124,14 @@ const canvas = byId<HTMLElement>('canvas')
 
 let state: ShellState = parseShellState(location.search)
 let views: ViewEntry[] = []
+let explore: ExploreEntry = { alternatives: [], problems: [] }
 let routesEntry: RoutesEntry = { present: false, routes: [], problems: [] }
-let current: LoadedView | null = null
+let loaded: LoadedView | null = null
 let cards: Card[] = []
 let loadToken = 0
 let editorIds = 0
+/** True when a version's file couldn't be fetched: the page is then ready with an error. */
+let loadFailed = false
 /** Links to a variation of the current state ("Open alone"), refreshed when the state changes. */
 let stateLinks: { el: HTMLAnchorElement; changes: Partial<ShellState> }[] = []
 
@@ -127,15 +151,57 @@ function stateLink(props: Props, changes: Partial<ShellState>): HTMLAnchorElemen
 }
 
 // ---------------------------------------------------------------------------------------------------
+// Views and their versions (SPEC D31)
+
+function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`
+}
+
+/** Every version of a view: the one in views/, then its alternatives in explore/. */
+function versionsOf(name: string): VersionEntry[] {
+  const current = views.find((view) => view.name === name)
+  return viewVersions(name, current !== undefined, explore.alternatives).flatMap((version) => {
+    const alternative = explore.alternatives.find((item) => item.name === version.alt)
+    const entry = version.own ? alternative?.views.find((view) => view.name === name) : current
+    return entry === undefined ? [] : [{ ...version, entry }]
+  })
+}
+
+/** View names that only exist in explore/: screens still being explored. */
+function exploringNames(): string[] {
+  const names = new Set<string>()
+  for (const alternative of explore.alternatives) for (const view of alternative.views) names.add(view.name)
+  for (const view of views) names.delete(view.name)
+  return [...names].sort()
+}
+
+/** `explore/night/settings.mel.html`, or the file name for the version in views/. */
+function versionPath(version: VersionEntry): string {
+  return version.own ? `explore/${version.alt}/${version.entry.file}` : version.entry.file
+}
+
+/** What a version is, for pickers and headers: `current`, `night · own theme`, `night · theme only`. */
+function versionLabel(version: Version): string {
+  if (version.alt === null) return CURRENT_VERSION
+  if (!version.own) return `${version.alt} · theme only`
+  return version.theme ? `${version.alt} · own theme` : version.alt
+}
+
+/** ` · 2 alternatives` for a view with alternatives, '' otherwise. */
+function alternativesSuffix(name: string): string {
+  const count = versionsOf(name).filter((version) => version.alt !== null).length
+  return count === 0 ? '' : ` · ${plural(count, 'alternative')}`
+}
+
+// ---------------------------------------------------------------------------------------------------
 // Top bar
 
 function renderDevicePicker(): void {
-  const options = DEVICE_PRESETS.map((preset) => h('option', { text: deviceLabel(preset), attrs: { value: formatDevice(preset) } }))
-  if (findPreset(state.device) === undefined) {
-    options.push(h('option', { text: deviceLabel(state.device), attrs: { value: formatDevice(state.device) } }))
-  }
-  devicePicker.replaceChildren(...options)
-  devicePicker.value = formatDevice(state.device)
+  const choices = [...DEVICE_CHOICES]
+  const same = (list: readonly Device[]) => list.length === state.devices.length && list.every((device, i) => sameDevice(device, state.devices[i]!))
+  if (!choices.some(same)) choices.push(state.devices)
+  devicePicker.replaceChildren(...choices.map((choice) => h('option', { text: devicesLabel(choice), attrs: { value: formatDevices(choice) } })))
+  devicePicker.value = formatDevices(state.devices)
 }
 
 function renderZoomPicker(): void {
@@ -151,12 +217,13 @@ const pickerValue = (kind: 'route' | 'view', name: string): string => `${kind}:$
 
 function currentPickerValue(): string {
   if (state.route !== null) return routesEntry.routes.some((route) => route.name === state.route) ? pickerValue('route', state.route) : ''
-  const view = current?.entry.name ?? pickView()?.entry.name
+  const view = loaded?.name ?? pickView()?.name
   return view === undefined ? '' : pickerValue('view', view)
 }
 
 function renderViewPicker(): void {
-  if (views.length === 0) {
+  const exploring = exploringNames()
+  if (views.length === 0 && exploring.length === 0) {
     viewPicker.replaceChildren(h('option', { text: 'No views', attrs: { value: '' } }))
     viewPicker.disabled = true
     return
@@ -166,24 +233,43 @@ function renderViewPicker(): void {
   for (const view of views) titles.set(view.title, (titles.get(view.title) ?? 0) + 1)
   const viewOptions = views.map((view) => {
     const label = (titles.get(view.title) ?? 0) > 1 ? `${view.title} (${view.file})` : view.title
-    return h('option', { text: label, title: view.file, attrs: { value: pickerValue('view', view.name) } })
+    return h('option', { text: label + alternativesSuffix(view.name), title: view.file, attrs: { value: pickerValue('view', view.name) } })
   })
-  const { routes } = routesEntry
-  if (routes.length === 0) {
-    viewPicker.replaceChildren(...viewOptions)
-  } else {
-    const routeOptions = routes.map((route) => h('option', { text: `${route.path}  (${route.name})`, title: `${route.view}.mel.html`, attrs: { value: pickerValue('route', route.name) } }))
-    viewPicker.replaceChildren(h('optgroup', { attrs: { label: 'Pages' } }, ...routeOptions), h('optgroup', { attrs: { label: 'Views' } }, ...viewOptions))
-  }
+  // Screens that only exist as alternatives, titled after their first one.
+  const exploringOptions = exploring.map((name) => {
+    const versions = versionsOf(name)
+    const title = versions[0]?.entry.title ?? name
+    return h('option', { text: title + alternativesSuffix(name), title: `explore/*/${name}.mel.html`, attrs: { value: pickerValue('view', name) } })
+  })
+  const routeOptions = routesEntry.routes.map((route) =>
+    h('option', { text: `${route.path}  (${route.name})${alternativesSuffix(route.view)}`, title: `${route.view}.mel.html`, attrs: { value: pickerValue('route', route.name) } }),
+  )
+  const groups: [string, HTMLOptionElement[]][] = [['Pages', routeOptions], ['Views', viewOptions], ['Exploring', exploringOptions]]
+  const used = groups.filter(([, options]) => options.length > 0)
+  if (used.length === 1 && used[0]![0] === 'Views') viewPicker.replaceChildren(...viewOptions)
+  else viewPicker.replaceChildren(...used.map(([label, options]) => h('optgroup', { attrs: { label } }, ...options)))
   // The requested view even when its file failed to load; blank for a name that matches nothing.
   viewPicker.value = currentPickerValue()
 }
 
-function setDevice(device: Device): void {
-  state.device = device
+/** The version picker: every version of the view, or nothing when it has only one. */
+function renderAltPicker(): void {
+  const all = loaded?.all ?? []
+  altControl.hidden = all.length < 2
+  if (all.length < 2) return
+  const options = [h('option', { text: 'All side by side', attrs: { value: '' } })]
+  for (const version of all) options.push(h('option', { text: versionLabel(version), title: versionPath(version), attrs: { value: version.key } }))
+  if (state.alt !== null && !all.some((version) => version.key === state.alt)) options.push(h('option', { text: `${state.alt} (missing)`, attrs: { value: state.alt } }))
+  altPicker.replaceChildren(...options)
+  altPicker.value = state.alt ?? ''
+}
+
+function setDevices(devices: Device[]): void {
+  state.devices = devices
   renderDevicePicker()
-  applyLayout()
+  // Each card has a frame per device, so the cards are built again.
   updateUrl()
+  void loadCurrentView()
 }
 
 function setZoom(zoom: number): void {
@@ -194,8 +280,8 @@ function setZoom(zoom: number): void {
 }
 
 devicePicker.addEventListener('change', () => {
-  const device = parseDevice(devicePicker.value)
-  if (device !== null) setDevice(device)
+  const devices = parseDevices(devicePicker.value)
+  if (devices !== null) setDevices(devices)
 })
 zoomPicker.addEventListener('change', () => setZoom(Number(zoomPicker.value)))
 zoomIn.addEventListener('click', () => setZoom(stepZoom(state.zoom, 1)))
@@ -206,6 +292,12 @@ viewPicker.addEventListener('change', () => {
   state.route = kind === 'route' ? name : null
   state.view = kind === 'view' ? name : null
   state.snapshot = null
+  state.alt = null
+  updateUrl()
+  void loadCurrentView()
+})
+altPicker.addEventListener('change', () => {
+  state.alt = altPicker.value === '' ? null : altPicker.value
   updateUrl()
   void loadCurrentView()
 })
@@ -238,15 +330,19 @@ function issueLine(issue: Issue): string {
 // ---------------------------------------------------------------------------------------------------
 // Cards
 
-function cardName(card: Card): string {
-  return card.snapshot === null ? 'no data' : card.snapshot.name
+function cardStatus(card: Card): FrameStatus {
+  if (card.frames.some((frame) => frame.status === 'error')) return 'error'
+  return card.frames.some((frame) => frame.status === 'loading') ? 'loading' : 'ready'
 }
 
-function setStatus(card: Card, status: CardStatus): void {
-  card.status = status
-  card.statusBadge.className = `status status-${status}`
-  card.statusBadge.textContent = status === 'loading' ? 'loading' : status === 'ready' ? 'live' : 'error'
-  if (cards.length > 0 && cards.every((item) => item.status !== 'loading')) document.body.dataset.melzinReady = 'true'
+function setFrameStatus(card: Card, frame: Frame, status: FrameStatus): void {
+  frame.status = status
+  const overall = cardStatus(card)
+  card.statusBadge.className = `status status-${overall}`
+  card.statusBadge.textContent = overall === 'loading' ? 'loading' : overall === 'ready' ? 'live' : 'error'
+  if (cards.length > 0 && cards.every((item) => item.frames.every((each) => each.status !== 'loading'))) {
+    document.body.dataset.melzinReady = loadFailed ? 'error' : 'true'
+  }
 }
 
 function renderWarningCount(card: Card): void {
@@ -284,7 +380,8 @@ function clearUpdateWarnings(card: Card): void {
   renderWarningCount(card)
 }
 
-function addEvent(card: Card, name: string, time: number, kind: 'event' | 'link' | 'navigate' = 'event'): void {
+/** `device` names the frame the event came from, for cards with several. */
+function addEvent(card: Card, name: string, time: number, kind: 'event' | 'link' | 'navigate' = 'event', device?: Device): void {
   card.events += 1
   card.eventCount.textContent = String(card.events)
   card.logEmpty.hidden = true
@@ -294,15 +391,21 @@ function addEvent(card: Card, name: string, time: number, kind: 'event' | 'link'
       : kind === 'navigate'
         ? h('span', { class: 'event-navigate' }, h('code', { text: 'navigate' }), h('span', { class: 'event-link', text: ` → ${name}` }))
         : h('code', { text: name })
-  const item = h('li', { class: 'event' }, h('time', { text: formatTime(new Date(time)) }), label)
+  const where = device === undefined ? null : h('span', { class: 'event-device', text: deviceName(device) })
+  const item = h('li', { class: 'event' }, h('time', { text: formatTime(new Date(time)) }), label, where)
   card.log.prepend(item)
   item.classList.add('event-new')
   setTimeout(() => item.classList.remove('event-new'), 600)
 }
 
-function sendData(card: Card, data: Record<string, unknown>): void {
+function post(card: Card, message: unknown): void {
+  for (const frame of card.frames) frame.iframe.contentWindow?.postMessage(message, location.origin)
+}
+
+function sendData(card: Card, data: Record<string, unknown>, frame?: Frame): void {
   clearUpdateWarnings(card)
-  card.iframe.contentWindow?.postMessage(setDataMessage(data), location.origin)
+  if (frame === undefined) post(card, setDataMessage(data))
+  else frame.iframe.contentWindow?.postMessage(setDataMessage(data), location.origin)
 }
 
 function initialData(card: Card): Record<string, unknown> {
@@ -330,22 +433,20 @@ function onEditorInput(card: Card): void {
 
 /** The URL input a card's snapshot starts with (SPEC D27); `name` is the route the card previews. */
 function initialRoute(card: Card): { name?: string; params: Record<string, string>; query: Record<string, string> } {
-  const route = current?.route ?? null
   const input = { params: { ...card.snapshot?.route?.params }, query: { ...card.snapshot?.route?.query } }
-  return route === null ? input : { name: route.name, ...input }
+  return card.route === null ? input : { name: card.route.name, ...input }
 }
 
 function initialUrl(card: Card): string {
-  const route = current?.route
-  if (route == null) return ''
+  if (card.route === null) return ''
   const { params, query } = initialRoute(card)
-  return routeCardUrl(route.path, params, query, route.query)
+  return routeCardUrl(card.route.path, params, query, card.route.query)
 }
 
 /** Applies the URL typed in a route card's address bar: it must be a URL of the card's route. */
 function onUrlChange(card: Card): void {
-  const route = current?.route
-  if (route == null || card.urlInput === null || card.urlError === null) return
+  const route = card.route
+  if (route === null || card.urlInput === null || card.urlError === null) return
   let url: URL
   try {
     url = new URL(card.urlInput.value.trim() || '/', location.origin)
@@ -370,7 +471,7 @@ function onUrlChange(card: Card): void {
     const value = url.searchParams.get(name)
     if (value !== null) query[name] = value
   }
-  card.iframe.contentWindow?.postMessage(setRouteMessage({ name: route.name, params, query }), location.origin)
+  post(card, setRouteMessage({ name: route.name, params, query }))
 }
 
 function resetCard(card: Card): void {
@@ -380,7 +481,7 @@ function resetCard(card: Card): void {
     card.urlInput.classList.remove('invalid')
     card.urlInput.removeAttribute('aria-invalid')
     card.urlError.hidden = true
-    card.iframe.contentWindow?.postMessage(setRouteMessage(initialRoute(card)), location.origin)
+    post(card, setRouteMessage(initialRoute(card)))
   }
   card.editor.value = formatData(initialData(card))
   card.editor.classList.remove('invalid')
@@ -390,25 +491,46 @@ function resetCard(card: Card): void {
   sendData(card, structuredClone(initialData(card)))
 }
 
-function panel(title: string, count: HTMLElement | null, ...body: Node[]): HTMLDetailsElement {
+function panel(title: string, count: HTMLElement | null, open: boolean, ...body: Node[]): HTMLDetailsElement {
   const summary = h('summary', {}, h('span', { text: title }), count)
   const details = h('details', { class: 'panel' }, summary, ...body)
-  details.open = true
+  details.open = open
   return details
 }
 
-function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
-  const iframe = h('iframe', {
-    title: `${view.title}: ${snapshot === null ? 'no data' : snapshot.name}`,
-    attrs: { src: frameUrl(view.entry.file, snapshot?.name ?? null, view.route?.name ?? null) },
+/** In a comparison, cards sit in a grid: a column per version, a row per snapshot under the headers. */
+function place(el: HTMLElement, column: number, row: number): void {
+  el.style.gridColumn = String(column + 1)
+  el.style.gridRow = String(row + 1)
+}
+
+function createCard(view: LoadedView, version: LoadedVersion, snapshot: Snapshot | null, compare: boolean): Card {
+  const name = snapshot === null ? 'no data' : snapshot.name
+  const several = state.devices.length > 1
+  const frames: Frame[] = []
+  const boxes = state.devices.map((device) => {
+    const where = [compare ? versionLabel(version) : null, name, several ? deviceLabel(device) : null].filter((part) => part !== null).join(', ')
+    const iframe = h('iframe', {
+      title: `${version.title}: ${where}`,
+      attrs: {
+        src: frameUrl(version.entry.file, {
+          snapshot: snapshot?.name ?? null,
+          route: view.route?.name ?? null,
+          alt: version.own ? version.alt : null,
+          theme: version.own ? null : version.alt,
+        }),
+      },
+    })
+    const wrap = h('div', { class: 'frame-wrap' }, iframe)
+    frames.push({ device, wrap, iframe, status: 'loading' })
+    return h('div', { class: 'frame' }, several ? h('p', { class: 'frame-label', text: deviceLabel(device) }) : null, wrap)
   })
-  const wrap = h('div', { class: 'frame-wrap' }, iframe)
   // A route card has an address bar: the URL the snapshot shows, editable like the view's data.
   let urlInput: HTMLInputElement | null = null
   let urlError: HTMLElement | null = null
   let urlBar: HTMLElement | null = null
   if (view.route !== null) {
-    urlInput = h('input', { class: 'url-input', attrs: { type: 'text', spellcheck: 'false', autocomplete: 'off', 'aria-label': `URL for ${snapshot?.name ?? 'no data'}` } })
+    urlInput = h('input', { class: 'url-input', attrs: { type: 'text', spellcheck: 'false', autocomplete: 'off', 'aria-label': `URL for ${name}` } })
     urlError = h('p', { class: 'editor-error url-error', attrs: { id: `url-error-${++editorIds}` } })
     urlError.hidden = true
     urlInput.setAttribute('aria-describedby', urlError.id)
@@ -418,16 +540,11 @@ function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
   const editedBadge = h('span', { class: 'edited', text: 'edited' })
   editedBadge.hidden = true
 
-  const name = snapshot === null ? 'no data' : snapshot.name
-  const head = h(
-    'header',
-    { class: 'card-head' },
-    h('h2', { class: 'card-title', text: name, title: name }),
-    statusBadge,
-    h('span', { class: 'spacer' }),
-  )
+  const head = h('header', { class: 'card-head' }, h('h2', { class: 'card-title', text: name, title: name }), statusBadge, h('span', { class: 'spacer' }))
   if (snapshot !== null && state.snapshot === null) {
-    head.append(stateLink({ class: 'card-action', text: 'Open alone', title: 'Show only this snapshot (a URL for screenshots)' }, { snapshot: snapshot.name }))
+    // In a comparison, alone means this version too.
+    const changes: Partial<ShellState> = compare ? { snapshot: snapshot.name, alt: version.key } : { snapshot: snapshot.name }
+    head.append(stateLink({ class: 'card-action', text: 'Open alone', title: 'Show only this snapshot (a URL for screenshots)' }, changes))
   }
 
   const editor = h('textarea', { class: 'editor', attrs: { spellcheck: 'false', autocomplete: 'off', 'aria-label': `Data for ${name}` } })
@@ -440,25 +557,29 @@ function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
 
   const eventCount = h('span', { class: 'count', text: '0' })
   const log = h('ol', { class: 'log' })
-  const logEmpty = h('p', { class: 'empty', text: 'Click something that emits an event.' })
+  const logEmpty = h('p', { class: 'empty', text: version.events ? 'Click something that emits an event.' : 'Links you click show up here.' })
   const clearLog = h('button', { class: 'link-button', text: 'Clear', attrs: { type: 'button' } })
 
   const warningCount = h('span', { class: 'count', text: '0' })
   const warningList = h('ul', { class: 'warnings' })
   const warningEmpty = h('p', { class: 'empty', text: 'No warnings.' })
 
-  const statePanel = panel('State', editedBadge, editor, editorError, h('div', { class: 'panel-actions' }, resetButton))
-  const eventsPanel = panel('Events', eventCount, logEmpty, log, h('div', { class: 'panel-actions' }, clearLog))
-  const warningsPanel = panel('Warnings', warningCount, warningEmpty, warningList)
-  const panels = h('aside', { class: 'panels' }, statePanel, eventsPanel, warningsPanel)
+  // A comparison keeps the panels closed under the frames, so its columns stay as wide as the frames.
+  const open = !compare
+  const panels = h('aside', { class: 'panels' })
+  // A static view (exploration, D28) has no data to edit.
+  if (version.entry.stage !== 'exploration') panels.append(panel('State', editedBadge, open, editor, editorError, h('div', { class: 'panel-actions' }, resetButton)))
+  panels.append(panel('Events', eventCount, open, logEmpty, log, h('div', { class: 'panel-actions' }, clearLog)))
+  panels.append(panel('Warnings', warningCount, open, warningEmpty, warningList))
 
-  const root = h('section', { class: 'card' }, head, ...(urlBar === null || urlError === null ? [] : [urlBar, urlError]), h('div', { class: 'card-body' }, wrap, panels))
+  const body = h('div', { class: 'card-body' }, h('div', { class: 'frames' }, ...boxes), panels)
+  const root = h('section', { class: 'card' }, head, ...(urlBar === null || urlError === null ? [] : [urlBar, urlError]), body)
   const card: Card = {
+    version,
     snapshot,
+    route: view.route,
+    frames,
     root,
-    wrap,
-    iframe,
-    status: 'loading',
     statusBadge,
     editor,
     editorError,
@@ -493,211 +614,309 @@ function createCard(view: LoadedView, snapshot: Snapshot | null): Card {
   return card
 }
 
+/** A comparison column's header: the version, its file, its stage, its theme and why it exists. */
+function versionHead(version: LoadedVersion, column: number): HTMLElement {
+  const title = h('div', { class: 'version-title' }, h('strong', { text: version.alt ?? CURRENT_VERSION }))
+  title.append(h('span', { class: `chip chip-${version.entry.stage}`, text: version.entry.stage, title: 'The stage the file is at (exploration, states or contracts)' }))
+  if (version.alt !== null && version.theme) title.append(h('span', { class: 'chip chip-theme', text: version.own ? 'own theme' : 'theme only', title: `explore/${version.alt}/theme.css over the project's theme` }))
+  title.append(h('span', { class: 'spacer' }), stateLink({ class: 'card-action', text: 'Open alone', title: 'Show only this version' }, { alt: version.key }))
+  const file = version.own || version.alt === null ? versionPath(version) : `${version.entry.file} with explore/${version.alt}/theme.css`
+  const head = h('header', { class: 'version-head' }, title, h('p', { class: 'version-file', text: file, title: file }))
+  if (version.own && version.entry.description !== '') head.append(h('p', { class: 'version-description', text: version.entry.description }))
+  place(head, column, 0)
+  return head
+}
+
 function applyLayout(): void {
-  const { width, height } = state.device
-  canvas.style.setProperty('--device-width', `${width}px`)
-  canvas.style.setProperty('--device-height', `${height}px`)
   canvas.style.setProperty('--zoom', String(state.zoom))
   for (const card of cards) {
-    // The wrapper takes the scaled size so cards lay out correctly; the iframe keeps the real
-    // viewport size (responsive classes see the device width) and is scaled with a transform.
-    card.wrap.style.width = `${width * state.zoom}px`
-    card.wrap.style.height = `${height * state.zoom}px`
-    card.iframe.style.width = `${width}px`
-    card.iframe.style.height = `${height}px`
-    card.iframe.style.transform = `scale(${state.zoom})`
+    for (const { device, wrap, iframe } of card.frames) {
+      // The wrapper takes the scaled size so cards lay out correctly; the iframe keeps the real
+      // viewport size (responsive classes see the device width) and is scaled with a transform.
+      wrap.style.width = `${device.width * state.zoom}px`
+      wrap.style.height = `${device.height * state.zoom}px`
+      iframe.style.width = `${device.width}px`
+      iframe.style.height = `${device.height}px`
+      iframe.style.transform = `scale(${state.zoom})`
+    }
   }
 }
 
-function onFrameMessage(card: Card, message: FrameMessage): void {
+function onFrameMessage(card: Card, frame: Frame, message: FrameMessage): void {
+  const device = card.frames.length > 1 ? frame.device : undefined
   switch (message.type) {
     case 'ready': {
-      setStatus(card, 'ready')
+      setFrameStatus(card, frame, 'ready')
       // The frame (re)loaded with the snapshot's data: an edit made while it was loading, or before a
       // reload of the frame alone, would otherwise be lost while the editor still shows it.
       const edited = parseDataJson(card.editor.value)
-      if (edited.ok && card.editor.value !== formatData(initialData(card))) sendData(card, edited.data)
+      if (edited.ok && card.editor.value !== formatData(initialData(card))) sendData(card, edited.data, frame)
       break
     }
     case 'event':
-      addEvent(card, message.name, message.time)
+      addEvent(card, message.name, message.time, 'event', device)
       break
     case 'link': {
       // A link to one of the app's routes is a navigation (SPEC D25): logged, not followed.
       const internal = message.href.startsWith('/') && !message.href.startsWith('//')
       const match = internal ? matchRoute({ routes: routesEntry.routes }, message.href) : null
-      if (match === null) addEvent(card, message.href, message.time, 'link')
-      else addEvent(card, `${match.route.name} ${match.url}`, message.time, 'navigate')
+      if (match === null) addEvent(card, message.href, message.time, 'link', device)
+      else addEvent(card, `${match.route.name} ${match.url}`, message.time, 'navigate', device)
       break
     }
     case 'warning':
-      addWarning(card, message.message, { update: message.update })
+      // Every frame of a card renders the same data, so they warn alike: the first one speaks for all.
+      if (frame === card.frames[0]) addWarning(card, message.message, { update: message.update })
       break
     case 'error':
       addWarning(card, message.message, { kind: 'error' })
-      setStatus(card, 'error')
+      setFrameStatus(card, frame, 'error')
       break
   }
 }
 
 window.addEventListener('message', (event) => {
   if (event.origin !== location.origin || !isFrameMessage(event.data)) return
-  const card = cards.find((item) => item.iframe.contentWindow === event.source)
-  if (card !== undefined) onFrameMessage(card, event.data)
+  for (const card of cards) {
+    const frame = card.frames.find((item) => item.iframe.contentWindow === event.source)
+    if (frame !== undefined) return onFrameMessage(card, frame, event.data)
+  }
 })
 
 // ---------------------------------------------------------------------------------------------------
 // Loading
 
-async function fetchRoutes(): Promise<RoutesEntry> {
-  const response = await fetch('/__melzin/api/routes', { cache: 'no-store' })
-  if (!response.ok) throw new Error(`couldn't list routes: HTTP ${response.status}`)
-  return (await response.json()) as RoutesEntry
-}
-
-async function fetchViews(): Promise<ViewEntry[]> {
-  const response = await fetch('/__melzin/api/views', { cache: 'no-store' })
-  if (!response.ok) throw new Error(`couldn't list views: HTTP ${response.status}`)
-  return (await response.json()) as ViewEntry[]
+async function fetchJson<T>(path: string, what: string): Promise<T> {
+  const response = await fetch(path, { cache: 'no-store' })
+  if (!response.ok) throw new Error(`couldn't list ${what}: HTTP ${response.status}`)
+  return (await response.json()) as T
 }
 
 /**
- * What the URL asks for: a route's page or a view. When it asks for neither, the first route, else the
- * first view. Undefined when it names a route or view that doesn't exist.
+ * What the URL asks for: a route's page or a view, with every version of it. When it asks for neither,
+ * the first route, else the first view, else the first screen in explore/. Undefined when it names a
+ * route or view that doesn't exist.
  */
-function pickView(): { entry: ViewEntry; route: Route | null } | undefined {
-  const viewEntry = (name: string): ViewEntry | undefined => views.find((view) => view.name === name || view.file === name)
-  const routeEntry = (route: Route | undefined): { entry: ViewEntry; route: Route } | undefined => {
-    const entry = route === undefined ? undefined : viewEntry(route.view)
-    return route === undefined || entry === undefined ? undefined : { entry, route }
+function pickView(): { name: string; route: Route | null; all: VersionEntry[] } | undefined {
+  const pick = (name: string, route: Route | null) => {
+    const all = versionsOf(name)
+    return all.length === 0 ? undefined : { name, route, all }
   }
-  if (state.route !== null) return routeEntry(routesEntry.routes.find((route) => route.name === state.route))
-  if (state.view !== null) {
-    const entry = viewEntry(state.view)
-    return entry === undefined ? undefined : { entry, route: null }
-  }
-  const first = routeEntry(routesEntry.routes[0])
-  if (first !== undefined) return first
-  return views[0] === undefined ? undefined : { entry: views[0], route: null }
+  const routed = (route: Route | undefined) => (route === undefined ? undefined : pick(route.view, route))
+  if (state.route !== null) return routed(routesEntry.routes.find((route) => route.name === state.route))
+  if (state.view !== null) return pick(state.view, null)
+  const first = routed(routesEntry.routes[0]) ?? (views[0] === undefined ? undefined : pick(views[0].name, null))
+  const exploring = exploringNames()[0]
+  return first ?? (exploring === undefined ? undefined : pick(exploring, null))
 }
 
 function renderCards(view: LoadedView): HTMLElement[] {
   const extra: HTMLElement[] = []
-  let snapshots: (Snapshot | null)[] = view.snapshots.length > 0 ? view.snapshots : [null]
+  const compare = view.versions.length > 1
+  let rows = snapshotRows(view.versions.map((version) => version.snapshots.map((snapshot) => snapshot.name)))
   if (state.snapshot !== null) {
     const wanted = state.snapshot
-    const match = view.snapshots.find((snapshot) => snapshot.name === wanted)
-    if (match === undefined) {
-      const names = view.snapshots.map((snapshot) => `'${snapshot.name}'`).join(', ') || 'none'
+    if (!rows.includes(wanted)) {
+      const names = rows.filter((row) => row !== null).map((row) => `'${row}'`).join(', ') || 'none'
       const lines = [`Snapshots: ${names}`]
-      if (view.issues.some((issue) => issue.path?.startsWith('snapshots'))) lines.push('The snapshots block has problems; see above.')
-      extra.push(notice('error', `${view.entry.file} has no snapshot named '${wanted}'`, lines, { text: 'Show all snapshots', changes: { snapshot: null } }))
-      snapshots = []
+      if (view.versions.some((version) => version.issues.some((issue) => issue.path?.startsWith('snapshots')))) lines.push('The snapshots block has problems; see above.')
+      const files = view.versions.length === 1 ? versionPath(view.versions[0]!) : view.name
+      extra.push(notice('error', `${files} has no snapshot named '${wanted}'`, lines, { text: 'Show all snapshots', changes: { snapshot: null } }))
+      rows = []
     } else {
-      snapshots = [match]
+      rows = [wanted]
       if (state.chrome) extra.push(notice('info', `Showing only '${wanted}'`, [], { text: 'Show all snapshots', changes: { snapshot: null } }))
     }
   }
-  cards = snapshots.map((snapshot) => createCard(view, snapshot))
-  canvas.replaceChildren(...cards.map((card) => card.root))
+  cards = []
+  const nodes: HTMLElement[] = []
+  view.versions.forEach((version, column) => {
+    if (compare) nodes.push(versionHead(version, column))
+    rows.forEach((row, index) => {
+      const snapshot = row === null ? null : version.snapshots.find((item) => item.name === row)
+      // A version without snapshots shows once, in the first row; one that lacks this snapshot says so.
+      if ((row === null) !== (version.snapshots.length === 0) || snapshot === undefined) {
+        if (compare && row !== null && version.snapshots.length > 0) {
+          const empty = h('div', { class: 'cell-empty', text: `No snapshot '${row}' in ${versionPath(version)}` })
+          place(empty, column, index + 1)
+          nodes.push(empty)
+        }
+        return
+      }
+      const card = createCard(view, version, snapshot, compare)
+      if (compare) place(card.root, column, index + 1)
+      cards.push(card)
+      nodes.push(card.root)
+    })
+  })
+  canvas.replaceChildren(...nodes)
+  canvas.classList.toggle('compare', compare)
+  canvas.style.gridTemplateColumns = compare ? `repeat(${view.versions.length}, max-content)` : ''
   canvas.classList.toggle('single', cards.length === 1)
   applyLayout()
-  if (cards.length === 0) document.body.dataset.melzinReady = 'true'
+  if (cards.length === 0) document.body.dataset.melzinReady = loadFailed ? 'error' : 'true'
   return extra
 }
 
 /** `nap` when there's simply nothing to show yet, `oops` when something went wrong. */
 function emptyState(title: string, text: string, mood: 'nap' | 'oops' = 'oops'): void {
-  current = null
+  loaded = null
   cards = []
   const zin = h('img', { class: 'empty-zin', attrs: { src: mood === 'nap' ? zinSoneca : zinOps, alt: '' } })
+  canvas.classList.remove('compare')
+  canvas.style.gridTemplateColumns = ''
   canvas.replaceChildren(h('div', { class: 'empty-state' }, zin, h('h2', { text: title }), h('p', { text })))
   viewMeta.textContent = ''
+  renderAltPicker()
 }
 
 /** Notices about URL parameters the shell couldn't use. */
 function urlNotices(): HTMLElement[] {
   const device = new URLSearchParams(location.search).get('device')
-  if (device === null || parseDevice(device) !== null) return []
-  return [notice('warning', `Ignored device '${device}'; showing ${deviceLabel(state.device)}`, [`Use WxH with each side from ${DEVICE_MIN} to ${DEVICE_MAX}, or phone, tablet, desktop.`])]
+  if (device === null || parseDevices(device) !== null) return []
+  const hint = `Use WxH with each side from ${DEVICE_MIN} to ${DEVICE_MAX}, or phone, tablet, desktop; separate several with commas (phone,desktop).`
+  return [notice('warning', `Ignored device '${device}'; showing ${devicesLabel(state.devices)}`, [hint])]
+}
+
+/** Fetches a version's file; versions that show the same file share one request. */
+function fetchVersionHtml(version: VersionEntry, requests: Map<string, Promise<string>>): Promise<string> {
+  const url = viewFileUrl(version.entry.file, version.own ? version.alt : null)
+  let request = requests.get(url)
+  if (request === undefined) {
+    request = fetch(url, { cache: 'no-store' }).then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return response.text()
+    })
+    requests.set(url, request)
+  }
+  return request
 }
 
 async function loadCurrentView(): Promise<void> {
   const token = ++loadToken
   delete document.body.dataset.melzinReady
   stateLinks = []
+  loadFailed = false
   const picked = pickView()
   const pageNotices: HTMLElement[] = urlNotices()
   if (routesEntry.problems.length > 0) {
-    const count = `${routesEntry.problems.length} problem${routesEntry.problems.length === 1 ? '' : 's'}`
+    const count = plural(routesEntry.problems.length, 'problem')
     pageNotices.push(notice('error', `routes.json: ${count}, so the shell lists no pages (run melzin check)`, routesEntry.problems))
+  }
+  if (explore.problems.length > 0) {
+    const count = plural(explore.problems.length, 'file')
+    pageNotices.push(notice('warning', `explore/: ${count} can't be an alternative, so the shell leaves them out (run melzin check)`, explore.problems))
   }
   if (picked === undefined) {
     // Keep the requested name in the URL: once the file exists, a refresh shows it (D3).
-    if (views.length === 0) {
-      emptyState('No views yet', 'Add a *.mel.html file to the views folder, then reload.', 'nap')
+    if (views.length === 0 && exploringNames().length === 0) {
+      emptyState('No views yet', 'Add a *.mel.html file to the views folder, or alternatives to explore/<alternative>/, then reload.', 'nap')
     } else if (state.route !== null) {
       const route = routesEntry.routes.find((item) => item.name === state.route)
       const pages = routesEntry.routes.map((item) => item.name).join(', ') || 'none'
       if (route === undefined) emptyState(`No route named '${state.route}'`, `Routes: ${pages}. Pick a page or a view above.`)
       else emptyState(`Route '${route.name}' shows '${route.view}', which isn't in the views folder`, 'Add the view, or fix routes.json, then reload.')
     } else {
-      emptyState(`No view named '${state.view}'`, `Available: ${views.map((view) => view.name).join(', ')}. Pick one above, or add the file and reload.`)
+      const available = [...views.map((view) => view.name), ...exploringNames()].join(', ')
+      emptyState(`No view named '${state.view}'`, `Available: ${available}. Pick one above, or add the file and reload.`)
     }
     viewPicker.value = ''
     notices.replaceChildren(...pageNotices)
     document.body.dataset.melzinReady = 'true'
     return
   }
-  const { entry, route } = picked
+  const { name, route, all } = picked
   state.route = route?.name ?? null
-  state.view = route === null ? entry.name : null
+  state.view = route === null ? name : null
   updateUrl()
-  viewPicker.value = currentPickerValue()
 
-  let html: string
-  try {
-    const response = await fetch(viewFileUrl(entry.file), { cache: 'no-store' })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    html = await response.text()
-  } catch (error) {
-    if (token !== loadToken) return
-    notices.replaceChildren(...pageNotices, notice('error', `Couldn't load ${entry.file}`, [error instanceof Error ? error.message : String(error)]))
-    emptyState(`Couldn't load ${entry.file}`, 'Fix the problem above, then reload.')
+  // The versions the URL asks for: all of them, or one (SPEC D31).
+  let shown = all
+  if (state.alt !== null) {
+    const match = all.find((version) => version.key === state.alt)
+    if (match === undefined) {
+      const keys = all.map((version) => `'${version.key}'`).join(', ')
+      pageNotices.push(notice('error', `'${name}' has no version named '${state.alt}'`, [`Versions: ${keys}`], { text: 'Show all versions', changes: { alt: null } }))
+      shown = []
+    } else {
+      shown = [match]
+      if (state.chrome && all.length > 1) pageNotices.push(notice('info', `Showing only ${match.alt === null ? 'the version in views/' : `the alternative '${match.alt}'`}`, [], { text: 'Show all versions', changes: { alt: null } }))
+    }
+  }
+
+  const requests = new Map<string, Promise<string>>()
+  const results = await Promise.all(
+    shown.map(async (version) => {
+      try {
+        return { version, html: await fetchVersionHtml(version, requests) }
+      } catch (error) {
+        return { version, error: error instanceof Error ? error.message : String(error) }
+      }
+    }),
+  )
+  if (token !== loadToken) return
+
+  const versions: LoadedVersion[] = []
+  for (const result of results) {
+    if (result.html === undefined) {
+      loadFailed = true
+      pageNotices.push(notice('error', `Couldn't load ${versionPath(result.version)}`, [result.error ?? '']))
+      continue
+    }
+    const parsed = parseViewHtml(result.html)
+    const events = Object.keys(parsed.schema?.events ?? {}).length > 0
+    versions.push({ ...result.version, title: parsed.title || result.version.entry.name, snapshots: parsed.snapshots, issues: parsed.issues, events })
+  }
+  loaded = { name, route, all, versions }
+  renderAltPicker()
+  viewPicker.value = currentPickerValue()
+  const title = versions[0]?.title ?? all[0]?.entry.title ?? name
+  document.title = `${route === null ? title : route.path} · Melzin shell`
+  const page = route === null ? '' : `${route.path} (route '${route.name}') · `
+  if (versions.length === 1) {
+    const only = versions[0]!
+    const count = only.snapshots.length
+    viewMeta.textContent = `${page}${versionPath(only)} · ${only.entry.stage} · ${count === 0 ? 'no snapshots' : plural(count, 'snapshot')}`
+  } else {
+    viewMeta.textContent = `${page}${name} · ${plural(all.length, 'version')}`
+  }
+  if (versions.length === 0 && shown.length > 0) {
+    emptyState(`Couldn't load ${name}`, 'Fix the problem above, then reload.')
+    notices.replaceChildren(...pageNotices)
     document.body.dataset.melzinReady = 'error'
     return
   }
-  if (token !== loadToken) return
-
-  const parsed = parseViewHtml(html)
-  current = { entry, route, title: parsed.title || entry.name, snapshots: parsed.snapshots, issues: parsed.issues }
-  document.title = `${route === null ? current.title : route.path} · Melzin shell`
-  viewPicker.value = currentPickerValue()
-  const count = parsed.snapshots.length
-  const page = route === null ? '' : `${route.path} (route '${route.name}') · `
-  viewMeta.textContent = `${page}${entry.file} · ${count === 0 ? 'no snapshots' : `${count} snapshot${count === 1 ? '' : 's'}`}`
   // Shown even with chrome=0: a screenshot of a view with a broken schema or snapshots would mislead.
-  if (parsed.issues.length > 0) {
-    const count = `${parsed.issues.length} problem${parsed.issues.length === 1 ? '' : 's'}`
-    pageNotices.push(notice('error', `${entry.file}: ${count} in the schema or snapshots blocks (run melzin check for every problem, with positions)`, parsed.issues.map(issueLine)))
+  const reported = new Set<string>()
+  for (const version of versions) {
+    const path = versionPath(version)
+    if (version.issues.length === 0 || reported.has(path)) continue
+    reported.add(path)
+    const count = plural(version.issues.length, 'problem')
+    pageNotices.push(notice('error', `${path}: ${count} in the schema or snapshots blocks (run melzin check for every problem, with positions)`, version.issues.map(issueLine)))
   }
-  pageNotices.push(...renderCards(current))
+  pageNotices.push(...renderCards(loaded))
   notices.replaceChildren(...pageNotices)
 }
 
 async function reloadAll(): Promise<void> {
   try {
-    ;[views, routesEntry] = await Promise.all([fetchViews(), fetchRoutes()])
+    ;[views, routesEntry, explore] = await Promise.all([
+      fetchJson<ViewEntry[]>('/__melzin/api/views', 'views'),
+      fetchJson<RoutesEntry>('/__melzin/api/routes', 'routes'),
+      fetchJson<ExploreEntry>('/__melzin/api/explore', 'alternatives'),
+    ])
   } catch (error) {
     views = []
     routesEntry = { present: false, routes: [], problems: [] }
+    explore = { alternatives: [], problems: [] }
     notices.replaceChildren(notice('error', 'The shell server is unreachable', [error instanceof Error ? error.message : String(error)]))
     emptyState('No connection', 'Start melzin shell again, then reload.')
     renderViewPicker()
     document.body.dataset.melzinReady = 'error'
     return
   }
-  current = null
+  loaded = null
   await loadCurrentView()
   renderViewPicker()
 }

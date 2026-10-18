@@ -12,28 +12,37 @@ import {
 } from '../shell/protocol.ts'
 import {
   DEFAULT_DEVICE,
+  DEVICE_CHOICES,
   DEVICE_PRESETS,
   ZOOM_MAX,
   ZOOM_MIN,
   clampZoom,
   defaultShellState,
   deviceLabel,
+  deviceName,
+  devicesLabel,
   formatData,
   formatDevice,
+  formatDevices,
   formatTime,
   frameUrl,
   parseDataJson,
   parseDevice,
+  parseDevices,
   parseShellState,
   parseZoom,
   routeCardUrl,
   serializeShellState,
+  snapshotRows,
   stepZoom,
+  stylesUrl,
   viewFileUrl,
   viewFileName,
   viewName,
+  viewVersions,
   zoomLabel,
 } from '../shell/state.ts'
+import { CURRENT_VERSION } from 'melzin/core'
 
 describe('devices', () => {
   test('the presets are the three POC sizes, phone first', () => {
@@ -64,6 +73,27 @@ describe('devices', () => {
     expect(formatDevice({ width: 375, height: 812 })).toBe('375x812')
     expect(deviceLabel({ width: 375, height: 812 })).toBe('Phone 375×812')
     expect(deviceLabel({ width: 500, height: 700 })).toBe('Custom 500×700')
+    expect(deviceName({ width: 1280, height: 800 })).toBe('Desktop')
+    expect(deviceName({ width: 500, height: 700 })).toBe('500×700')
+  })
+
+  test('parseDevices reads one or several devices, drops repeats, and rejects a list with a bad entry', () => {
+    const phone = { width: 375, height: 812 }
+    const desktop = { width: 1280, height: 800 }
+    expect(parseDevices('phone')).toEqual([phone])
+    expect(parseDevices('phone,desktop')).toEqual([phone, desktop])
+    expect(parseDevices(' 375x812 , 1280×800 ,phone')).toEqual([phone, desktop])
+    for (const value of [null, undefined, '', ',', 'phone,', 'phone,watch', 'phone,,desktop']) expect(parseDevices(value)).toBeNull()
+  })
+
+  test('device lists: URL form, labels and the picker\'s choices', () => {
+    const phone = { width: 375, height: 812 }
+    const desktop = { width: 1280, height: 800 }
+    expect(formatDevices([phone, desktop])).toBe('375x812,1280x800')
+    expect(devicesLabel([phone])).toBe('Phone 375×812')
+    expect(devicesLabel([phone, desktop])).toBe('Phone + Desktop')
+    expect(devicesLabel([phone, { width: 500, height: 700 }])).toBe('Phone + 500×700')
+    expect(DEVICE_CHOICES.map(devicesLabel)).toEqual(['Phone 375×812', 'Tablet 768×1024', 'Desktop 1280×800', 'Phone + Desktop', 'Phone + Tablet + Desktop'])
   })
 })
 
@@ -93,35 +123,47 @@ describe('zoom', () => {
 })
 
 describe('URL state', () => {
-  test('defaults: first view, phone, 100%, every snapshot, chrome on', () => {
+  test('defaults: first view, phone, 100%, every snapshot, every version, chrome on', () => {
     expect(parseShellState('')).toEqual(defaultShellState())
-    expect(defaultShellState()).toEqual({ route: null, view: null, device: { width: 375, height: 812 }, zoom: 1, snapshot: null, chrome: true })
+    expect(defaultShellState()).toEqual({ route: null, view: null, devices: [{ width: 375, height: 812 }], zoom: 1, snapshot: null, alt: null, chrome: true })
   })
 
   test('reads every parameter', () => {
-    expect(parseShellState('?view=counter&device=768x1024&zoom=0.5&snapshot=a+few+clicks&chrome=0')).toEqual({
+    expect(parseShellState('?view=counter&device=768x1024,desktop&zoom=0.5&snapshot=a+few+clicks&alt=night&chrome=0')).toEqual({
       route: null,
       view: 'counter',
-      device: { width: 768, height: 1024 },
+      devices: [
+        { width: 768, height: 1024 },
+        { width: 1280, height: 800 },
+      ],
       zoom: 0.5,
       snapshot: 'a few clicks',
+      alt: 'night',
       chrome: false,
     })
+    expect(parseShellState('?alt=current').alt).toBe(CURRENT_VERSION)
+    expect(parseShellState('?alt=+').alt).toBeNull()
   })
 
   test('accepts a file name for view and falls back on bad values', () => {
-    const state = parseShellState('?view=profile-card.mel.html&device=huge&zoom=abc&snapshot=&chrome=1')
+    const state = parseShellState('?view=profile-card.mel.html&device=huge&zoom=abc&snapshot=&alt=&chrome=1')
     expect(state).toEqual({ ...defaultShellState(), view: 'profile-card' })
     expect(parseShellState('?chrome=false').chrome).toBe(false)
     expect(parseShellState('?chrome=yes').chrome).toBe(true)
   })
 
   test('serializes in a stable order and round-trips', () => {
-    const state = { route: null, view: 'counter', device: { width: 375, height: 812 }, zoom: 1, snapshot: null, chrome: true }
+    const state = { ...defaultShellState(), view: 'counter' }
     expect(serializeShellState(state)).toBe('?view=counter&device=375x812&zoom=1')
     const solo = { ...state, snapshot: 'a few clicks', chrome: false, zoom: 0.67 }
     expect(serializeShellState(solo)).toBe('?view=counter&device=375x812&zoom=0.67&snapshot=a+few+clicks&chrome=0')
     expect(parseShellState(serializeShellState(solo))).toEqual(solo)
+    const compared = { ...state, devices: [{ width: 375, height: 812 }, { width: 1280, height: 800 }], alt: 'night' }
+    expect(serializeShellState(compared)).toBe('?view=counter&device=375x812,1280x800&zoom=1&alt=night')
+    const named = { ...state, snapshot: 'a, b & c' }
+    expect(serializeShellState(named)).toBe('?view=counter&device=375x812&zoom=1&snapshot=a,+b+%26+c')
+    expect(parseShellState(serializeShellState(named))).toEqual(named)
+    expect(parseShellState(serializeShellState(compared))).toEqual(compared)
     expect(serializeShellState(defaultShellState())).toBe('?device=375x812&zoom=1')
   })
 
@@ -137,11 +179,48 @@ describe('URL state', () => {
     expect(viewFileName('counter')).toBe('counter.mel.html')
     expect(viewFileName('counter.mel.html')).toBe('counter.mel.html')
     expect(viewFileName('')).toBe('')
-    expect(frameUrl('counter.mel.html', 'a few clicks')).toBe('/frame?view=counter.mel.html&snapshot=a+few+clicks')
-    expect(frameUrl('hello.mel.html', null)).toBe('/frame?view=hello.mel.html')
-    expect(frameUrl('profile.mel.html', 'me', 'profile')).toBe('/frame?view=profile.mel.html&snapshot=me&route=profile')
-    expect(new URLSearchParams(frameUrl('x.mel.html', 'a&b=c').split('?')[1]).get('snapshot')).toBe('a&b=c')
+    expect(frameUrl('counter.mel.html', { snapshot: 'a few clicks' })).toBe('/frame?view=counter.mel.html&snapshot=a+few+clicks')
+    expect(frameUrl('hello.mel.html', { snapshot: null })).toBe('/frame?view=hello.mel.html')
+    expect(frameUrl('hello.mel.html')).toBe('/frame?view=hello.mel.html')
+    expect(frameUrl('profile.mel.html', { snapshot: 'me', route: 'profile' })).toBe('/frame?view=profile.mel.html&snapshot=me&route=profile')
+    expect(frameUrl('profile.mel.html', { snapshot: 'me', alt: 'night' })).toBe('/frame?view=profile.mel.html&snapshot=me&alt=night')
+    expect(frameUrl('profile.mel.html', { theme: 'night' })).toBe('/frame?view=profile.mel.html&theme=night')
+    expect(new URLSearchParams(frameUrl('x.mel.html', { snapshot: 'a&b=c' }).split('?')[1]).get('snapshot')).toBe('a&b=c')
     expect(viewFileUrl('my view.mel.html')).toBe('/views/my%20view.mel.html')
+    expect(viewFileUrl('my view.mel.html', 'dark mode')).toBe('/explore/dark%20mode/my%20view.mel.html')
+    expect(stylesUrl()).toBe('/__melzin/styles.css')
+    expect(stylesUrl('dark mode')).toBe('/__melzin/styles.css?alt=dark%20mode')
+  })
+})
+
+describe('versions of a view (SPEC D31)', () => {
+  const alternatives = [
+    { name: 'cards', theme: false, views: [{ name: 'settings' }, { name: 'profile' }] },
+    { name: 'night', theme: true, views: [{ name: 'profile' }] },
+    { name: 'list', theme: false, views: [{ name: 'other' }] },
+  ]
+
+  test('the one in views/, then each alternative with its own file or a theme to show it in', () => {
+    expect(viewVersions('profile', true, alternatives)).toEqual([
+      { key: 'current', alt: null, own: false, theme: false },
+      { key: 'cards', alt: 'cards', own: true, theme: false },
+      { key: 'night', alt: 'night', own: true, theme: true },
+    ])
+    // A theme reaches the views it doesn't redesign too: promoting it would restyle them.
+    expect(viewVersions('home', true, alternatives)).toEqual([
+      { key: 'current', alt: null, own: false, theme: false },
+      { key: 'night', alt: 'night', own: false, theme: true },
+    ])
+    // A screen still being explored has no current version, so a theme alone has nothing to show.
+    expect(viewVersions('settings', false, alternatives)).toEqual([{ key: 'cards', alt: 'cards', own: true, theme: false }])
+    expect(viewVersions('nope', false, alternatives)).toEqual([])
+  })
+
+  test('comparison rows: snapshot names in order of first appearance, no data first', () => {
+    expect(snapshotRows([['typical', 'empty'], ['typical', 'long'], ['empty']])).toEqual(['typical', 'empty', 'long'])
+    expect(snapshotRows([[], ['typical']])).toEqual([null, 'typical'])
+    expect(snapshotRows([[], []])).toEqual([null])
+    expect(snapshotRows([])).toEqual([])
   })
 })
 

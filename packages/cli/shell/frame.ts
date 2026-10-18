@@ -1,14 +1,14 @@
 // One render of one view: `/frame?view=counter.mel.html&snapshot=zero`. The frame is the view's
 // mock host. It mounts the view through the real runtime with the snapshot's data, gives it a
 // handler for every declared event, and reports events and warnings to the shell. The shell sends
-// new data with a "set-data" message, applied with `view.update`.
+// new data with a "set-data" message, applied with `view.update`. `&alt=night` renders a design
+// alternative's own file and `&theme=night` the file in views/, both with the alternative's CSS
+// (SPEC D31, D32).
 
 import { type RouteInput, VIEW_FILE_SUFFIX } from 'melzin/core'
 import { DATA_WARNING_PREFIX, type MelzinView, mountSource, parseViewHtml } from 'melzin'
 import { type FrameMessageBody, frameMessage, isShellMessage } from './protocol.ts'
-import { viewFileName, viewFileUrl } from './state.ts'
-
-const STYLES_URL = '/__melzin/styles.css'
+import { stylesUrl, viewFileName, viewFileUrl } from './state.ts'
 
 const embedded = window.parent !== window
 let view: MelzinView<Record<string, unknown>> | null = null
@@ -29,22 +29,22 @@ function markReady(state: 'true' | 'error'): void {
 }
 
 // Linked at runtime so Bun's HTML bundler doesn't try to resolve the dynamic URL at bundle time.
-function loadStylesheet(): Promise<void> {
+function loadStylesheet(url: string): Promise<void> {
   return new Promise((resolve) => {
     const link = document.createElement('link')
     link.rel = 'stylesheet'
-    link.href = STYLES_URL
+    link.href = url
     link.addEventListener('load', () => resolve())
     link.addEventListener('error', () => {
-      post({ type: 'warning', message: `couldn't load ${STYLES_URL}; the view is unstyled` })
+      post({ type: 'warning', message: `couldn't load ${url}; the view is unstyled` })
       resolve()
     })
     document.head.append(link)
   })
 }
 
-async function fetchView(file: string): Promise<string> {
-  const url = viewFileUrl(file)
+async function fetchView(file: string, alt: string | null): Promise<string> {
+  const url = viewFileUrl(file, alt)
   const response = await fetch(url, { cache: 'no-store' })
   if (!response.ok) throw new Error(`couldn't load ${url}: HTTP ${response.status}`)
   return response.text()
@@ -121,6 +121,9 @@ async function start(): Promise<void> {
   const snapshotName = params.get('snapshot')
   // The route this frame previews (SPEC D26): its name is part of the view's URL input.
   const routeName = params.get('route')
+  // A design alternative (SPEC D31): its own file, or (theme) the views/ one with its CSS.
+  const alt = params.get('alt') || null
+  const theme = alt ?? (params.get('theme') || null)
   if (!file.endsWith(VIEW_FILE_SUFFIX) || file.includes('/') || file.includes('\\')) {
     fail(`melzin: expected ?view=<name> or ?view=<name>${VIEW_FILE_SUFFIX}, got '${params.get('view') ?? ''}'`)
     return
@@ -128,7 +131,7 @@ async function start(): Promise<void> {
 
   let html: string
   try {
-    ;[html] = await Promise.all([fetchView(file), loadStylesheet()])
+    ;[html] = await Promise.all([fetchView(file, alt), loadStylesheet(stylesUrl(theme))])
   } catch (error) {
     // A frame torn down mid-load (shell reload, view switch) aborts its fetches; that isn't a failure.
     if (unloading) return

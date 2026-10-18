@@ -372,6 +372,133 @@ a:focus-visible {
   transform-origin: 0 0;
 }
 
+/* A card's frames, one per device size, side by side. */
+.frames {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.frame {
+  display: flex;
+  flex-direction: column;
+}
+
+.frame-label {
+  margin: 12px 14px -6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Comparison (SPEC D31): a column per version of the view, a row per snapshot, headers on top ----- */
+
+.canvas.compare {
+  display: grid;
+  align-content: start;
+  align-items: start;
+  justify-content: start;
+}
+
+/* Panels go under the frames, so each column is as wide as its frames. */
+.canvas.compare .card-body {
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+.canvas.compare .panels {
+  width: auto;
+  border-left: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Headers and empty cells fill their column without widening it (width 0, then the column's width). */
+.version-head,
+.cell-empty {
+  width: 0;
+  min-width: 100%;
+}
+
+.version-head {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  align-self: stretch;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+
+.version-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.version-title strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-file {
+  margin: 0;
+  color: var(--text-muted);
+  font: 12px var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.version-description {
+  margin: 0;
+  font-size: 12.5px;
+  text-wrap: pretty;
+}
+
+.chip {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f4f4f5;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* The stage a file is at (SPEC D28): exploration, states, contracts. */
+.chip-states {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.chip-contracts {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.chip-theme {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.cell-empty {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
 /* Panels ----------------------------------------------------------------------------------------- */
 
 .panels {
@@ -559,6 +686,14 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* Which frame of the card an event came from, when it has several. */
+.event-device {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
 /* A route card's address bar: the URL its snapshot shows (SPEC D26, D27). */
 .url-bar {
   display: flex;
@@ -657,7 +792,10 @@ body.chrome-off .topbar,
 body.chrome-off .card-head,
 body.chrome-off .url-bar,
 body.chrome-off .url-error,
-body.chrome-off .panels {
+body.chrome-off .panels,
+body.chrome-off .version-head,
+body.chrome-off .frame-label,
+body.chrome-off .cell-empty {
   display: none;
 }
 
@@ -687,4 +825,17 @@ body.chrome-off .frame-wrap {
   margin: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+body.chrome-off .frames {
+  gap: 16px;
+}
+
+/* The empty header row takes no gap, so the first frame still sits at the top-left corner. */
+body.chrome-off .canvas.compare {
+  row-gap: 0;
+}
+
+body.chrome-off .canvas.compare > .card {
+  margin-bottom: 16px;
 }
