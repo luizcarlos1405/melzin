@@ -244,29 +244,48 @@ function listKeyword(key: string): string | undefined {
   return undefined
 }
 
-function validateField(value: unknown, path: string, issues: Issue[]): FieldSchema | null {
+// Keywords in a list's items' schema that belong to the list, or that an item can't have.
+function itemKeyword(key: string): string | undefined {
+  if (key === 'key' || key === 'uniqueItems' || key === 'minItems' || key === 'maxItems') return `put "${key}" on the list, next to "items"`
+  if (key === 'default') return "a list item is never missing, so it takes no 'default'"
+  return listKeyword(key)
+}
+
+/**
+ * Where a field schema sits, so messages offer only what fits there: the types it may have, the type
+ * to use for a name from elsewhere ("integer"), and what to say about keywords that belong elsewhere.
+ */
+type FieldPlace = { types: string; renamed: Readonly<Record<string, string>>; keyword: (key: string) => string | undefined }
+/** A field of data or of an object. */
+const DATA_FIELD: FieldPlace = { types: TYPES, renamed: { integer: 'number', list: 'array' }, keyword: listKeyword }
+/** A list's items: objects, strings or numbers (SPEC D34). */
+const LIST_ITEM: FieldPlace = { types: 'object, string or number', renamed: { integer: 'number' }, keyword: itemKeyword }
+/** A field of an event's payload: a string, number or boolean (D35). */
+const PAYLOAD_FIELD: FieldPlace = { types: 'string, number or boolean', renamed: { integer: 'number' }, keyword: () => undefined }
+
+function validateField(value: unknown, path: string, issues: Issue[], place: FieldPlace = DATA_FIELD): FieldSchema | null {
   if (!isPlainObject(value)) {
     issues.push({ message: `a field schema must be an object, got ${typeName(value)}`, path: at(path) })
     return null
   }
   const type = value.type
   if (type === undefined) {
-    const hint = 'items' in value ? ': a list needs "type": "array"' : ` (${TYPES})`
+    const hint = 'items' in value ? ': a list needs "type": "array"' : ` (${place.types})`
     issues.push({ message: `missing 'type'${hint}`, path: at(path) })
     return null
   }
   if (type === 'array') return validateList(value, path, issues)
   if (type === 'object') return validateObject(value, path, issues)
   if (typeof type !== 'string' || !LEAF_TYPES.includes(type)) {
-    const hint = type === 'integer' ? " (use 'number')" : type === 'list' ? " (use 'array')" : ''
+    const use = typeof type === 'string' && Object.hasOwn(place.renamed, type) ? place.renamed[type] : undefined
     issues.push({
-      message: `unsupported type ${JSON.stringify(type)}${hint}; use ${TYPES}`,
+      message: `unsupported type ${JSON.stringify(type)}${use === undefined ? '' : ` (use '${use}')`}; use ${place.types}`,
       path: joinPath(path, 'type'),
     })
     return null
   }
   const before = issues.length
-  checkUnknownKeys(value, LEAF_KEYS, path, issues, listKeyword)
+  checkUnknownKeys(value, LEAF_KEYS, path, issues, place.keyword)
   checkDescription(value, path, issues)
   const leaf: LeafSchema = { type: type as LeafType }
   if ('default' in value) {
@@ -324,11 +343,15 @@ function validateRequired(value: Record<string, unknown>, path: string, issues: 
   return [...seen]
 }
 
-function validateObject(value: Record<string, unknown>, path: string, issues: Issue[]): ObjectSchema | null {
+/** `keyword` says what to write instead of a keyword that belongs elsewhere (see FieldPlace). */
+function validateObject(
+  value: Record<string, unknown>,
+  path: string,
+  issues: Issue[],
+  keyword: (key: string) => string | undefined = (key) => (key === 'default' ? "'default' is only allowed on string, number and boolean fields" : listKeyword(key)),
+): ObjectSchema | null {
   const before = issues.length
-  checkUnknownKeys(value, OBJECT_KEYS, path, issues, (key) =>
-    key === 'default' ? "'default' is only allowed on string, number and boolean fields" : listKeyword(key),
-  )
+  checkUnknownKeys(value, OBJECT_KEYS, path, issues, keyword)
   checkDescription(value, path, issues)
   const properties: Record<string, FieldSchema> = {}
   const rawProperties = value.properties
@@ -386,12 +409,12 @@ function validateItems(value: Record<string, unknown>, path: string, issues: Iss
     })
     return null
   }
-  if (items.type === 'object') return validateObject(items, itemsPath, issues)
+  if (items.type === 'object') return validateObject(items, itemsPath, issues, itemKeyword)
   const before = issues.length
   if ('default' in items) {
     issues.push({ message: "a list item is never missing, so it takes no 'default'", path: joinPath(itemsPath, 'default') })
   }
-  const leaf = validateField(items, itemsPath, issues)
+  const leaf = validateField(items, itemsPath, issues, LIST_ITEM)
   return issues.length === before && leaf !== null ? (leaf as LeafSchema) : null
 }
 
@@ -507,20 +530,19 @@ function validatePayload(value: unknown, path: string, issues: Issue[]): Payload
         issues.push({ message: PAYLOAD_LEAVES, path: fieldPath })
         continue
       }
-      // A leaf as validateField reads it, minus what a payload field can't have.
-      const leaf: Record<string, unknown> = {}
+      // A leaf as validateField reads it, minus what a payload field can't have. Object.fromEntries keeps
+      // every key its own, `__proto__` included, so validateField reports it like any unknown keyword.
+      let leaf: unknown = field
       if (isPlainObject(field)) {
-        for (const [key, item] of Object.entries(field)) {
-          if (key === 'default') {
-            issues.push({ message: "a payload field has no default: the view sends the value it has, or leaves an optional field out", path: joinPath(fieldPath, key) })
-          } else if (key === 'route') {
-            issues.push({ message: "a payload field isn't a link: send a key, such as the item's id, and let the host find the URL", path: joinPath(fieldPath, key) })
-          } else {
-            leaf[key] = item
-          }
+        if (Object.hasOwn(field, 'default')) {
+          issues.push({ message: "a payload field has no default: the view sends the value it has, or leaves an optional field out", path: joinPath(fieldPath, 'default') })
         }
+        if (Object.hasOwn(field, 'route')) {
+          issues.push({ message: "a payload field isn't a link: send a key, such as the item's id, and let the host find the URL", path: joinPath(fieldPath, 'route') })
+        }
+        leaf = Object.fromEntries(Object.entries(field).filter(([key]) => key !== 'default' && key !== 'route'))
       }
-      const schema = validateField(isPlainObject(field) ? leaf : field, fieldPath, issues)
+      const schema = validateField(leaf, fieldPath, issues, PAYLOAD_FIELD)
       if (schema !== null) properties[name] = schema as LeafSchema
     }
   }

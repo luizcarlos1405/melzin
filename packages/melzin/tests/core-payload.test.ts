@@ -93,8 +93,35 @@ describe('validateSchema: payloads', () => {
     expect(payloadSchemaIssues({ type: 'object', properties: { url: { type: 'string', route: 'home' } } })).toEqual([
       { message: "a payload field isn't a link: send a key, such as the item's id, and let the host find the URL", path: 'events.go.payload.properties.url.route' },
     ])
+  })
+
+  // Messages about a payload field's type list only what a payload field can be (D35).
+  test("a field's type gets the hints that fit a payload", () => {
     expect(payloadSchemaIssues({ type: 'object', properties: { n: { type: 'integer' } } })).toEqual([
-      { message: `unsupported type "integer" (use 'number'); use string, number, boolean, object or array`, path: 'events.go.payload.properties.n.type' },
+      { message: `unsupported type "integer" (use 'number'); use string, number or boolean`, path: 'events.go.payload.properties.n.type' },
+    ])
+    expect(payloadSchemaIssues({ type: 'object', properties: { n: { type: 'list' } } })).toEqual([
+      { message: 'unsupported type "list"; use string, number or boolean', path: 'events.go.payload.properties.n.type' },
+    ])
+    expect(payloadSchemaIssues({ type: 'object', properties: { n: {} } })).toEqual([
+      { message: "missing 'type' (string, number or boolean)", path: 'events.go.payload.properties.n' },
+    ])
+    expect(payloadSchemaIssues({ type: 'object', properties: { n: { type: 'string', key: 'id' } } })).toEqual([
+      { message: "unknown keyword 'key'", path: 'events.go.payload.properties.n.key' },
+    ])
+  })
+
+  // JSON.parse keeps `__proto__` an own key; it must stay one, and be reported, not become the prototype.
+  test('a __proto__ keyword in a payload field is reported, and what it holds is ignored', () => {
+    const field = (json: string) => JSON.parse(`{ "events": { "vote": { "payload": { "type": "object", "properties": { "optionId": ${json} } } } } }`)
+    for (const json of ['{ "type": "string", "__proto__": { "default": "x" } }', '{ "type": "string", "__proto__": { "bogus": 1 } }']) {
+      const { schema, issues } = validateSchema(field(json))
+      expect(schema).toBeNull()
+      expect(issues).toEqual([{ message: "unknown keyword '__proto__'", path: 'events.vote.payload.properties.optionId.__proto__' }])
+    }
+    expect(validateSchema(field('{ "type": "string", "default": "x", "__proto__": {} }')).issues).toEqual([
+      { message: 'a payload field has no default: the view sends the value it has, or leaves an optional field out', path: 'events.vote.payload.properties.optionId.default' },
+      { message: "unknown keyword '__proto__'", path: 'events.vote.payload.properties.optionId.__proto__' },
     ])
   })
 

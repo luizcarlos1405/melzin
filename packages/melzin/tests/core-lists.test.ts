@@ -213,6 +213,28 @@ describe('validateSchema: lists', () => {
     valid({ data: { type: 'object', properties: { list: { ...strings, minItems: 2, maxItems: 2 } } } })
   })
 
+  // Messages inside the items list only what items can be, and send list keywords to the list.
+  test("the items' type and keywords get the hints that fit a list's items", () => {
+    expect(listIssues({ type: 'array', uniqueItems: true, items: { type: 'integer' } })).toEqual([
+      { message: `unsupported type "integer" (use 'number'); use object, string or number`, path: 'data.properties.list.items.type' },
+    ])
+    expect(listIssues({ type: 'array', uniqueItems: true, items: { type: 'list' } })).toEqual([
+      { message: 'unsupported type "list"; use object, string or number', path: 'data.properties.list.items.type' },
+    ])
+    expect(listIssues({ type: 'array', items: { type: 'string', uniqueItems: true } })).toEqual([
+      { message: 'put "uniqueItems" on the list, next to "items"', path: 'data.properties.list.items.uniqueItems' },
+      { message: 'a list of strings is keyed by its values: add "uniqueItems": true', path: 'data.properties.list' },
+    ])
+    expect(listIssues({ type: 'array', items: { ...objectItems, key: 'id' } })).toEqual([
+      { message: 'put "key" on the list, next to "items"', path: 'data.properties.list.items.key' },
+      { message: `a list of objects needs a "key": the field of its items that identifies each one, such as "key": "id"`, path: 'data.properties.list' },
+    ])
+    expect(listIssues({ type: 'array', key: 'id', items: { ...objectItems, maxItems: 3, default: {} } })).toEqual([
+      { message: 'put "maxItems" on the list, next to "items"', path: 'data.properties.list.items.maxItems' },
+      { message: "a list item is never missing, so it takes no 'default'", path: 'data.properties.list.items.default' },
+    ])
+  })
+
   test('problems inside the items are reported at their paths, and still the key rules apply', () => {
     expect(listIssues({ type: 'array', items: { type: 'object', properties: { 'a-b': { type: 'string' } } } })).toEqual([
       { message: "'a-b' isn't a valid field name (use letters, digits and _, not starting with a digit)", path: 'data.properties.list.items.properties["a-b"]' },
