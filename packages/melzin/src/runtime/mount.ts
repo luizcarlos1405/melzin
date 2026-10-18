@@ -5,9 +5,11 @@ import {
   type ChainDirective,
   ELSE_DIRECTIVE,
   ELSE_IF_DIRECTIVE,
+  HREF_DIRECTIVE,
   IF_DIRECTIVE,
   type Issue,
   type MelzinSchema,
+  type RouteInput,
   SHOW_DIRECTIVE,
   TEXT_DIRECTIVE,
   VOID_ELEMENTS,
@@ -21,10 +23,14 @@ import {
   isInterElementWhitespace,
   parseClickDirective,
   parseConditionDirective,
+  parseHrefDirective,
+  parseRouteRef,
   parseTextDirective,
+  readPath,
   resolveField,
   resolvePath,
   suggest,
+  urlScheme,
   validateData,
   valueOrDefault,
 } from '../core/index.ts'
@@ -38,17 +44,24 @@ export const DATA_WARNING_PREFIX = "data doesn't match the schema: "
 export type MountOptions<D, H> = {
   data: D
   on: H
+  /** The URL input views read as `route.name`, `route.params.*` and `route.query.*` (SPEC D27). */
+  route?: RouteInput
   onWarning?: (message: string) => void
 }
 
 export type MelzinView<D> = {
   readonly data: D
+  readonly route: RouteInput
   readonly schema: MelzinSchema
   update(data: D): void
+  /** Replaces the URL input; like update, only bindings whose value changed touch the DOM. */
+  setRoute(route: RouteInput): void
   destroy(): void
 }
 
 type TextBinding = { segments: readonly string[]; el: Element; lastText: string | null }
+/** m-bind:href: the link field's URL, or no href at all while the field is missing. */
+type HrefBinding = { segments: readonly string[]; el: Element; lastHref: string | null | undefined }
 type ClickBinding = { el: Element; listener: (event: Event) => void }
 /** m-show: `display: none` while the condition is false; `display` is the element's own value to restore. */
 type ShowBinding = { style: CSSStyleDeclaration; holds: () => boolean; display: string; shown: boolean | null }
@@ -102,6 +115,9 @@ function describeElement(el: Element, attribute: string, value: string): string 
 function chainRole(el: Element): ChainDirective | undefined {
   return el.getAttributeNames().find(isChainDirective)
 }
+
+/** Schemes a link field may not use: they would run code instead of navigating. */
+const SCRIPT_SCHEMES = new Set(['javascript', 'vbscript', 'data'])
 
 /** Text for a value: primitives through String(); objects (wrong data, already warned about) show nothing. */
 function toText(value: unknown): string {
@@ -165,8 +181,10 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   for (const child of body.childNodes) fragment.appendChild(target.importNode(child, true))
 
   let data = options.data
+  let route: RouteInput = options.route ?? {}
   let destroyed = false
   const texts: TextBinding[] = []
+  const hrefs: HrefBinding[] = []
   const clicks: ClickBinding[] = []
   const shows: ShowBinding[] = []
   const chains: ChainBinding[] = []
@@ -188,7 +206,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       warn(`${describeElement(el, TEXT_DIRECTIVE, value)}: ${parsed.message} (at column ${parsed.offset + 1}); skipped`)
       return
     }
-    const resolved = resolvePath(schema, parsed.path)
+    const ref = parseRouteRef(parsed.path)
+    const resolved = ref ?? resolvePath(schema, parsed.path)
     if (!resolved.ok) {
       warn(`${describeElement(el, TEXT_DIRECTIVE, value)}: ${resolved.message}; skipped`)
       return
@@ -228,13 +247,42 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       warn(`${describeElement(el, directive, value)}: ${parsed.message} (at column ${parsed.offset + 1}); treated as false`)
       return () => false
     }
-    const resolved = resolveField(schema, parsed.condition.path)
+    const resolved = parseRouteRef(parsed.condition.path) ?? resolveField(schema, parsed.condition.path)
     if (!resolved.ok) {
       warn(`${describeElement(el, directive, value)}: ${resolved.message}; treated as false`)
       return () => false
     }
     const { condition } = parsed
-    return () => conditionHolds(schema, data, condition)
+    return () => conditionHolds(schema, data, condition, route)
+  }
+
+  // A link's URL comes from a link field, a string field that names its route (SPEC D23).
+  const bindHref = (el: Element, value: string): void => {
+    const where = describeElement(el, HREF_DIRECTIVE, value)
+    if (el.localName !== 'a' && el.localName !== 'area') {
+      warn(`${where}: ${HREF_DIRECTIVE} only works on links (<a> and <area>); skipped`)
+      return
+    }
+    const parsed = parseHrefDirective(value)
+    if (!parsed.ok) {
+      warn(`${where}: ${parsed.message} (at column ${parsed.offset + 1}); skipped`)
+      return
+    }
+    if (parseRouteRef(parsed.path) !== undefined) {
+      warn(`${where}: ${HREF_DIRECTIVE} needs a link field; the URL input isn't a URL; skipped`)
+      return
+    }
+    const resolved = resolveField(schema, parsed.path)
+    if (!resolved.ok) {
+      warn(`${where}: ${resolved.message}; skipped`)
+      return
+    }
+    if (resolved.field.type !== 'string' || resolved.field.route === undefined) {
+      warn(`${where}: '${parsed.path.join('.')}' isn't a link field; give it "route": "<route name>" in the schema; skipped`)
+      return
+    }
+    if (el.hasAttribute('href')) warn(`${where}: the link also has a static href, which the field's URL replaces; keep one`)
+    hrefs.push({ segments: parsed.path, el, lastHref: undefined })
   }
 
   const bindShow = (el: Element): void => {
@@ -289,6 +337,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       const value = el.getAttribute(name) ?? ''
       if (kind.name === TEXT_DIRECTIVE) bindText(el, value)
       else if (kind.name === CLICK_DIRECTIVE) bindClick(el, value)
+      else if (kind.name === HREF_DIRECTIVE) bindHref(el, value)
       else if (kind.name === SHOW_DIRECTIVE) bindShow(el)
       else if (kind.name !== role) {
         warn(`<${el.tagName.toLowerCase()}>: an element can have only one of ${IF_DIRECTIVE}, ${ELSE_IF_DIRECTIVE} and ${ELSE_DIRECTIVE}; ${kind.name} ignored`)
@@ -333,11 +382,24 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       binding.shown = shown
     }
     for (const binding of texts) {
-      const text = toText(valueOrDefault(schema, data, binding.segments))
+      const text = toText(readPath(schema, data, route, binding.segments))
       if (text !== binding.lastText) {
         binding.el.textContent = text
         binding.lastText = text
       }
+    }
+    for (const binding of hrefs) {
+      const value = valueOrDefault(schema, data, binding.segments)
+      let href = typeof value === 'string' && value !== '' ? value : null
+      const scheme = href === null ? undefined : urlScheme(href)
+      if (scheme !== undefined && SCRIPT_SCHEMES.has(scheme)) {
+        warn(`${HREF_DIRECTIVE}="${binding.segments.join('.')}": ${scheme}: URLs aren't allowed in links; the link has no href`)
+        href = null
+      }
+      if (href === binding.lastHref) continue
+      if (href === null) binding.el.removeAttribute('href')
+      else binding.el.setAttribute('href', href)
+      binding.lastHref = href
     }
   }
 
@@ -359,6 +421,9 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     get data() {
       return data
     },
+    get route() {
+      return route
+    },
     schema,
     update(next: D): void {
       if (destroyed) {
@@ -369,12 +434,21 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       data = next
       render()
     },
+    setRoute(next: RouteInput): void {
+      if (destroyed) {
+        warn('setRoute() called after destroy(); ignored')
+        return
+      }
+      route = next
+      render()
+    },
     destroy(): void {
       if (destroyed) return
       destroyed = true
       for (const { el, listener } of clicks) el.removeEventListener('click', listener)
       clicks.length = 0
       texts.length = 0
+      hrefs.length = 0
       shows.length = 0
       for (const chain of topLevelChains) chain.active?.remove()
       topLevelChains.length = 0

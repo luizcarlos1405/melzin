@@ -13,6 +13,11 @@ export function dataBlockType(type: string | null | undefined): DataBlockType | 
 
 export const VIEW_FILE_SUFFIX = '.mel.html'
 
+/** The route table's file, at the project root (SPEC D21). */
+export const ROUTES_FILE = 'routes.json'
+/** The name views read the URL input under: `route.name`, `route.params.handle`, `route.query.tab` (D27). */
+export const ROUTE_INPUT = 'route'
+
 export const DIRECTIVE_PREFIX = 'm-'
 export const TEXT_DIRECTIVE = 'm-text'
 export const SHOW_DIRECTIVE = 'm-show'
@@ -20,6 +25,8 @@ export const IF_DIRECTIVE = 'm-if'
 export const ELSE_IF_DIRECTIVE = 'm-else-if'
 export const ELSE_DIRECTIVE = 'm-else'
 export const CLICK_DIRECTIVE = 'm-on:click'
+/** A link's URL, from a link field (SPEC D23). The only m-bind for now. */
+export const HREF_DIRECTIVE = 'm-bind:href'
 export const SUPPORTED_DIRECTIVES = [
   TEXT_DIRECTIVE,
   SHOW_DIRECTIVE,
@@ -27,6 +34,7 @@ export const SUPPORTED_DIRECTIVES = [
   ELSE_IF_DIRECTIVE,
   ELSE_DIRECTIVE,
   CLICK_DIRECTIVE,
+  HREF_DIRECTIVE,
 ] as const
 export type DirectiveName = (typeof SUPPORTED_DIRECTIVES)[number]
 
@@ -60,6 +68,9 @@ export const FOREIGN_DIRECTIVE_HINTS: Readonly<Record<string, DirectiveName>> = 
   'v-on:click': CLICK_DIRECTIVE,
   '@click': CLICK_DIRECTIVE,
   'x-on:click': CLICK_DIRECTIVE,
+  'v-bind:href': HREF_DIRECTIVE,
+  ':href': HREF_DIRECTIVE,
+  'x-bind:href': HREF_DIRECTIVE,
 }
 
 /** Names inside expressions that deserve a hint instead of a generic error. */
@@ -67,7 +78,7 @@ export const NAME_HINTS: Readonly<Record<string, string>> = {
   $emit: "use emit('name') instead of Vue's $emit",
 }
 
-// `m-text, m-show, m-if, m-else-if, m-else and m-on:click`, for messages.
+// `m-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href`, for messages.
 const DIRECTIVE_LIST = SUPPORTED_DIRECTIVES.join(', ').replace(/, ([^,]+)$/, ' and $1')
 
 export const FOREIGN_SYNTAX_MESSAGE = `Vue/Alpine syntax isn't supported; Melzin has ${DIRECTIVE_LIST}`
@@ -76,7 +87,7 @@ export const UNSUPPORTED_DIRECTIVE_MESSAGE = `not supported yet; Melzin supports
 // What to do instead, per unsupported directive (docs/authoring.md §7 has the same table).
 const UNSUPPORTED_HINTS: readonly [RegExp, string][] = [
   [/^m-for$/, 'lists come later; use a fixed number of fields such as first, second, third, with m-if on the optional ones'],
-  [/^m-(bind|class|style)(:|$)/, 'attributes and classes are static for now; to switch styles, show one of two elements with m-if and m-else'],
+  [/^m-(bind|class|style)(:|$)/, 'other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else'],
   [/^m-model$/, "forms and inputs aren't supported yet"],
   [/^m-html$/, 'only plain text, through m-text'],
   [/^m-on:/, 'only clicks for now: m-on:click'],

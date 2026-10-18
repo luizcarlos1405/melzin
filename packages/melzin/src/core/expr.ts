@@ -9,7 +9,7 @@
 //
 // Growing the language (operators, more calls, formatters) means extending this file.
 
-import { CLICK_DIRECTIVE, EMIT_FUNCTION, NAME_HINTS, TEXT_DIRECTIVE, isIdent } from './constants.ts'
+import { CLICK_DIRECTIVE, EMIT_FUNCTION, HREF_DIRECTIVE, NAME_HINTS, TEXT_DIRECTIVE, isIdent } from './constants.ts'
 
 export type StringLit = { kind: 'string'; value: string; start: number; end: number }
 export type PathExpr = { kind: 'path'; segments: string[]; start: number; end: number }
@@ -244,18 +244,27 @@ export type ConditionDirectiveResult =
   | { ok: true; condition: Condition; pathStart: number }
   | { ok: false; message: string; offset: number }
 
-/** `m-text="user.name"` → `['user', 'name']`. */
-export function parseTextDirective(value: string): TextDirectiveResult {
+function parsePathDirective(directive: string, example: string, value: string): TextDirectiveResult {
   const result = parseExpression(value)
   if (!result.ok) return result
   const { expr } = result
   if (expr.kind === 'not') {
-    return { ok: false, message: `${TEXT_DIRECTIVE} needs a path such as user.name; '!' only works in conditions (m-if, m-show)`, offset: expr.start }
+    return { ok: false, message: `${directive} needs a path such as ${example}; '!' only works in conditions (m-if, m-show)`, offset: expr.start }
   }
   if (expr.kind !== 'path') {
-    return { ok: false, message: `${TEXT_DIRECTIVE} needs a path such as user.name, not a call`, offset: expr.start }
+    return { ok: false, message: `${directive} needs a path such as ${example}, not a call`, offset: expr.start }
   }
   return { ok: true, path: expr.segments }
+}
+
+/** `m-text="user.name"` → `['user', 'name']`. */
+export function parseTextDirective(value: string): TextDirectiveResult {
+  return parsePathDirective(TEXT_DIRECTIVE, 'user.name', value)
+}
+
+/** `m-bind:href="links.profile"` → `['links', 'profile']`: the path of a link field (SPEC D23). */
+export function parseHrefDirective(value: string): TextDirectiveResult {
+  return parsePathDirective(HREF_DIRECTIVE, 'author.profileUrl', value)
 }
 
 // Characters that start the operators a condition might reach for: comparisons, && and ||, arithmetic

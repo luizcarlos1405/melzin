@@ -40,22 +40,25 @@ describe('constants', () => {
   })
 
   test('other Vue/Alpine syntax', () => {
-    for (const name of ['v-for', 'x-data', '@submit', ':href', 'v-bind:class']) {
+    for (const name of ['v-for', 'x-data', '@submit', ':title', 'v-bind:class']) {
       expect(classifyAttribute(name)).toEqual({
         kind: 'foreign',
-        message: `'${name}': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else and m-on:click`,
+        message: `'${name}': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href`,
       })
+    }
+    for (const name of [':href', 'v-bind:href', 'x-bind:href']) {
+      expect(classifyAttribute(name)).toEqual({ kind: 'foreign', suggestion: 'm-bind:href', message: `'${name}' is Vue/Alpine syntax; use m-bind:href` })
     }
   })
 
   test('unsupported m-* directives', () => {
     const hints: Record<string, string> = {
-      'm-bind:href': 'attributes and classes are static for now; to switch styles, show one of two elements with m-if and m-else',
+      'm-bind:title': 'other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else',
       'm-on:submit': 'only clicks for now: m-on:click',
       'm-for': 'lists come later; use a fixed number of fields such as first, second, third, with m-if on the optional ones',
       'm-model': "forms and inputs aren't supported yet",
     }
-    const supported = 'm-text, m-show, m-if, m-else-if, m-else and m-on:click'
+    const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href'
     for (const [name, hint] of Object.entries(hints)) {
       expect(classifyAttribute(name)).toEqual({
         kind: 'unsupported',
@@ -71,6 +74,7 @@ describe('constants', () => {
   })
 
   test('plain attributes', () => {
+    expect(classifyAttribute('m-bind:href')).toEqual({ kind: 'directive', name: 'm-bind:href' })
     for (const name of ['class', 'id', 'data-x', 'aria-label', 'href', 'mtext']) {
       expect(classifyAttribute(name)).toEqual({ kind: 'plain' })
     }
@@ -81,7 +85,8 @@ describe('constants', () => {
       'parseExpression', 'parseTextDirective', 'parseClickDirective', 'parseConditionDirective', 'validateSchema',
       'validateData', 'resolvePath', 'resolveField', 'leafPaths', 'defaultAt', 'valueAt', 'valueOrDefault',
       'conditionHolds', 'parseSnapshots', 'classifyAttribute', 'isInterElementWhitespace', 'SCHEMA_BLOCK_TYPE',
-      'SNAPSHOTS_BLOCK_TYPE', 'IDENT_RE',
+      'SNAPSHOTS_BLOCK_TYPE', 'IDENT_RE', 'parseHrefDirective', 'readPath', 'validateRouteTable', 'matchRoute',
+      'buildUrl', 'parseRouteRef', 'routeValue', 'validateRouteInput', 'ROUTES_FILE', 'ROUTE_INPUT',
     ]) {
       expect(core).toHaveProperty(name)
     }

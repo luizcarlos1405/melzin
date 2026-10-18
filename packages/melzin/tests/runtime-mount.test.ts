@@ -271,12 +271,12 @@ describe('directive warnings', () => {
   })
 
   test('foreign and unsupported directives are warned and ignored', () => {
-    mountBody(`<p v-text="count"></p><button @click="go"></button><a m-bind:href="url"></a><p m-html="count"></p><p :title="x"></p>`)
-    const supported = 'm-text, m-show, m-if, m-else-if, m-else and m-on:click'
+    mountBody(`<p v-text="count"></p><button @click="go"></button><a m-bind:title="url"></a><p m-html="count"></p><p :title="x"></p>`)
+    const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href'
     expect(warnings).toEqual([
       "<p>: 'v-text' is Vue/Alpine syntax; use m-text; ignored",
       "<button>: '@click' is Vue/Alpine syntax; use m-on:click; ignored",
-      `<a>: 'm-bind:href' is not supported yet; Melzin supports only ${supported}; attributes and classes are static for now; to switch styles, show one of two elements with m-if and m-else (docs/authoring.md §7); ignored`,
+      `<a>: 'm-bind:title' is not supported yet; Melzin supports only ${supported}; other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else (docs/authoring.md §7); ignored`,
       `<p>: 'm-html' is not supported yet; Melzin supports only ${supported}; only plain text, through m-text (docs/authoring.md §7); ignored`,
       `<p>: ':title': Vue/Alpine syntax isn't supported; Melzin has ${supported}; ignored`,
     ])

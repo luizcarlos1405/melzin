@@ -107,14 +107,14 @@ const errors: Case[] = [
   {
     file: 'foreign-other.mel.html',
     severity: 'error',
-    message: "':class': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else and m-on:click",
+    message: "':class': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href",
     at: pos('foreign-other.mel.html', ':class'),
   },
   {
     file: 'unsupported-directive.mel.html',
     severity: 'error',
     message:
-      "'m-for' is not supported yet; Melzin supports only m-text, m-show, m-if, m-else-if, m-else and m-on:click; lists come later; use a fixed number of fields such as first, second, third, with m-if on the optional ones (docs/authoring.md §7)",
+      "'m-for' is not supported yet; Melzin supports only m-text, m-show, m-if, m-else-if, m-else, m-on:click and m-bind:href; lists come later; use a fixed number of fields such as first, second, third, with m-if on the optional ones (docs/authoring.md §7)",
     at: pos('unsupported-directive.mel.html', 'm-for'),
   },
   {

@@ -1,9 +1,10 @@
 // Schema v0: a strict subset of JSON Schema for `data`, plus declared events (POC.md §3).
 
-import { isIdent } from './constants.ts'
+import { ROUTE_INPUT, isIdent } from './constants.ts'
 
 export type LeafType = 'string' | 'number' | 'boolean'
-export type LeafSchema = { type: LeafType; default?: string | number | boolean; description?: string }
+/** `route` makes a string field a link to that route (SPEC D23): the source fills it with the route's URL. */
+export type LeafSchema = { type: LeafType; default?: string | number | boolean; description?: string; route?: string }
 export type ObjectSchema = {
   type: 'object'
   properties: Record<string, FieldSchema>
@@ -25,7 +26,7 @@ export type ResolvedPath =
 export type ResolvedField = { ok: true; field: FieldSchema; required: boolean } | { ok: false; message: string }
 
 const LEAF_TYPES: readonly string[] = ['string', 'number', 'boolean']
-const LEAF_KEYS = new Set(['type', 'default', 'description'])
+const LEAF_KEYS = new Set(['type', 'default', 'description', 'route'])
 const OBJECT_KEYS = new Set(['type', 'properties', 'required', 'description'])
 const TOP_LEVEL_KEYS = new Set(['data', 'events', 'description'])
 const EVENT_KEYS = new Set(['description'])
@@ -158,6 +159,19 @@ function validateField(value: unknown, path: string, issues: Issue[]): FieldSche
     }
   }
   if (typeof value.description === 'string') leaf.description = value.description
+  if ('route' in value) {
+    const route = value.route
+    const routePath = joinPath(path, 'route')
+    if (type !== 'string') {
+      issues.push({ message: "'route' is only allowed on string fields: a link field holds a URL", path: routePath })
+    } else if (typeof route !== 'string' || !isIdent(route)) {
+      issues.push({ message: `'route' must be the name of a route in routes.json, such as "profile"`, path: routePath })
+    } else if ('default' in value) {
+      issues.push({ message: "a link field can't have a default: views never build URLs, the source sends them (leave the field out to show no link)", path: joinPath(path, 'default') })
+    } else {
+      leaf.route = route
+    }
+  }
   return issues.length === before ? leaf : null
 }
 
@@ -254,6 +268,12 @@ export function validateSchema(value: unknown): { schema: MelzinSchema | null; i
   if ('data' in value) {
     const data = value.data
     if (isPlainObject(data) && data.type === 'object') {
+      if (isPlainObject(data.properties) && Object.hasOwn(data.properties, ROUTE_INPUT)) {
+        issues.push({
+          message: `'${ROUTE_INPUT}' is reserved for the URL input (${ROUTE_INPUT}.params, ${ROUTE_INPUT}.query); rename the field`,
+          path: joinPath(joinPath('data', 'properties'), ROUTE_INPUT),
+        })
+      }
       const object = validateObject(data, 'data', issues)
       if (object !== null) schema.data = object
     } else if (isPlainObject(data) && (data.type === 'array' || 'items' in data)) {

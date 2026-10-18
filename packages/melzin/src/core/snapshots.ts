@@ -1,8 +1,10 @@
 // Snapshots v0: named, complete states inside the view file (P4).
 
+import { type RouteInput, validateRouteInput } from './routes.ts'
 import { type Issue, type MelzinSchema, isPlainObject, joinPath, validateData } from './schema.ts'
 
-export type Snapshot = { name: string; data: Record<string, unknown> }
+/** `route` is the URL input the snapshot shows the view with (SPEC D27): its params and query. */
+export type Snapshot = { name: string; data: Record<string, unknown>; route?: RouteInput }
 
 export type ParseSnapshotsOptions = {
   /** Check each snapshot's data against the schema (default true). Turn off when the schema is invalid. */
@@ -39,11 +41,17 @@ export function parseSnapshots(
       continue
     }
     for (const key of Object.keys(entry)) {
-      if (key === 'data') continue
+      if (key === 'data' || key === 'route') continue
       issues.push({
-        message: key === 'ui' ? "internal state (ui) isn't supported yet; put the whole state in 'data'" : `unknown key '${key}'; a snapshot has only 'data'`,
+        message: key === 'ui' ? "internal state (ui) isn't supported yet; put the whole state in 'data'" : `unknown key '${key}'; a snapshot has 'data' and, for the URL, 'route'`,
         path: joinPath(path, key),
       })
+    }
+    let route: RouteInput | undefined
+    if ('route' in entry) {
+      const result = validateRouteInput(entry.route, joinPath(path, 'route'))
+      issues.push(...result.issues)
+      if (result.route !== null) route = result.route
     }
     const data = entry.data === undefined ? {} : entry.data
     if (!isPlainObject(data)) {
@@ -56,7 +64,7 @@ export function parseSnapshots(
         issues.push({ message: issue.message, path: issuePath })
       }
     }
-    snapshots.push({ name, data })
+    snapshots.push(route === undefined ? { name, data } : { name, data, route })
   }
   return { snapshots, issues }
 }

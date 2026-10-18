@@ -48,9 +48,30 @@ describe('parseSnapshots', () => {
     const result = parseSnapshots({ s: { data: { count: 1 }, ui: {}, notes: 'x' } }, schema)
     expect(result.issues).toEqual([
       { message: "internal state (ui) isn't supported yet; put the whole state in 'data'", path: 'snapshots["s"].ui' },
-      { message: "unknown key 'notes'; a snapshot has only 'data'", path: 'snapshots["s"].notes' },
+      { message: "unknown key 'notes'; a snapshot has 'data' and, for the URL, 'route'", path: 'snapshots["s"].notes' },
     ])
     expect(result.snapshots).toHaveLength(1)
+  })
+
+  test('a route sets the URL input', () => {
+    const result = parseSnapshots({ s: { data: { count: 1 }, route: { params: { handle: 'ana' }, query: { tab: 'posts' } } } }, schema)
+    expect(result).toEqual({
+      snapshots: [{ name: 's', data: { count: 1 }, route: { params: { handle: 'ana' }, query: { tab: 'posts' } } }],
+      issues: [],
+    })
+  })
+
+  test('route values are strings, and the name comes from the shell', () => {
+    const result = parseSnapshots({ s: { data: { count: 1 }, route: { name: 'x', params: { id: 7 }, hash: '' } } }, schema)
+    expect(result.issues).toEqual([
+      { message: "a snapshot doesn't set the route's name; the shell takes it from the route it previews", path: 'snapshots["s"].route.name' },
+      { message: 'expected a string, got number (URL values are always strings)', path: 'snapshots["s"].route.params.id' },
+      { message: "unknown key 'hash'; a snapshot's route has 'params' and 'query'", path: 'snapshots["s"].route.hash' },
+    ])
+    expect(result.snapshots).toEqual([{ name: 's', data: { count: 1 } }])
+    expect(parseSnapshots({ s: { route: [] } }, null).issues).toEqual([
+      { message: '\'route\' must be an object such as { "params": { "handle": "ana" } }, got array', path: 'snapshots["s"].route' },
+    ])
   })
 
   test('the block must be an object', () => {
