@@ -506,7 +506,7 @@ const warnings: Case[] = [
   {
     file: 'for-no-rows.mel.html',
     severity: 'warning',
-    message: "no snapshot shows a row of 'members' (it's empty in every snapshot)",
+    message: "no snapshot shows a row of 'members' (it's empty in every snapshot); add a snapshot where it has items",
     at: pos('for-no-rows.mel.html', 'm-for'),
   },
   {
@@ -518,7 +518,7 @@ const warnings: Case[] = [
   {
     file: 'list-never-several.mel.html',
     severity: 'warning',
-    message: "no snapshot shows 'members' with more than one item",
+    message: "no snapshot shows 'members' with more than one item; add one, or set \"maxItems\": 1 if it never has more",
     at: pos('list-never-several.mel.html', 'm-for'),
   },
   {

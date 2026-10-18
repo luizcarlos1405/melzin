@@ -212,7 +212,7 @@ describe('nested lists', () => {
     const source = page(BODY, POLLS, snapshots)
     expect(checkSource(source)).toEqual([
       { ...at(source, 'm-for="option'), severity: 'warning', message: `no snapshot shows 'poll.options' empty; add one to design the empty state, or set "minItems": 1 if it's never empty` },
-      { ...at(source, 'm-for="option'), severity: 'warning', message: "no snapshot shows 'poll.options' with more than one item" },
+      { ...at(source, 'm-for="option'), severity: 'warning', message: "no snapshot shows 'poll.options' with more than one item; add one, or set \"maxItems\": 1 if it never has more" },
     ])
   })
 })
@@ -308,11 +308,11 @@ describe('snapshot coverage in rows', () => {
     const optional = { data: { ...SCHEMA.data, required: ['title'] } }
     const body = LIST.replace('<span m-text="member.name"></span>', '<span m-if="member.verified" m-text="member.name"></span>')
     expect(check(body, optional, { nobody: { data: { title: 'T' } } })).toEqual([
-      "warning: no snapshot shows a row of 'members' (it's missing in every snapshot)",
+      "warning: no snapshot shows a row of 'members' (it's missing in every snapshot); add a snapshot where it has items",
     ])
     expect(check(LIST, SCHEMA, { nobody: SNAPSHOTS.nobody, alone: { data: { title: 'T', members: [{ ...BO, verified: true }] } } })).toEqual([
-      "warning: no snapshot shows 'members' with more than one item",
-      "warning: no snapshot shows a row of 'member.tags' (it's empty in every snapshot that shows it)",
+      "warning: no snapshot shows 'members' with more than one item; add one, or set \"maxItems\": 1 if it never has more",
+      "warning: no snapshot shows a row of 'member.tags' (it's empty in every snapshot that shows it); add a snapshot where it has items",
     ])
   })
 
@@ -320,6 +320,45 @@ describe('snapshot coverage in rows', () => {
     const limited = (list: object): unknown => ({ data: { ...SCHEMA.data, properties: { ...SCHEMA.data.properties, members: { ...SCHEMA.data.properties.members, ...list } } } })
     expect(check(LIST, limited({ minItems: 1 }), { two: SNAPSHOTS.two })).toEqual([])
     expect(check(LIST, limited({ maxItems: 1 }), { nobody: SNAPSHOTS.nobody, ana: { data: { title: 'T', members: [ANA] } }, bo: { data: { title: 'T', members: [BO] } } })).toEqual([])
+    expect(check(LIST, limited({ maxItems: 0 }), { nobody: SNAPSHOTS.nobody })).toEqual([
+      `warning: no snapshot shows a row of 'members' (it's empty in every snapshot); "maxItems": 0 keeps it empty: raise it, or remove the m-for`,
+    ])
+  })
+
+  test('several items count only where the list shows; the empty state counts everywhere', () => {
+    const schema = { data: { ...SCHEMA.data, properties: { ...SCHEMA.data.properties, open: { type: 'boolean' } } } }
+    const body = LIST.replace('<ul>', '<ul m-if="open">')
+    const one = { data: { title: 'T', open: true, members: [ANA] } }
+    const closed = { data: { title: 'T', members: [ANA, BO] } }
+    expect(check(body, schema, { empty: { data: { title: 'T', open: true, members: [] } }, one, closed })).toEqual([
+      "warning: no snapshot shows 'members' with more than one item; it only has several where an element around it is hidden",
+    ])
+    // The empty list may be hidden on purpose (m-if on its length, with an m-else).
+    expect(check(body, schema, { empty: { data: { title: 'T', members: [] } }, one, open: { data: { ...closed.data, open: true } } })).toEqual([])
+  })
+
+  test("a constant condition is warned about once, and doesn't hide what's inside it from the other checks", () => {
+    const alone = { alone: { data: { title: 'T', members: [ANA] } } }
+    expect(check(LIST.replace('<ul>', '<ul m-if="members">'), SCHEMA, alone)).toEqual([
+      "warning: m-if: 'members' is a required list, so the condition always holds, even when it's empty; test members.length",
+      `warning: no snapshot shows 'members' empty; add one to design the empty state, or set "minItems": 1 if it's never empty`,
+      'warning: no snapshot shows \'members\' with more than one item; add one, or set "maxItems": 1 if it never has more',
+      `warning: no snapshot shows 'member.tags' empty; add one to design the empty state, or set "minItems": 1 if it's never empty`,
+    ])
+    const user = { data: { ...SCHEMA.data, properties: { ...SCHEMA.data.properties, user: { type: 'object', properties: { name: { type: 'string' } } } }, required: ['title', 'members', 'user'] } }
+    const withUser = { nobody: { data: { ...SNAPSHOTS.nobody.data, user: {} } }, two: { data: { ...SNAPSHOTS.two.data, user: { name: 'Ana' } } } }
+    expect(check(`${LIST}<div m-if="user"><p m-show="user.name" m-text="user.name"></p></div>`, user, withUser)).toEqual([
+      "warning: m-if: 'user' is a required object, so this condition is always true",
+    ])
+    const named = { nobody: { data: { ...SNAPSHOTS.nobody.data, user: { name: 'Bo' } } }, two: withUser.two }
+    expect(check(`${LIST}<div m-if="user"><p m-show="!user.name" m-text="user.name"></p></div>`, user, named)).toEqual([
+      "warning: m-if: 'user' is a required object, so this condition is always true",
+      'warning: no snapshot shows this element; add one where m-show="!user.name" holds',
+    ])
+    // One that never holds hides its element: only its own warning, not "no snapshot shows this element".
+    expect(check(`${LIST}<div m-if="!user"><p m-show="title">None</p></div><p m-else m-text="user.name"></p>`, user, withUser)).toEqual([
+      "warning: m-if: 'user' is a required object, so this condition is always false",
+    ])
   })
 
   test('a static id inside a row', () => {

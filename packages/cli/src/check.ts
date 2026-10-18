@@ -708,8 +708,10 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     kind: 'condition'
     /** The element's first condition directive, where the warning points. */
     offset: number
-    /** Each condition with the result it needs; undefined when one of them is broken or constant. */
+    /** Each condition with the result it needs; undefined when one of them is broken. */
     tests: { condition: Condition; holds: boolean }[] | undefined
+    /** A constant condition never gives the result it needs, which its own warning says already. */
+    blocked: boolean
     /** What has to be true, for the message: `m-if="user.bio" holds`. */
     clauses: string[]
     parent: Gate | undefined
@@ -746,6 +748,9 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     if (!lenient.unknown || first === ROUTE_INPUT || context.scope?.has(first) === true) return false
     return !(checked?.data !== undefined && Object.hasOwn(checked.data.properties, first))
   }
+  // Conditions that always hold, or never do (on a required list or object), each warned about at its
+  // directive. They count in the coverage like any other: true, or false with !.
+  const constants = new WeakSet<Condition>()
   const useField = (segments: readonly string[], scope: Scope | undefined): void => {
     used.add(formatFieldPath(fieldPathOf(segments, scope)))
   }
@@ -913,7 +918,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     }
   }
 
-  // m-show, m-if and m-else-if: the condition, or undefined when it's broken or constant (already reported).
+  // m-show, m-if and m-else-if: the condition, or undefined when it's broken (already reported).
   const checkConditionDirective = (element: Element, directive: string, value: string, context: Context): Condition | undefined => {
     const { start, exact } = valueStart(element, directive, value)
     const at = (offset: number): number => (exact ? start + offset : start)
@@ -942,7 +947,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       const test = `${condition.negated ? '!' : ''}${name}.length`
       if (resolved.required) {
         warning(at(pathStart), `${directive}: '${name}' is a required list, so the condition ${condition.negated ? 'never holds' : 'always holds'}, even when it's empty; test ${test}`)
-        return undefined // the snapshot coverage check would only repeat this
+        constants.add(condition)
+        return condition
       }
       const when = condition.negated ? "doesn't hold when it's empty, only when it's missing" : "holds even when it's empty"
       warning(at(pathStart), `${directive}: '${name}' is a list, so the condition ${when}; test ${test}`)
@@ -950,7 +956,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       useField(condition.path, context.scope)
     } else if (resolved.required) {
       warning(at(pathStart), `${directive}: '${name}' is a required object, so this condition is always ${condition.negated ? 'false' : 'true'}`)
-      return undefined // the snapshot coverage check would only repeat this
+      constants.add(condition)
     }
     return condition
   }
@@ -989,7 +995,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     return { gate: loop, scope: resolved.scope, inRow: true, lenient: context.lenient }
   }
 
-  // The m-if chain open among a run of siblings: its conditions so far (undefined: broken or constant).
+  // The m-if chain open among a run of siblings: its conditions so far (undefined: broken).
   type Chain = { conditions: (Condition | undefined)[] }
 
   const checkMustache = (node: TextNode): void => {
@@ -1102,6 +1108,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         kind: 'condition',
         offset: Math.min(role?.at ?? Infinity, show?.at ?? Infinity),
         tests: complete ? (tests as { condition: Condition; holds: boolean }[]) : undefined,
+        // A constant holds exactly when it isn't negated.
+        blocked: tests.some(({ condition, holds }) => condition !== undefined && constants.has(condition) && condition.negated === holds),
         clauses,
         parent: row.gate,
       }
@@ -1191,7 +1199,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       const { data, route } = snapshots[i]!
       return conditional.tests!.every(({ condition, holds }) => conditionHolds(checked, data, condition, route, scope) === holds)
     }
-    // Where a gate's element shows. Undefined when a condition on the way is broken or constant.
+    // Where a gate's element shows. Undefined when a condition on the way is broken.
     const shownMemo = new Map<Gate, Rows | undefined>()
     const shown = (gate: Gate | undefined): Rows | undefined => {
       if (gate === undefined) return top
@@ -1224,6 +1232,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       const parent = shown(gate.parent)!
       if (!any(parent)) continue
       if (gate.kind === 'condition') {
+        if (gate.blocked) continue // its constant condition's warning says why
         const own = reach(gate.parent).some((scopes, i) => scopes.some((scope) => holds(gate, i, scope)))
         warning(
           gate.offset,
@@ -1240,7 +1249,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       }
       const values = parent.flatMap((scopes, i) => scopes.map((scope) => valueAt(snapshots[i]!.data, gate.segments, scope)))
       const state = values.every(Array.isArray) ? 'empty' : values.some(Array.isArray) ? 'empty or missing' : 'missing'
-      warning(gate.offset, `no snapshot shows a row of '${name}' (it's ${state} in every snapshot${gate.parent === undefined ? '' : ' that shows it'})`)
+      const fix = gate.list.maxItems === 0 ? `; "maxItems": 0 keeps it empty: raise it, or remove the ${FOR_DIRECTIVE}` : '; add a snapshot where it has items'
+      warning(gate.offset, `no snapshot shows a row of '${name}' (it's ${state} in every snapshot${gate.parent === undefined ? '' : ' that shows it'})${fix}`)
     }
 
     // The states every list has (SPEC §9.1): empty, and several items. Once per list field, across all
@@ -1262,8 +1272,17 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       if ((list.minItems ?? 0) < 1 && !instances.some((value) => !Array.isArray(value) || value.length === 0)) {
         warning(offset, `no snapshot shows '${name}' empty; add one to design the empty state, or set "minItems": 1 if it's never empty`)
       }
-      if ((list.maxItems ?? Infinity) > 1 && !instances.some((value) => Array.isArray(value) && value.length > 1)) {
-        warning(offset, `no snapshot shows '${name}' with more than one item`)
+      // Several items count only where the list shows: the empty state may be hidden on purpose (an
+      // m-if on its length with an m-else), but rows nobody sees can't be reviewed.
+      const several = (value: unknown): boolean => Array.isArray(value) && value.length > 1
+      const shownSeveral = over.some((loop) =>
+        (shown(loop.parent) ?? []).some((scopes, i) => scopes.some((scope) => several(valueAt(snapshots[i]!.data, loop.segments, scope)))),
+      )
+      if ((list.maxItems ?? Infinity) > 1 && !shownSeveral) {
+        const fix = instances.some(several)
+          ? "; it only has several where an element around it is hidden"
+          : `; add one, or set "maxItems": 1 if it never has more`
+        warning(offset, `no snapshot shows '${name}' with more than one item${fix}`)
       }
     }
   }
