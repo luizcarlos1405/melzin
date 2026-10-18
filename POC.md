@@ -1038,3 +1038,58 @@ Made for this step; the binding-language battle (SPEC §11) can still change the
   sends `{}` with a warning, so a handler that destructures doesn't throw.
 - **Lists replace whole in snapshots** (D36). The members page's restated list is the cost, and it's
   small.
+
+### After the review
+
+A review of the build went through the runtime, the checker, the core, security, the docs and the
+examples, and ran an authoring trial: an agent given only the guide wrote views with lists and
+payloads. It confirmed 43 findings, 11 medium and 32 low, a few of them found twice. Most were
+messages that didn't name the fix the guide promised; a few were bugs. Each fix came with tests, and
+the reviewers' reproductions were run again. What changed:
+
+- **Script URLs in link fields** became data issues, from `validateData`, at the item's path
+  (`members[1].url: javascript: URLs aren't allowed in links; the link has no href`). The runtime's
+  warning used to repeat on every render, once per row and again on `setRoute`, and it stayed in the
+  shell after the fix. Now it's a data warning, once per `mount` and `update`, and `melzin check`
+  reports it in snapshots.
+- **Whitespace around a list** used to go on both sides of every `m-for` element, which glued
+  `<b>Tags:</b> <span m-for>` together. It now goes only when the list is its container's only
+  content (Runtime, above).
+- **A required payload field that's missing at the click** (no `route` passed to `mount`, or data that
+  breaks the schema) is still left out, but it now warns once per emit, with the fix.
+- **Markup names can't break the runtime.** A document's named elements (`<img name="createComment">`)
+  and a form's named controls (`<input name="insertBefore">`) shadowed DOM methods that `mount` and
+  `update` called. The runtime now calls them through the prototypes (`runtime/dom.ts`), and chain
+  anchors are made in the template, so rows get them by cloning.
+- **Messages name the fix with the names in scope.** Payload fixes use the event's declared fields
+  and the row's alias, in the checker and the runtime alike (core's `payloadFixMessage`):
+  `emit('pick', member.handle)` gets `emit('pick', { handle: member.handle })`, where it used to
+  suggest `{ memberHandle: member.handle }`, and other forms a hard-coded `option.id`. A count compared
+  with 0 or 1 points at `m-if="members.length"` or `m-if="!members.length"`, `members.lenght` gets a
+  did-you-mean, and a bare item field in a row points at `member.name`. `v-for`, `:class` and `:title`
+  get the `m-*` form and its workaround, `m-bind:href` built from parts says views never build URLs,
+  an `m-else` after a list says to wrap the list, and a snapshot that patches one item of an inherited
+  list is told that lists replace whole. Schema hints inside list items and payloads offer only the
+  types allowed there.
+- **Checker.** "More than one item" counts only snapshots where the list shows, and the coverage
+  checks go on inside a constant condition (an `m-if` on a required list or object). `v-for` rows, any
+  `<template>`, an emit of an undeclared event and `m-if` on an `m-for` element no longer bring false
+  "never used" or "nothing emits it" warnings. A `</script>` inside a JSON string is named as what
+  ended the block, and control and bidi characters in diagnostics print as `\uXXXX`, so a view can't
+  rewrite what the terminal shows.
+- **Types.** Lists are readonly arrays (Checker and types, above), so `as const` data fits `mount`.
+- **Shell.** The event log cuts payloads between graphemes, and the main page is
+  `data-melzin-ready="error"` when its URL asks for something it can't show or a frame fails, as
+  `/frame` already was.
+- **Smaller fixes.** A class prototype's `constructor` no longer counts as a field or a handler (§4), a
+  `__proto__` key in a payload field is an unknown keyword, and a stray character in `m-for` (a
+  no-break space, `é`) is named where it is.
+- **The guide** gives the new whitespace rule, says when `route` values are in a payload, shows
+  `onWarning` and `<\/script>`, cites Q15 for `<template>`, and a test keeps its Types example in step
+  with `melzin types`.
+
+Not fixed, for later: a view's markup can still reach the host page through ids and names (`form`,
+`for`, `popovertarget`, `commandfor`, a `target` that names a frame, and a `name` or `id` that shadows
+a property of the host's document), and Tailwind's arbitrary variants
+(`[:root:has(&)_#banner]:hidden`) can restyle the host page, which waits on style isolation
+(SPEC #39).
