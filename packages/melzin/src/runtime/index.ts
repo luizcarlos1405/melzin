@@ -19,5 +19,5 @@ export {
   hrefs,
   startApp,
 } from './app.ts'
-export { DATA_WARNING_PREFIX, type Handlers, type MelzinView, type MountOptions, mount, mountSource } from './mount.ts'
+export { DATA_WARNING_PREFIX, type Handlers, type MelzinView, type MountOptions, type Payload, mount, mountSource } from './mount.ts'
 export { type ParsedView, parseViewHtml } from './viewdoc.ts'

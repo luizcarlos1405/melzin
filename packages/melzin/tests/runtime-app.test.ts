@@ -2,7 +2,7 @@
 // policies (D24) and the URL input (D27).
 
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
-import { type MelzinApp, type RouteState, type RouteTypes, hrefs, startApp } from '../src/runtime/index.ts'
+import { type MelzinApp, type RouteState, type RouteTypes, type Source, hrefs, startApp } from '../src/runtime/index.ts'
 import { useDom } from './helpers/dom.ts'
 import { view } from './runtime-fixtures.ts'
 
@@ -282,6 +282,81 @@ describe('handlers', () => {
     expect(saved?.current).toBe(false)
     saved?.update({ name: 'X', follows: true, homeUrl: '/' })
     expect(text('#settings-title')).toBe('Settings')
+  })
+
+  test("get the event's payload first, built from the row that was clicked", async () => {
+    type PollRoutes = {
+      poll: {
+        params: Record<string, never>
+        query: Record<string, never>
+        data: { options: { id: string; votes: number }[] }
+        handlers: { vote: (payload: { optionId: string }) => void }
+      }
+    }
+    const poll = view({
+      schema: {
+        data: {
+          type: 'object',
+          properties: {
+            options: {
+              type: 'array',
+              key: 'id',
+              items: { type: 'object', properties: { id: { type: 'string' }, votes: { type: 'number' } }, required: ['id', 'votes'] },
+            },
+          },
+          required: ['options'],
+        },
+        events: { vote: { payload: { type: 'object', properties: { optionId: { type: 'string' } }, required: ['optionId'] } } },
+      },
+      body: `<button m-for="option in options" m-on:click="emit('vote', { optionId: option.id })" m-text="option.votes"></button>`,
+    })
+    const votes = new Map([['pizza', 0], ['tacos', 0]])
+    const data = (): PollRoutes['poll']['data'] => ({ options: [...votes].map(([id, count]) => ({ id, votes: count })) })
+    const received: unknown[] = []
+    const source: Source<PollRoutes> = {
+      poll: {
+        load: data,
+        on: {
+          vote: ({ optionId }, page) => {
+            received.push(optionId)
+            votes.set(optionId, (votes.get(optionId) ?? 0) + 1)
+            page.update(data())
+          },
+        },
+      },
+    }
+    history.replaceState(null, '', '/')
+    app = (await startApp<PollRoutes>(root, {
+      routes: { routes: { poll: { path: '/', view: 'poll' } } },
+      source,
+      loadView: async () => poll,
+      onWarning: (message) => warnings.push(message),
+    })) as never
+    const tacos = root.querySelectorAll('button')[1]!
+    tacos.click()
+    tacos.click()
+    expect(received).toEqual(['tacos', 'tacos'])
+    expect([...root.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['0', '2'])
+    expect(root.querySelectorAll('button')[1]).toBe(tacos)
+    expect(warnings).toEqual([])
+
+    // Handlers are typed by the generated Handlers: the payload's fields, or undefined without one.
+    const typed: Source<PollRoutes> = {
+      poll: {
+        load: data,
+        // @ts-expect-error: optionId is a string, not a number
+        on: { vote: (payload: { optionId: number }) => void payload },
+      },
+    }
+    const untyped: Source<Routes>['profile']['on'] = {
+      follow: (payload) => {
+        const nothing: undefined = payload
+        void nothing
+      },
+      signIn: () => {},
+    }
+    void typed
+    void untyped
   })
 
   test('a failing handler warns', async () => {

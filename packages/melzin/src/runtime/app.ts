@@ -15,7 +15,7 @@ import {
   matchRoute,
   validateRouteTable,
 } from '../core/index.ts'
-import { type MelzinView, mountSource } from './mount.ts'
+import { type MelzinView, type Payload, mountSource } from './mount.ts'
 
 /**
  * A URL for route `R`, made by an href helper (SPEC D23). Link fields have this type in the generated
@@ -59,7 +59,15 @@ export type LoadContext = {
   signal: AbortSignal
 }
 
-type EventHandlers<H, D, Rt> = { [E in keyof H]-?: (payload: undefined, page: Page<D, Rt>) => void | Promise<void> }
+/**
+ * The payload a generated handler type takes (SPEC D35): `{ optionId: string }` for
+ * `(payload: { optionId: string }) => void`; undefined for an event without one, such as
+ * `(payload?: undefined) => void` or `() => void`.
+ */
+type PayloadOf<F> = F extends (...args: infer A) => unknown ? (A extends [] ? undefined : A[0]) : undefined
+type EventHandlers<H, D, Rt> = {
+  [E in keyof H]-?: (payload: PayloadOf<Exclude<H[E], undefined>>, page: Page<D, Rt>) => void | Promise<void>
+}
 
 /** One route's part of the source: its loader and the handlers for its view's events (D20). */
 export type RouteSource<R extends RouteTypes, K extends keyof R & string> = {
@@ -110,7 +118,7 @@ type HrefArgs<T extends { params: object; query: object }> = {} extends T['param
 /** `href('profile', { handle: 'ana' }, { as: 'bruno' })` → `/u/ana?as=bruno`. */
 export type HrefBuilder<R extends RouteTypes> = <K extends keyof R & string>(name: K, ...args: HrefArgs<R[K]>) => Href<K>
 
-type AnyHandler = (payload: undefined, page: Page<unknown>) => unknown
+type AnyHandler = (payload: Payload | undefined, page: Page<unknown>) => unknown
 type AnyRouteSource = { load?: (route: RouteState, context: LoadContext) => unknown; on?: Record<string, AnyHandler> }
 type Kind = 'initial' | 'push' | 'replace' | 'traverse'
 
@@ -277,7 +285,7 @@ export async function startApp<R extends RouteTypes = RouteTypes>(root: Element,
       },
     }
     const handlers = sourceFor(route.name)?.on ?? {}
-    const on: Record<string, (payload: undefined) => void> = {}
+    const on: Record<string, (payload: Payload | undefined) => void> = {}
     for (const name of Object.keys(handlers)) {
       const handler = handlers[name]
       if (typeof handler !== 'function') continue
