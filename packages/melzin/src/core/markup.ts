@@ -29,7 +29,7 @@ const HTML_ONLY: Readonly<Record<string, MarkupProblem>> = {
   object: { message: `<object> isn't allowed; ${EMBEDDING}`, drop: true },
   embed: { message: `<embed> isn't allowed; ${EMBEDDING}`, drop: true },
   template: {
-    message: "<template> isn't supported; its content would never be bound. Write the markup directly",
+    message: `<template> isn't supported; to group elements, wrap them in one element, such as <div class="contents">`,
     drop: true,
   },
   form: {

@@ -22,7 +22,7 @@ describe('elementProblem', () => {
       })
     }
     expect(elementProblem('template', HTML_NAMESPACE, none)?.message).toBe(
-      "<template> isn't supported; its content would never be bound. Write the markup directly",
+      '<template> isn\'t supported; to group elements, wrap them in one element, such as <div class="contents">',
     )
   })
 

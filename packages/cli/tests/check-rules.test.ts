@@ -107,7 +107,7 @@ const errors: Case[] = [
   {
     file: 'foreign-other.mel.html',
     severity: 'error',
-    message: "':class': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href",
+    message: "':class' is Vue/Alpine syntax; classes and styles are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else (docs/authoring.md §7)",
     at: pos('foreign-other.mel.html', ':class'),
   },
   {
@@ -193,7 +193,7 @@ const errors: Case[] = [
   {
     file: 'body-template.mel.html',
     severity: 'error',
-    message: "<template> isn't supported; its content would never be bound. Write the markup directly",
+    message: '<template> isn\'t supported; to group elements, wrap them in one element, such as <div class="contents">',
     at: pos('body-template.mel.html', '<template>'),
   },
   {

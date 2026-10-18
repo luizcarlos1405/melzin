@@ -101,7 +101,7 @@ export const TEMPLATE_FOR_MESSAGE = "put m-for on the element to repeat; <templa
 
 /** Vue's `:key` and its spellings: rows are keyed by the list's key, which the schema declares (D34). */
 export const KEY_BINDING_MESSAGE = 'keys live in the schema: add "key": "<field>" to the list, such as "key": "id"'
-const KEY_BINDINGS = new Set(['m-bind:key', ':key', 'v-bind:key', 'x-bind:key'])
+const KEY_BINDINGS = new Set(['m-bind:key', 'm-key', ':key', 'v-bind:key', 'x-bind:key'])
 
 /** Why m-if, m-else-if and m-else can't go on an m-for element (`directive` names the one used). */
 export function forChainMessage(directive: string): string {
@@ -114,15 +114,46 @@ export function positionMessage(path: string): string {
 }
 
 // What to do instead, per unsupported directive (docs/authoring.md §7 has the same table).
-const UNSUPPORTED_HINTS: readonly [RegExp, string][] = [
-  [/^m-(bind|class|style)(:|$)/, 'other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else'],
+
+/** The attribute a binding sets: `class` for m-bind:class or m-class, '' for a bare m-bind; undefined for other names. */
+function bindingTarget(name: string): string | undefined {
+  if (name === 'm-bind') return ''
+  if (name.startsWith('m-bind:')) return name.slice('m-bind:'.length).split('.')[0]
+  return /^m-(class|style)(:|$)/.exec(name)?.[1]
+}
+
+function bindingHint(target: string): string {
+  const only = '(m-bind:href is the only binding, for links)'
+  if (target === 'class' || target === 'style') {
+    return `classes and styles are static for now ${only}; to switch styles, show one of two elements with m-if and m-else`
+  }
+  if (target === 'title' || target.startsWith('aria-')) {
+    return `attributes are static for now ${only}; for an accessible name from data, put sr-only text with m-text inside the element`
+  }
+  return `attributes are static for now ${only}; to switch one, show one of two elements with m-if and m-else`
+}
+
+const OTHER_HINTS: readonly [RegExp, string][] = [
   [/^m-model$/, "forms and inputs aren't supported yet"],
   [/^m-html$/, 'only plain text, through m-text'],
   [/^m-on:/, 'only clicks for now: m-on:click'],
 ]
 
+/** What to write instead of an m-* directive Melzin doesn't have, if there's something to say. */
+function unsupportedHint(name: string): string | undefined {
+  const target = bindingTarget(name)
+  return target === undefined ? OTHER_HINTS.find(([pattern]) => pattern.test(name))?.[1] : bindingHint(target)
+}
+
+/** The m-* spelling of a Vue or Alpine attribute, to find its hint: `:class` → `m-bind:class`, `@submit` → `m-on:submit`. */
+function melzinSpelling(name: string): string {
+  if (name.startsWith(':')) return `m-bind${name}`
+  if (name.startsWith('@')) return `m-on:${name.slice(1)}`
+  return `${DIRECTIVE_PREFIX}${name.slice(2)}`
+}
+
 function unsupportedMessage(name: string): string {
-  const hint = UNSUPPORTED_HINTS.find(([pattern]) => pattern.test(name))?.[1]
+  const hint = unsupportedHint(name)
   return `'${name}' is ${UNSUPPORTED_DIRECTIVE_MESSAGE}${hint === undefined ? '' : `; ${hint}`} (docs/authoring.md §7)`
 }
 
@@ -151,7 +182,11 @@ export function classifyAttribute(name: string): AttributeKind {
     return { kind: 'foreign', suggestion, message: `'${name}' is Vue/Alpine syntax; use ${use}` }
   }
   if (name.startsWith('v-') || name.startsWith('x-') || name.startsWith('@') || name.startsWith(':')) {
-    return { kind: 'foreign', message: `'${name}': ${FOREIGN_SYNTAX_MESSAGE}` }
+    // `:class`, `v-bind:title`, `@submit`, `v-model`: the hint for the m-* spelling, which isn't supported either.
+    const hint = unsupportedHint(melzinSpelling(name))
+    return hint === undefined
+      ? { kind: 'foreign', message: `'${name}': ${FOREIGN_SYNTAX_MESSAGE}` }
+      : { kind: 'foreign', message: `'${name}' is Vue/Alpine syntax; ${hint} (docs/authoring.md §7)` }
   }
   if (name.startsWith(DIRECTIVE_PREFIX)) {
     return { kind: 'unsupported', message: unsupportedMessage(name) }

@@ -276,9 +276,9 @@ describe('directive warnings', () => {
     expect(warnings).toEqual([
       "<p>: 'v-text' is Vue/Alpine syntax; use m-text; ignored",
       "<button>: '@click' is Vue/Alpine syntax; use m-on:click; ignored",
-      `<a>: 'm-bind:title' is not supported yet; Melzin supports only ${supported}; other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else (docs/authoring.md §7); ignored`,
+      `<a>: 'm-bind:title' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7); ignored`,
       `<p>: 'm-html' is not supported yet; Melzin supports only ${supported}; only plain text, through m-text (docs/authoring.md §7); ignored`,
-      `<p>: ':title': Vue/Alpine syntax isn't supported; Melzin has ${supported}; ignored`,
+      `<p>: ':title' is Vue/Alpine syntax; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7); ignored`,
     ])
   })
 

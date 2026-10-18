@@ -166,7 +166,7 @@ describe('markup', () => {
   test('<template> is an error, and its content (never bound by the runtime) is not counted as used', () => {
     expect(messages(checkSource(page(`<button m-on:click="emit('increment')">+</button><template><p m-text="count"></p></template>`)))).toEqual([
       "warning: data field 'count' is never used",
-      "error: <template> isn't supported; its content would never be bound. Write the markup directly",
+      'error: <template> isn\'t supported; to group elements, wrap them in one element, such as <div class="contents">',
     ])
   })
 

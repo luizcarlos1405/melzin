@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import * as core from '../src/core/index.ts'
 import { type DirectiveName, classifyAttribute, forChainMessage, isChainDirective, isIdent } from '../src/core/constants.ts'
 
+const ONLY_HREF = '(m-bind:href is the only binding, for links)'
+const CLASS_HINT = `classes and styles are static for now ${ONLY_HREF}; to switch styles, show one of two elements with m-if and m-else`
+const NAME_HINT = `attributes are static for now ${ONLY_HREF}; for an accessible name from data, put sr-only text with m-text inside the element`
+const ATTRIBUTE_HINT = `attributes are static for now ${ONLY_HREF}; to switch one, show one of two elements with m-if and m-else`
+
 describe('constants', () => {
   test('identifiers', () => {
     for (const name of ['a', '_', 'A_1', 'camelCase']) expect(isIdent(name)).toBe(true)
@@ -40,11 +45,31 @@ describe('constants', () => {
   })
 
   test('other Vue/Alpine syntax', () => {
-    for (const name of ['x-data', '@submit', ':title', 'v-bind:class']) {
+    for (const name of ['x-data', 'x-init', 'v-cloak']) {
       expect(classifyAttribute(name)).toEqual({
         kind: 'foreign',
         message: `'${name}': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href`,
       })
+    }
+    // Spellings of directives Melzin doesn't have get the same hint as their m-* spelling (docs/authoring.md §7).
+    const hints: Record<string, string> = {
+      ':class': CLASS_HINT,
+      'v-bind:class': CLASS_HINT,
+      'x-bind:class': CLASS_HINT,
+      ':style': CLASS_HINT,
+      ':class.prop': CLASS_HINT,
+      ':title': NAME_HINT,
+      ':aria-label': NAME_HINT,
+      'v-bind:aria-describedby': NAME_HINT,
+      ':src': ATTRIBUTE_HINT,
+      'v-bind': ATTRIBUTE_HINT,
+      '@submit': 'only clicks for now: m-on:click',
+      'v-on:submit': 'only clicks for now: m-on:click',
+      'v-model': "forms and inputs aren't supported yet",
+      'x-html': 'only plain text, through m-text',
+    }
+    for (const [name, hint] of Object.entries(hints)) {
+      expect(classifyAttribute(name)).toEqual({ kind: 'foreign', message: `'${name}' is Vue/Alpine syntax; ${hint} (docs/authoring.md §7)` })
     }
     for (const name of [':href', 'v-bind:href', 'x-bind:href']) {
       expect(classifyAttribute(name)).toEqual({ kind: 'foreign', suggestion: 'm-bind:href', message: `'${name}' is Vue/Alpine syntax; use m-bind:href` })
@@ -53,7 +78,13 @@ describe('constants', () => {
 
   test('unsupported m-* directives', () => {
     const hints: Record<string, string> = {
-      'm-bind:title': 'other attributes and classes are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else',
+      'm-bind:class': CLASS_HINT,
+      'm-class': CLASS_HINT,
+      'm-style': CLASS_HINT,
+      'm-bind:title': NAME_HINT,
+      'm-bind:aria-label': NAME_HINT,
+      'm-bind:src': ATTRIBUTE_HINT,
+      'm-bind': ATTRIBUTE_HINT,
       'm-on:submit': 'only clicks for now: m-on:click',
       'm-model': "forms and inputs aren't supported yet",
     }
@@ -82,11 +113,12 @@ describe('constants', () => {
     })
     const keys = 'keys live in the schema: add "key": "<field>" to the list, such as "key": "id"'
     expect(classifyAttribute('m-bind:key')).toEqual({ kind: 'unsupported', message: `'m-bind:key': ${keys}` })
+    expect(classifyAttribute('m-key')).toEqual({ kind: 'unsupported', message: `'m-key': ${keys}` })
     for (const name of [':key', 'v-bind:key', 'x-bind:key']) {
       expect(classifyAttribute(name)).toEqual({ kind: 'foreign', message: `'${name}' is Vue/Alpine syntax; ${keys}` })
     }
     // Other bindings keep their message.
-    expect(classifyAttribute('m-bind:id')).toMatchObject({ kind: 'unsupported', message: expect.stringContaining('other attributes and classes are static for now') })
+    expect(classifyAttribute('m-bind:id')).toMatchObject({ kind: 'unsupported', message: expect.stringContaining(ATTRIBUTE_HINT) })
     expect(forChainMessage('m-if')).toBe(
       "m-if can't go on an element with m-for: wrap the list in an element with m-if, or put the condition inside the row; to show only some items, have the host filter the list",
     )

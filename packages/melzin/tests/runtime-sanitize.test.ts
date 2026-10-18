@@ -62,7 +62,7 @@ describe('elements that would run code or change the host page are dropped', () 
   test('<template> is dropped with its content (it would never be bound), with one warning', () => {
     mountBody(`<template><p m-text="a"></p><script>x()</script><img onerror="x()"></template><p>after</p>`)
     expect(root.innerHTML).toBe('<p>after</p>')
-    expect(warnings).toEqual(["<template> isn't supported; its content would never be bound. Write the markup directly; dropped"])
+    expect(warnings).toEqual(['<template> isn\'t supported; to group elements, wrap them in one element, such as <div class="contents">; dropped'])
   })
 
   // SVG <script> and <style> follow the same rule (core-markup.test.ts, check-rules.test.ts), but
