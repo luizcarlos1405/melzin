@@ -14,7 +14,6 @@ import {
   type DataBlockType,
   ELSE_DIRECTIVE,
   ELSE_IF_DIRECTIVE,
-  type FieldSchema,
   HREF_DIRECTIVE,
   IF_DIRECTIVE,
   type Issue,
@@ -26,6 +25,7 @@ import {
   SHOW_DIRECTIVE,
   SNAPSHOTS_BLOCK_TYPE,
   type Snapshot,
+  type Stage,
   TEXT_DIRECTIVE,
   VIEW_FILE_SUFFIX,
   VOID_ELEMENTS,
@@ -39,6 +39,7 @@ import {
   isInterElementWhitespace,
   joinPath,
   leafPaths,
+  linkFields,
   matchRoute,
   parseClickDirective,
   parseConditionDirective,
@@ -54,6 +55,7 @@ import {
   validateRouteTable,
   validateSchema,
   valueAt,
+  viewStage,
 } from 'melzin/core'
 import { UsageError, resolveProject } from './project.ts'
 import { generateRouteTypes, generateTypes, routeTypesPathFor, typesPathFor, viewTypesImport } from './typegen.ts'
@@ -93,6 +95,10 @@ export type RouteContext = { present: boolean; table: RouteTable | null }
 export type LoadedView = {
   /** Text of `<title>` with whitespace collapsed (as in parseViewHtml), '' when missing. */
   title: string
+  /** Content of `<meta name="description">`, whitespace collapsed; '' when missing. */
+  description: string
+  /** The design stage the file is at, from what it has (SPEC D28, D33). */
+  stage: Stage
   /** Null when there is no schema block or it is invalid (see `issues`). */
   schema: MelzinSchema | null
   snapshots: Snapshot[]
@@ -470,7 +476,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   if (fileName !== undefined && !fileName.endsWith(VIEW_FILE_SUFFIX)) {
     // Possibly not a view at all, so the other rules would only add noise.
     error(0, `view files must be named *${VIEW_FILE_SUFFIX} (got '${basename(fileName)}')`)
-    return { diagnostics, view: { title: '', schema: null, snapshots: [], issues: [] } }
+    return { diagnostics, view: { title: '', description: '', stage: 'exploration', schema: null, snapshots: [], issues: [] } }
   }
 
   // Scripting off, like the runtime's DOMParser document: <noscript> content is parsed as elements.
@@ -497,6 +503,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
 
   // --- head
   let title: string | undefined
+  let description: string | undefined
   const blocks = new Map<DataBlockType, DataBlock>()
   for (const node of headNodes) {
     const offset = startOf(node) ?? 0
@@ -512,7 +519,12 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       else title = textContent(node).replace(/\s+/g, ' ').trim()
       continue
     }
-    if (tag === 'meta') continue
+    if (tag === 'meta') {
+      if (description === undefined && getAttr(node, 'name')?.trim().toLowerCase() === 'description') {
+        description = (getAttr(node, 'content') ?? '').replace(/\s+/g, ' ').trim()
+      }
+      continue
+    }
     if (tag === 'script') {
       const blockType = dataBlockType(getAttr(node, 'type'))
       if (blockType === undefined) {
@@ -973,22 +985,14 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     })
   }
 
+  const stage = viewStage({
+    schemaBlock: schemaBlock !== undefined,
+    snapshotsBlock: snapshotsBlock !== undefined,
+    schema: schemaState === 'valid' ? schema : null,
+    readsRoute: routeRefs.length > 0,
+  })
   diagnostics.sort((a, b) => a.line - b.line || a.col - b.col)
-  return { diagnostics, view: { title: title ?? '', schema, snapshots, issues } }
-}
-
-/** Every link field of a schema (SPEC D23): its path and the route it names. */
-export function linkFields(schema: MelzinSchema | null | undefined): { path: string[]; route: string }[] {
-  const links: { path: string[]; route: string }[] = []
-  const walk = (field: FieldSchema, path: string[]): void => {
-    if (field.type === 'object') {
-      for (const [name, child] of Object.entries(field.properties)) walk(child, [...path, name])
-    } else if (field.route !== undefined) {
-      links.push({ path, route: field.route })
-    }
-  }
-  if (schema?.data) walk(schema.data, [])
-  return links
+  return { diagnostics, view: { title: title ?? '', description: description ?? '', stage, schema, snapshots, issues } }
 }
 
 /** `['user', 'url']` → `data.properties.user.properties.url`, the field's path in the schema block. */

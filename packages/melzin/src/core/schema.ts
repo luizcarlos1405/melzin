@@ -398,6 +398,20 @@ export function leafPaths(schema: MelzinSchema | null | undefined): string[] {
   return paths
 }
 
+/** Every link field of a schema (SPEC D23): its path and the route it names. */
+export function linkFields(schema: MelzinSchema | null | undefined): { path: string[]; route: string }[] {
+  const links: { path: string[]; route: string }[] = []
+  const walk = (field: FieldSchema, path: string[]): void => {
+    if (field.type === 'object') {
+      for (const [name, child] of Object.entries(field.properties)) walk(child, [...path, name])
+    } else if (field.route !== undefined) {
+      links.push({ path, route: field.route })
+    }
+  }
+  if (schema?.data) walk(schema.data, [])
+  return links
+}
+
 /** The schema default for a leaf path, if any. */
 export function defaultAt(
   schema: MelzinSchema | null | undefined,
