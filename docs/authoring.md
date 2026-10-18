@@ -632,7 +632,7 @@ choices still open, such as Q15 for `<template>`.
 | Attribute and class bindings other than links (`m-bind:class`, `:title`, `:aria-label`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else`; for an accessible name from data, `sr-only` text with `m-text` |
 | Layouts shared by several pages, nested routes | Each route shows one whole view; repeat the shared part in each |
 | Route paths with wildcards, optional or partial segments (`*`, `:id?`, `/@:handle`) | Literal segments and whole-segment parameters: `/u/:handle` |
-| Comparisons and `&&`, `\|\|` in conditions | A boolean the host computes: `m-if="hasVotes"` |
+| Comparisons and `&&`, `\|\|` in conditions | A boolean the host computes: `m-if="hasVotes"`; for a list's count, `.length` alone: `m-if="items.length"`, `m-if="!items.length"` |
 | An index in `m-for` (`(item, index) in items`), destructuring, `of`, ranges (`n in 5`) | `item in items`; position variants (`odd:`, `first:`) for styles, the list's key for identity, the items in snapshots |
 | Filtering, sorting or cutting a list in the view (`items.slice(0, 3)`, `\| filter`, `m-if` on the `m-for` element) | The host sends the list as it should show, and a field such as `"moreLabel": "+12 more"` |
 | An item by position (`members[0].name`), a count in `m-text` (`items.length`) | A field the host sends: `featured.name`, `"countLabel": "12 members"`; `.length` works in conditions |
