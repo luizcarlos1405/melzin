@@ -174,7 +174,7 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   pen.dev or any other design tool would (#63).
 - **D30. Snapshots extend other snapshots.** A snapshot can name a base snapshot and list only what
   differs, so states don't repeat their shared data, and a change to that data reaches every snapshot
-  built on it (#34). The exact form is Q14. *Built in the form Q14 leans to (POC.md §17).*
+  built on it (#34). The exact form is D36, built in POC.md §17.
 - **D31. Design alternatives live in `explore/`.** Each alternative is a folder, `explore/<name>/`, next
   to `views/`, and its views stand in for the views with the same file name, so one folder can hold a
   single screen or every screen of a direction. The shell shows every version of a view side by side,
@@ -191,6 +191,30 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   declare or keep current. A finished static page reads as stopped at exploration, which D28 allows, and
   drafts are told apart by living in `explore/` (D31). The shell shows each view's stage, and checks
   that only help from a given stage on, such as forgotten bindings (#33), will use it (Q13).
+- **D34. A list is a JSON Schema `array`, and the list declares its key.**
+  `"members": { "type": "array", "key": "handle", "items": { ... } }`. A list of objects names a
+  required string or number field of its items as the key, and keys are unique among the items of one
+  list. The key is the rows' identity: updates keep each row's DOM and focus (#17), and later its `ui`
+  state (#48) and its address in partial updates, `members[handle=ana]` (#16). It's states-stage data,
+  so declaring one doesn't move a view to contracts (D33). A list of strings or numbers is keyed by its
+  values and says so with `"uniqueItems": true`; `minItems` and `maxItems` state design limits (#15).
+  The key lives on the list rather than on the item type, so an item type stays free to be shared, such
+  as a component's type behind `$ref` (D17), and lists of plain values have a place for it. Keys never
+  appear in the markup: Vue's `:key` is an error that points at the schema (#38).
+- **D35. An event's payload is an object of named fields, built from paths.** The schema declares it
+  under the event's `payload`, as an object schema of string, number and boolean fields:
+  `"vote": { "payload": { "type": "object", "properties": { "optionId": { "type": "string" } } } }`. The
+  view fills each field with a path into the list item in scope, `data` or `route`, and the checker
+  matches every emit against the declared payload (D15). Named fields follow how this record writes
+  events (`follow {userId}`, D14, P6), match the DOM's single `CustomEvent.detail` (§7) and the
+  field-by-field compatibility rules (§9.4), and let a field be added without breaking handlers. Paths
+  keep payloads data (P1, D29). Literals, the DOM event and `ui` state wait for the binding language
+  (§11), and so does the markup that builds a payload, which is provisional.
+- **D36. Snapshots override their base with JSON Merge Patch** (RFC 7396). Settles Q14 in the form
+  built for D30 (POC.md §17): `extends` names the base, as in `tsconfig.json`, objects merge field by
+  field, `null` removes a field, and lists and plain values replace whole, so changing one item of a
+  list means restating the list. Chains are fine and cycles are errors. A keyed merge for lists, if one
+  is ever needed, would need its own marker, so that a plain list keeps meaning "replace".
 
 ## 5. Principles
 
@@ -263,7 +287,8 @@ is laid out, is the next battle (§11).
 - two-way bindings for form inputs
 - conditionals: show or hide
 - variants: styles driven by a boolean, an enum or list position (first/last/odd)
-- repeat: a template repeated over a list, with a key and an `empty` slot
+- repeat: an element repeated over a list, one row per item, keyed by the list's key (D34), with an
+  empty state
 - switch: picks a template by the tag of a value that can take one of several shapes
 - component instances: another view, given parts of this view's data as props (D16–D18, §9.5)
 - code components (P7)
@@ -277,18 +302,18 @@ is laid out, is the next battle (§11).
 - events: everything the view can emit, with payload types (D14)
 
 Each field has a stable ID, name, type, optionality, default and constraints; events have stable IDs
-too, so renames stay renames. List item types declare their key field. The contract exported for the
-backend covers `data` and events only.
+too, so renames stay renames. Each list declares the field that identifies its items (D34), and each
+event its payload (D35). The contract exported for the backend covers `data` and events only.
 
 **Snapshots.** Named states (`data` + `ui`), stored inside the file (D8). A base snapshot holds the sample
-values; other snapshots override parts of it (D30, Q14).
+values; other snapshots override parts of it (D30, D36).
 
 **Design-time content.** Snapshots, notes, explorations and similar. They live in the file but are
 stripped from production (#37).
 
 **Types (draft):** string, number, boolean, enum, id, date, money, url, color, image (url, size, alt),
-rich text; list of T (with a key), object, optional, tagged union. Constraints such as max length and
-ranges.
+rich text; list of T (keyed, D34), object, optional, tagged union. Constraints such as max length,
+ranges and a list's number of items.
 
 **Binding operations (draft):** paths; formatters for dates, relative times, numbers, money, plurals and
 list joining (like `Intl.ListFormat`); comparisons. Whether to go further is #6.
@@ -305,10 +330,10 @@ that cite a decision are settled; the rest are proposals.
   covers much of accessibility (#28).
 - **Directives:** Vue's built-in set under the `m-` prefix (D13). What goes inside them is limited to an
   analyzable subset (P1).
-- **Events:** declared like Vue's `emits`, with typed payloads (D14), and sent to the host as DOM events
-  (§7).
-- **Reuse:** `<template>` for repeated content, `<slot>` for content passed into components, custom
-  elements for components (§9.5).
+- **Events:** declared like Vue's `emits`, with typed payloads (D14, D35), and sent to the host as DOM
+  events (§7).
+- **Reuse:** `m-for` on the element to repeat, as in Vue, `<slot>` for content passed into components,
+  custom elements for components (§9.5).
 - **Composition:** JSON Schema `$ref` for a child's types (D17), and Vue's prop binding for passing
   data: `m-bind:user="post.author"` for one prop, `m-bind="post.author"` for all of them (D18).
 - **Forms:** native input types and validation attributes (`required`, `pattern`, `min`, `max`,
@@ -320,7 +345,8 @@ that cite a decision are settled; the rest are proposals.
   `m-bind:class="{ 'bg-yellow-100': item.featured }"`, which keeps Tailwind class names literal (#8,
   #52).
 - **Schema:** JSON Schema. Every language can validate it, and it already has `default`, `examples`,
-  `enum`, `maxLength` and required fields; a custom keyword adds stable field IDs (P2).
+  `enum`, `maxLength`, required fields, and `uniqueItems`, `minItems` and `maxItems` for lists; custom
+  keywords add stable field IDs (P2) and a list's key (D34).
 - **Snapshots:** JSON documents inside the Melzin file (D8) that validate against the schema.
 - **Embedding:** Web Components: data in as a property, events out as DOM events (§7).
 - **Partial updates:** JSON Patch, with a caveat: it addresses list items by index, which breaks when
@@ -470,9 +496,9 @@ The browser app where humans review and explore the design (D1–D3), and where 
 
 ### 9.1 Lists (#1)
 
-- **Store one template, not N rows.** The file holds `repeat(followers, key: id)` with a template and an
-  `empty` slot; the sample items live in the snapshot. The preview shows 3 rows because the sample has 3
-  items.
+- **Store one template, not N rows.** The file holds one element repeated over the list, with an empty
+  state next to it, and the schema holds the list's key (D34); the sample items live in the snapshot.
+  The preview shows 3 rows because the sample has 3 items.
 - **Editing rule:** changing the structure or style of any row changes the template, so every row
   updates. Changing bound text changes only that item's sample. Unbound text is the same in every row.
   With D1, this rule guides how the AI reads requests ("rename the second follower" vs. "make the rows
@@ -480,10 +506,11 @@ The browser app where humans review and explore the design (D1–D3), and where 
 - **One-off differences have to become data.** If one row should be highlighted, that's either a field
   (`isFeatured: bool`) or a position rule (first/last/odd). Production can't have hand-tweaked rows, so
   the AI should propose the field.
-- **Every list gets automatic states:** 0 items, 1, many, overflow ("+12 more"), long content.
-- **Keys belong in the schema.** Each item type declares which field identifies it. Without that,
-  updates can't preserve focus or animations, keep per-item internal state with the right item (#48), or
-  target a single item in a partial update.
+- **Every list gets automatic states:** 0 items, 1, many, overflow (more items than the design holds,
+  with a "+12 more" label the host sends, P3), long content.
+- **Keys belong in the schema** (D34). Each list declares which field identifies its items. Without
+  that, updates can't preserve focus or animations, keep per-item internal state with the right item
+  (#48), or target a single item in a partial update.
 - **Later:** lists mixing item types (a feed with posts and ads, switched on a type tag), recursion
   (comment replies), separators ("Ana, Bruno and 3 others", via an `Intl.ListFormat`-style formatter),
   grouping (better if the backend sends lists that are already grouped, P3).
@@ -637,8 +664,9 @@ and passes each subtree as the child's props, handling the child's event by emit
 <m-option-row m-bind="pizza" m-on:vote="emit('votePizza')"></m-option-row>
 ```
 
-With lists and event payloads, the three fields become `options: array of option-row` with an `m-for`,
-and one `vote {optionId}` event. The exact syntax inside directives waits for the language battle (§11).
+With lists and event payloads, the three fields become `options`, a list of `option-row` keyed by an `id`
+field it gains (D34), with an `m-for`, and one `vote {optionId}` event (D35). The exact syntax inside
+directives waits for the language battle (§11).
 
 **Names and references** (proposed)
 
@@ -713,14 +741,17 @@ place the type appears (#59).
 
 ### Data and contract
 
-1. ⚑ **Lists:** zero or more items that appear, disappear and change. Approach in §9.1.
+1. ⚑ **Lists:** zero or more items that appear, disappear and change. Approach in §9.1. *Settled in
+   part by D34: lists are arrays in the schema, keyed by a field the list declares. The syntax in the
+   markup is provisional (§11).*
 2. ⚑ **Schema extraction:** getting a consistent schema out of the design as it changes. Approach in
    §9.2.
 3. **Schema change analysis:** when the design changes, know exactly how the schema changed and whether
    data fetching has to change. Approach in §9.3 for data and §9.4 for events.
 4. ⚑ **Events:** the contract goes both ways. Typed events (`follow {userId}`,
    `saveProfile {name, bio}`), and who handles them (P6). *Settled in part: events are declared in the
-   schema (D14) and unhandled ones are caught statically (D15). Approach in §9.4.*
+   schema (D14), unhandled ones are caught statically (D15), and payloads are objects of named fields
+   built from paths (D35). Approach in §9.4.*
 5. ⚑ **UI state vs. data:** "menu open", "selected tab", unsaved input. Can be snapshotted, but isn't
    part of the backend contract (P6). *Ownership settled by D5: the view owns `ui` state. Still open:
    where the line falls. Rule of thumb: if the host needs it to load or save data, it's `data` or an
@@ -800,8 +831,8 @@ place the type appears (#59).
 33. **Forgotten bindings:** a hardcoded "Ana Souza" looks perfect in the design and is wrong for every
     user in production (P8).
 34. **Snapshot upkeep:** a base state plus overrides, updating snapshots when the schema changes, and the
-    explosion of possible combinations. *Settled in part by D30: snapshots extend a base and override
-    what differs (Q14), built in POC.md §17.*
+    explosion of possible combinations. *Settled in part by D30 and D36: snapshots extend a base and
+    override what differs with JSON Merge Patch, built in POC.md §17.*
 35. **Version mismatch at deploy:** the new UI expects a field the deployed backend doesn't send yet (P3,
     §9.3).
 36. **Adapter and contract tests:** generated types, contract tests, an adapter the AI keeps up to date.
@@ -929,12 +960,12 @@ it: a need that would take programming gets code (P7), not a bigger language. To
 
 - what an expression can contain: paths, literals, comparisons, `!`, `&&`, `||`, maybe ternaries,
   formatter calls (#6)
-- `m-for`: which of Vue's forms are allowed (index, destructuring, ranges), and whether the key comes
-  from `m-bind:key` or from the schema (§9.1)
+- `m-for`: which of Vue's forms are allowed (index, destructuring, ranges). The key comes from the
+  schema (D34)
 - empty states: Vue has no `empty` slot, so it's `m-if`/`m-else` around the list, which needs `.length`
   in expressions
-- handler operations (#46), what `emit` payloads can be built from (`data`, `ui`, the list item in scope,
-  the DOM event), and which modifiers apply
+- handler operations (#46), what `emit` payloads can be built from besides paths (literals, `ui`, the
+  DOM event; D35), and which modifiers apply
 - `m-model`: what it can write to (only `ui`, since `data` belongs to the host?) and its modifiers
 - `m-html`: sanitized rich text only (#24)
 - whether Vue's niche directives (`v-pre`, `v-once`, `v-memo`, `v-cloak`) carry over
@@ -944,7 +975,12 @@ provisional subset: a condition is a path, optionally negated with `!`, tested f
 (POC.md §14). The battle can still change it.
 
 Snapshots that extend a base (D30) didn't depend on the language either, and are built, in the form
-Q14 leans to (POC.md §17).
+D36 settles (POC.md §17).
+
+Lists and event payloads come next, also ahead of the battle. What the contract depends on is settled
+(D34, D35); the syntax inside the attributes is provisional, as it was for conditionals:
+`m-for="member in members"` and no other form, `.length` in conditions for empty states, and
+`emit('vote', { optionId: option.id })` with paths as values.
 
 **After that:** the file layout: where the schema, internal state and snapshots sit in the HTML file
 (#37).
@@ -989,13 +1025,13 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   child states in sync and lets generated states compose (P8), but adds a reference mechanism to
   snapshots (#34). Lean: yes.
 - **Q13. How does a view show its stage?** *Settled by D33: inferred from what the file has.*
-- **Q14. How does a snapshot override its base?** Lean: JSON Merge Patch (RFC 7396), a known pattern
-  (P9). Objects merge field by field, `null` removes a field, and lists and plain values replace whole.
-  Melzin's types have no `null` so far, so that's how a snapshot makes an optional field missing:
+- **Q14. How does a snapshot override its base?** *Settled by D36, as this lean, built in POC.md
+  §17.* Lean: JSON Merge Patch (RFC 7396), a known pattern (P9). Objects merge field by field, `null`
+  removes a field, and lists and plain values replace whole. Melzin's types have no `null` so far, so
+  that's how a snapshot makes an optional field missing:
   `"signed out": { "extends": "follows you", "data": { "viewer": null } }`. The `extends` key names
   the base, as in `tsconfig.json`; chains are fine, cycles are errors, and the checker validates each
-  snapshot once it's resolved. Changing one list item means restating the list (D30). *Built as this
-  lean (POC.md §17); not settled yet.*
+  snapshot once it's resolved. Changing one list item means restating the list (D30).
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -1090,6 +1126,7 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **URL input (`route`):** the current route's name, params and query, injected by the host and
   read-only. Any view can bind to it (D27).
 - **Event:** a typed message the view sends to its host, declared in the schema (D14).
+- **Payload:** the object an event carries, with named, typed fields the view fills from paths (D35).
 - **Handler:** code that consumes an event: in the host for a screen, in the parent view for a component.
   Every declared event needs one (D15).
 - **Host:** whatever feeds a view its `data` and handles its events: the app embedding it, or Melzin's
@@ -1098,6 +1135,8 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - **Source:** the code that loads a route's data and handles its events: static (build time), remote
   (a server) or local (on the device) (D20).
 - **Snapshot:** a named state (`data` + `ui`) that renders the UI in one particular situation.
+- **List:** a field that holds zero or more items of one type, rendered by repeating one element (D34).
+- **Key:** the field that identifies each item of a list, declared by the list (D34).
 - **Sample, default, placeholder:** see P4.
 - **Render:** one live instance of the view in the shell, for one snapshot at one viewport size.
 - **Shell:** the browser app that hosts many renders, with zoom and state inspectors.
@@ -1153,3 +1192,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   (POC.md §16). Settles Q13 and #62, and #61 in part.
 - 2026-10-17: snapshots that extend a base (D30) built as Q14's lean: JSON Merge Patch with `extends`
   (POC.md §17).
+- 2026-10-18: D34–D36 (lists as JSON Schema arrays that declare their key, event payloads as objects
+  of named fields built from paths, and snapshot overrides as JSON Merge Patch, which settles Q14).
+  Aligned §6, §9.1, §9.5, §10 and §11 with them; the markup for lists and payloads stays provisional.
