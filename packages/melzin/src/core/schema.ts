@@ -99,12 +99,13 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 
 /**
  * Whether `object` has `key` as its own property or through its prototype chain, stopping before
- * Object.prototype: getters on a class instance count, `toString` or `constructor` don't. The runtime
+ * Object.prototype: getters on a class instance count, `toString` or `constructor` don't. A class's
+ * prototype has `constructor` too (the class itself), so only an own `constructor` counts. The runtime
  * reads data and handlers with this rule, and validateData checks data with it.
  */
 export function hasField(object: object, key: string): boolean {
   for (let node: object | null = object; node !== null && node !== Object.prototype; node = Object.getPrototypeOf(node)) {
-    if (Object.hasOwn(node, key)) return true
+    if (Object.hasOwn(node, key) && (key !== 'constructor' || node === object)) return true
   }
   return false
 }

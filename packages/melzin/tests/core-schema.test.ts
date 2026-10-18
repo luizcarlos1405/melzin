@@ -438,4 +438,22 @@ describe('review fixes', () => {
     expect(hasField(Object.create({ a: 1 }), 'a')).toBe(true)
     expect(hasField(Object.create(null), 'a')).toBe(false)
   })
+
+  test("a class prototype's constructor isn't a field; an own one is", () => {
+    class Item {
+      readonly id: string
+      constructor(id: string) {
+        this.id = id
+      }
+    }
+    class Special extends Item {}
+    expect(hasField(new Item('a'), 'constructor')).toBe(false)
+    expect(hasField(new Special('a'), 'constructor')).toBe(false)
+    expect(hasField(Object.create(Item.prototype), 'constructor')).toBe(false)
+    expect(hasField({ constructor: 'x' }, 'constructor')).toBe(true)
+    expect(hasField(Object.assign(new Item('a'), { constructor: 'x' }), 'constructor')).toBe(true)
+    expect(hasField(new Item('a'), 'id')).toBe(true)
+    const schema = valid({ data: { type: 'object', properties: { items: { type: 'array', key: 'id', items: { type: 'object', properties: { id: { type: 'string' }, constructor: { type: 'string' } }, required: ['id'] } } } } })
+    expect(validateData(schema, { items: [new Item('a')] })).toEqual([])
+  })
 })

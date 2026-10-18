@@ -45,6 +45,27 @@ describe('data lookup', () => {
     expect(warnings).toEqual([])
   })
 
+  test("a class instance's constructor is no data field", () => {
+    class Item {
+      readonly id: string
+      constructor(id: string) {
+        this.id = id
+      }
+    }
+    const src = view({
+      schema: {
+        data: {
+          type: 'object',
+          properties: { items: { type: 'array', key: 'id', items: { type: 'object', properties: { id: { type: 'string' }, constructor: { type: 'string' } }, required: ['id'] } } },
+        },
+      },
+      body: '<ul><li m-for="item in items"><p m-text="item.id"></p><p m-text="item.constructor"></p></li></ul>',
+    })
+    mountSource(root, src, { data: { items: [new Item('a')] }, on: {}, onWarning })
+    expect(texts()).toEqual(['a', ''])
+    expect(warnings).toEqual([])
+  })
+
   test('a missing required field named like an Object.prototype member is reported and renders empty', () => {
     const src = view({
       schema: { data: { type: 'object', properties: { toString: { type: 'string' }, constructor: { type: 'string' } }, required: ['toString'] } },
@@ -87,6 +108,27 @@ describe('handler lookup', () => {
     root.querySelector<HTMLElement>('#a')!.click()
     root.querySelector<HTMLElement>('#b')!.click()
     expect(warnings).toEqual(["no handler for event 'toString'; add on.toString", "no handler for event 'valueOf'; add on.valueOf"])
+  })
+
+  // A class's prototype has `constructor` (the class): it is no handler, so the event still warns.
+  test("a class's constructor is never a handler", () => {
+    const calls: string[] = []
+    class Handlers {
+      save(): void {
+        calls.push('save')
+      }
+    }
+    const src = view({
+      schema: { events: { constructor: {}, save: {} } },
+      body: `<button id="a" m-on:click="emit('constructor')">a</button><button id="b" m-on:click="emit('save')">b</button>`,
+    })
+    mountSource(root, src, { data: {}, on: new Handlers(), onWarning })
+    expect(warnings).toEqual(["declared event 'constructor' has no handler; add on.constructor"])
+    warnings = []
+    expect(() => root.querySelector<HTMLElement>('#a')!.click()).not.toThrow()
+    root.querySelector<HTMLElement>('#b')!.click()
+    expect(warnings).toEqual(["no handler for event 'constructor'; add on.constructor"])
+    expect(calls).toEqual(['save'])
   })
 
   test('handlers may be methods of a class', () => {
