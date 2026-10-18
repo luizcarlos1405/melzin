@@ -704,18 +704,19 @@ changed. Run it again after every schema change; until you do, `melzin check` wa
 is out of date. In an app, `bunx melzin types routes.json` writes `routes.types.ts` and the types of
 every view a route shows (§12).
 
-Lists become arrays, and each handler takes its event's payload. For the list and the events of §4:
+Lists become readonly arrays, and each handler takes its event's payload. For the list and the events
+of §4:
 
 ```ts
 export type Data = {
-  members: {
+  members: readonly {
     handle: string
     name: string
     url: Href<'profile'>
     isAdmin?: boolean
-    tags: string[]
+    tags: readonly string[]
   }[]
-  related?: Href<'profile'>[]
+  related?: readonly Href<'profile'>[]
 }
 export type Handlers = {
   /** One vote for an option */
@@ -730,6 +731,9 @@ export type Handlers = {
 
 A payload whose fields have no descriptions fits on one line: `(payload: { optionId: string }) => void`.
 A handler that reads a field the payload doesn't have, or reads one as the wrong type, fails `tsc`.
+The view only reads its data, so a host may pass readonly arrays or `as const` data, and plain arrays
+fit too. To build a list by pushing into it, type it as a plain array first:
+`const members: Data['members'][number][] = []`.
 
 ### Preview
 

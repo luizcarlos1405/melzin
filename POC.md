@@ -955,13 +955,14 @@ payload rules (`core/payload.ts`), so the runtime and the checker still agree (Â
 - **"Never used"** names item fields as `members[].name`. An `m-for` or a `.length` condition uses a
   list, an `m-for` its key, reading the alias of a list of strings or numbers its values, and a payload
   the fields it reads. A list that nothing uses gets one warning, not one per item field.
-- **Types.** Lists are inline arrays: `members: { handle: string; url: Href<'profile'> }[]`,
-  `members?:` when optional, `tags: string[]`. Handlers type their payload,
-  `vote: (payload: { optionId: string; note?: string }) => void`, with descriptions as comments;
-  events without one keep `(payload?: undefined) => void`, and `routes.types.ts` follows. The tsc
-  tests show a host whose handler takes the right payload passing, and one whose handler takes a wrong
-  payload type or a field the payload lacks, a wrong item or a list of the wrong values failing with
-  `mount`; with `startApp`, a wrong payload type and a hand-built link inside a list fail.
+- **Types.** Lists are inline readonly arrays:
+  `members: readonly { handle: string; url: Href<'profile'> }[]`, `members?:` when optional,
+  `tags: readonly string[]`, so a host may pass readonly arrays or `as const` data. Handlers type
+  their payload, `vote: (payload: { optionId: string; note?: string }) => void`, with descriptions as
+  comments; events without one keep `(payload?: undefined) => void`, and `routes.types.ts` follows.
+  The tsc tests show a host whose handler takes the right payload passing, and one whose handler takes
+  a wrong payload type or a field the payload lacks, a wrong item or a list of the wrong values failing
+  with `mount`; with `startApp`, a wrong payload type and a hand-built link inside a list fail.
 - 35 new fixtures in `packages/cli/tests/fixtures/check/`: `good-lists.mel.html` with no diagnostics,
   and one per rule with exactly one.
 

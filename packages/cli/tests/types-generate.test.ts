@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { validateSchema } from 'melzin/core'
 import { loadViewFile } from '../src/check.ts'
 import { generateTypes, typesPathFor } from '../src/types.ts'
 
@@ -150,6 +151,24 @@ describe('generateTypes', () => {
         '',
       ].join('\n'),
     )
+  })
+
+  test("the guide's Types example is what it writes for the guide's list and events (docs/authoring.md §4, §8)", () => {
+    const guide = readFileSync(join(import.meta.dir, '../../../docs/authoring.md'), 'utf8')
+    const block = (lang: string, start: string): string => {
+      const blocks = guide.split(`\`\`\`${lang}\n`).slice(1).map((part) => part.slice(0, part.indexOf('\n```')))
+      const found = blocks.find((code) => code.startsWith(start))
+      if (found === undefined) throw new Error(`docs/authoring.md has no ${lang} block that starts with ${start}`)
+      return found
+    }
+    const lists = block('json', '"members": {')
+    const events = block('json', '"events": {')
+    const { schema, issues } = validateSchema(
+      JSON.parse(`{ "data": { "type": "object", "properties": { ${lists} }, "required": ["members"] }, ${events} }`),
+    )
+    expect(issues).toEqual([])
+    const written = generateTypes(schema, 'members.mel.html')
+    expect(written.slice(written.indexOf('export type Data = {'))).toBe(`${block('ts', 'export type Data = {')}\n`)
   })
 
   test('no data', async () => {
