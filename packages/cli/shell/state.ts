@@ -281,6 +281,20 @@ export function formatTime(date: Date): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
 }
 
+/** The longest payload the event log shows whole, in characters; longer ones are cut. */
+export const PAYLOAD_MAX = 80
+
+/**
+ * An event's payload for the event log: compact JSON, such as `{"optionId":"pizza"}`. Past `max`
+ * characters it's cut with an ellipsis, and `full` holds the whole JSON (for a title). Cut by code
+ * points, so an emoji in a label never shows as half a surrogate pair.
+ */
+export function formatPayload(payload: Readonly<Record<string, unknown>>, max: number = PAYLOAD_MAX): { text: string; full?: string } {
+  const json = JSON.stringify(payload)
+  const chars = Array.from(json)
+  return chars.length <= max ? { text: json } : { text: `${chars.slice(0, Math.max(0, max - 1)).join('')}…`, full: json }
+}
+
 export type DataParseResult = { ok: true; data: Record<string, unknown> } | { ok: false; message: string }
 
 /** Parses the state editor's text. The data must be a JSON object. */

@@ -4,7 +4,7 @@
 // side by side, one column each (SPEC D31). All state worth sharing lives in the URL (see state.ts), so
 // a refresh reloads everything from the files (D3).
 
-import { type Issue, type Route, type Snapshot, parseViewHtml } from 'melzin'
+import { type Issue, type Payload, type Route, type Snapshot, parseViewHtml } from 'melzin'
 import { CURRENT_VERSION, type Stage, matchPath, matchRoute } from 'melzin/core'
 import { type FrameMessage, isFrameMessage, setDataMessage, setRouteMessage } from './protocol.ts'
 import {
@@ -20,6 +20,7 @@ import {
   devicesLabel,
   formatData,
   formatDevices,
+  formatPayload,
   formatTime,
   frameUrl,
   parseDataJson,
@@ -380,19 +381,30 @@ function clearUpdateWarnings(card: Card): void {
   renderWarningCount(card)
 }
 
-/** `device` names the frame the event came from, for cards with several. */
-function addEvent(card: Card, name: string, time: number, kind: 'event' | 'link' | 'navigate' = 'event', device?: Device): void {
+type EventEntry = {
+  kind?: 'event' | 'link' | 'navigate'
+  /** The frame the event came from, for cards with several. */
+  device?: Device
+  /** What the view sent with the event (SPEC D35). */
+  payload?: Payload
+}
+
+/** Adds a line to the card's event log: an event (with its payload), a link not followed or a navigation. */
+function addEvent(card: Card, name: string, time: number, entry: EventEntry = {}): void {
   card.events += 1
   card.eventCount.textContent = String(card.events)
   card.logEmpty.hidden = true
   const label =
-    kind === 'link'
+    entry.kind === 'link'
       ? h('span', { class: 'event-link', text: `link not followed: ${name}` })
-      : kind === 'navigate'
+      : entry.kind === 'navigate'
         ? h('span', { class: 'event-navigate' }, h('code', { text: 'navigate' }), h('span', { class: 'event-link', text: ` → ${name}` }))
         : h('code', { text: name })
-  const where = device === undefined ? null : h('span', { class: 'event-device', text: deviceName(device) })
-  const item = h('li', { class: 'event' }, h('time', { text: formatTime(new Date(time)) }), label, where)
+  // As text, never markup: a payload holds the data's own strings.
+  const shown = entry.payload === undefined ? null : formatPayload(entry.payload)
+  const payload = shown === null ? null : h('span', { class: 'event-payload', text: shown.text, title: shown.full })
+  const where = entry.device === undefined ? null : h('span', { class: 'event-device', text: deviceName(entry.device) })
+  const item = h('li', { class: 'event' }, h('time', { text: formatTime(new Date(time)) }), label, where, payload)
   card.log.prepend(item)
   item.classList.add('event-new')
   setTimeout(() => item.classList.remove('event-new'), 600)
@@ -656,14 +668,14 @@ function onFrameMessage(card: Card, frame: Frame, message: FrameMessage): void {
       break
     }
     case 'event':
-      addEvent(card, message.name, message.time, 'event', device)
+      addEvent(card, message.name, message.time, { device, payload: message.payload })
       break
     case 'link': {
       // A link to one of the app's routes is a navigation (SPEC D25): logged, not followed.
       const internal = message.href.startsWith('/') && !message.href.startsWith('//')
       const match = internal ? matchRoute({ routes: routesEntry.routes }, message.href) : null
-      if (match === null) addEvent(card, message.href, message.time, 'link', device)
-      else addEvent(card, `${match.route.name} ${match.url}`, message.time, 'navigate', device)
+      if (match === null) addEvent(card, message.href, message.time, { kind: 'link', device })
+      else addEvent(card, `${match.route.name} ${match.url}`, message.time, { kind: 'navigate', device })
       break
     }
     case 'warning':

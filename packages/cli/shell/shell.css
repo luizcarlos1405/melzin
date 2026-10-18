@@ -662,8 +662,9 @@ a:focus-visible {
 
 .event {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 2px 10px;
   padding: 3px 6px;
   border-radius: 5px;
   transition: background 0.6s;
@@ -691,6 +692,20 @@ a:focus-visible {
 .event-navigate {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* What the view sent with the event, as compact JSON on a line of its own (the panel is narrow); a
+   cut one has the whole JSON in its title. */
+.event-payload {
+  flex-basis: 100%;
+  min-width: 0;
+  color: var(--text-muted);
+  font: 12px var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.event-payload[title] {
+  cursor: help;
 }
 
 /* Which frame of the card an event came from, when it has several. */

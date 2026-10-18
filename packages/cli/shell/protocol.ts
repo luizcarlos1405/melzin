@@ -2,6 +2,7 @@
 // acts as the view's host: it mounts the view and reports everything to the shell, which plays the
 // mock host's UI (state editor, event log, warnings).
 
+import type { Payload } from 'melzin'
 import { type RouteInput, isPlainObject } from 'melzin/core'
 
 export const FRAME_SOURCE = 'melzin-frame'
@@ -10,7 +11,8 @@ export const SHELL_SOURCE = 'melzin-shell'
 /** Frame → shell. */
 export type FrameMessage = { source: typeof FRAME_SOURCE } & (
   | { type: 'ready'; title: string }
-  | { type: 'event'; name: string; time: number }
+  /** `payload` is the object the view sent with the event (SPEC D35); absent when it sent none. */
+  | { type: 'event'; name: string; time: number; payload?: Payload }
   /** A link or form in the view that the frame didn't follow (the host page would have navigated). */
   | { type: 'link'; href: string; time: number }
   /** `update` is true for warnings about the current data (they go stale when the shell sends new data). */
@@ -47,7 +49,7 @@ export function isFrameMessage(value: unknown): value is FrameMessage {
     case 'ready':
       return typeof value.title === 'string'
     case 'event':
-      return typeof value.name === 'string' && typeof value.time === 'number'
+      return typeof value.name === 'string' && typeof value.time === 'number' && (value.payload === undefined || isPayload(value.payload))
     case 'link':
       return typeof value.href === 'string' && typeof value.time === 'number'
     case 'warning':
@@ -57,6 +59,11 @@ export function isFrameMessage(value: unknown): value is FrameMessage {
     default:
       return false
   }
+}
+
+/** A payload as the runtime builds it: an object of string, number or boolean fields. */
+function isPayload(value: unknown): value is Payload {
+  return isPlainObject(value) && Object.values(value).every((field) => typeof field === 'string' || typeof field === 'number' || typeof field === 'boolean')
 }
 
 export function isShellMessage(value: unknown): value is ShellMessage {

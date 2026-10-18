@@ -1,12 +1,12 @@
 // One render of one view: `/frame?view=counter.mel.html&snapshot=zero`. The frame is the view's
 // mock host. It mounts the view through the real runtime with the snapshot's data, gives it a
-// handler for every declared event, and reports events and warnings to the shell. The shell sends
-// new data with a "set-data" message, applied with `view.update`. `&alt=night` renders a design
-// alternative's own file and `&theme=night` the file in views/, both with the alternative's CSS
-// (SPEC D31, D32).
+// handler for every declared event, and reports events (with their payloads) and warnings to the
+// shell. The shell sends new data with a "set-data" message, applied with `view.update`. `&alt=night`
+// renders a design alternative's own file and `&theme=night` the file in views/, both with the
+// alternative's CSS (SPEC D31, D32).
 
 import { type RouteInput, VIEW_FILE_SUFFIX } from 'melzin/core'
-import { DATA_WARNING_PREFIX, type MelzinView, mountSource, parseViewHtml } from 'melzin'
+import { DATA_WARNING_PREFIX, type MelzinView, type Payload, mountSource, parseViewHtml } from 'melzin'
 import { type FrameMessageBody, frameMessage, isShellMessage } from './protocol.ts'
 import { stylesUrl, viewFileName, viewFileUrl } from './state.ts'
 
@@ -158,10 +158,11 @@ async function start(): Promise<void> {
     route = { ...route, params: { ...snapshot.route?.params }, query: { ...snapshot.route?.query } }
   }
 
-  // A handler for every declared event: the shell logs it, nothing else happens (#43).
-  const on: Record<string, (payload?: undefined) => void> = {}
+  // A handler for every declared event: the shell logs it with its payload (SPEC D35), nothing else
+  // happens (#43). The payload is built from the row's current values at click time, by the runtime.
+  const on: Record<string, (payload?: Payload) => void> = {}
   for (const name of Object.keys(parsed.schema?.events ?? {})) {
-    on[name] = () => post({ type: 'event', name, time: Date.now() })
+    on[name] = (payload) => post({ type: 'event', name, time: Date.now(), payload })
   }
 
   const root = document.querySelector('#melzin-root')

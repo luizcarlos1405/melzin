@@ -24,7 +24,9 @@ import {
   formatData,
   formatDevice,
   formatDevices,
+  formatPayload,
   formatTime,
+  PAYLOAD_MAX,
   frameUrl,
   parseDataJson,
   parseDevice,
@@ -243,12 +245,42 @@ describe('formatters', () => {
   test('formatData pretty-prints with two spaces', () => {
     expect(formatData({ user: { name: 'Ada' } })).toBe('{\n  "user": {\n    "name": "Ada"\n  }\n}')
   })
+
+  test('formatPayload is compact JSON in the emit\'s field order', () => {
+    expect(formatPayload({ optionId: 'pizza' })).toEqual({ text: '{"optionId":"pizza"}' })
+    expect(formatPayload({ label: 'Ana "A"', count: 3, open: false })).toEqual({ text: '{"label":"Ana \\"A\\"","count":3,"open":false}' })
+    expect(formatPayload({})).toEqual({ text: '{}' })
+    // Markup stays text: the shell sets it with textContent.
+    expect(formatPayload({ label: '<img src=x onerror=alert(1)>' }).text).toBe('{"label":"<img src=x onerror=alert(1)>"}')
+    // A field named like a prototype property is a plain field.
+    expect(formatPayload(JSON.parse('{"__proto__":"x"}') as Record<string, unknown>)).toEqual({ text: '{"__proto__":"x"}' })
+  })
+
+  test('formatPayload cuts long payloads at PAYLOAD_MAX characters, keeping the whole JSON', () => {
+    const fits = { note: 'x'.repeat(PAYLOAD_MAX - '{"note":""}'.length) }
+    expect(formatPayload(fits)).toEqual({ text: JSON.stringify(fits) })
+    const long = { note: 'x'.repeat(PAYLOAD_MAX) }
+    const shown = formatPayload(long)
+    expect(shown.full).toBe(JSON.stringify(long))
+    expect(Array.from(shown.text)).toHaveLength(PAYLOAD_MAX)
+    expect(shown.text.endsWith('x…')).toBe(true)
+    expect(formatPayload({ optionId: 'pizza' }, 10)).toEqual({ text: '{"optionI…', full: '{"optionId":"pizza"}' })
+  })
+
+  test('formatPayload never cuts an emoji in half', () => {
+    const shown = formatPayload({ emoji: '🍕🌮🍣🍔' }, 12)
+    expect(shown.text).toBe('{"emoji":"🍕…')
+    expect(shown.text.isWellFormed()).toBe(true)
+  })
 })
 
 describe('frame protocol', () => {
   test('builders produce messages the guards accept', () => {
     expect(isFrameMessage(frameMessage({ type: 'ready', title: 'Counter' }))).toBe(true)
     expect(isFrameMessage(frameMessage({ type: 'event', name: 'increment', time: 1 }))).toBe(true)
+    expect(isFrameMessage(frameMessage({ type: 'event', name: 'vote', time: 1, payload: { optionId: 'pizza', votes: 3, open: true } }))).toBe(true)
+    expect(isFrameMessage(frameMessage({ type: 'event', name: 'vote', time: 1, payload: {} }))).toBe(true)
+    expect(isFrameMessage(frameMessage({ type: 'event', name: 'increment', time: 1, payload: undefined }))).toBe(true)
     expect(isFrameMessage(frameMessage({ type: 'link', href: '/orders/42', time: 1 }))).toBe(true)
     expect(isFrameMessage({ source: 'melzin-frame', type: 'link', href: 1, time: 1 })).toBe(false)
     expect(isFrameMessage(frameMessage({ type: 'warning', message: 'w' }))).toBe(true)
@@ -267,6 +299,12 @@ describe('frame protocol', () => {
       { type: 'ready', title: 'x' },
       { source: 'webpack', type: 'ready', title: 'x' },
       { source: FRAME_SOURCE, type: 'event', name: 'x' },
+      // A payload is an object of string, number or boolean fields, as the runtime builds it.
+      { source: FRAME_SOURCE, type: 'event', name: 'x', time: 1, payload: 'pizza' },
+      { source: FRAME_SOURCE, type: 'event', name: 'x', time: 1, payload: null },
+      { source: FRAME_SOURCE, type: 'event', name: 'x', time: 1, payload: ['pizza'] },
+      { source: FRAME_SOURCE, type: 'event', name: 'x', time: 1, payload: { option: { id: 'pizza' } } },
+      { source: FRAME_SOURCE, type: 'event', name: 'x', time: 1, payload: { optionId: null } },
       { source: FRAME_SOURCE, type: 'warning', message: 'x', update: 'yes' },
       { source: FRAME_SOURCE, type: 'nope' },
       setDataMessage({}),
