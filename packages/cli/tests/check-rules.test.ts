@@ -242,7 +242,7 @@ const errors: Case[] = [
   {
     file: 'if-operator.mel.html',
     severity: 'error',
-    message: "m-if: '>' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes",
+    message: "m-if: '>' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasCount",
     at: pos('if-operator.mel.html', '> 0'),
   },
   {

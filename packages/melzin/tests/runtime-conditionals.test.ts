@@ -221,7 +221,7 @@ describe('warnings', () => {
     expect(byId('c').style.display).toBe('none')
     expect(warnings).toEqual([
       `<p m-if="verifed">: unknown field 'verifed' (did you mean 'verified'?); treated as false`,
-      `<p m-show="unread > 0">: '>' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes (at column 8); treated as false`,
+      `<p m-show="unread > 0">: '>' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasUnread (at column 8); treated as false`,
     ])
   })
 

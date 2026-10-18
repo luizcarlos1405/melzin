@@ -162,23 +162,53 @@ describe('parseConditionDirective', () => {
     expect(parseConditionDirective('m-else-if', "!emit('x')")).toMatchObject({ ok: false, offset: 1 })
   })
 
-  const operators: [string, string, number][] = [
-    ['count > 0', '>', 6],
-    ['count >= 1', '>=', 6],
-    ['a && b', '&&', 2],
-    ['a||b', '||', 1],
-    ["status === 'paid'", '===', 7],
-    ['a != b', '!=', 2],
-    ['a !== b', '!==', 2],
-    ["ok ? 'a' : 'b'", '?', 3],
-    ['-count', '-', 0],
-    ['count + 1', '+', 6],
+  // [value, operator, offset, the boolean field the message names (from what is compared)]
+  const operators: [string, string, number, string | undefined][] = [
+    ['count > 0', '>', 6, 'hasCount'],
+    ['count >= 1', '>=', 6, 'hasCount'],
+    ['user.age >= 18', '>=', 9, 'hasAge'],
+    ['a && b', '&&', 2, undefined],
+    ['a||b', '||', 1, undefined],
+    ["status === 'paid'", '===', 7, 'isPaid'],
+    ['status != "draft"', '!=', 7, 'isDraft'],
+    ['a != b', '!=', 2, 'hasA'],
+    ['a !== b', '!==', 2, 'hasA'],
+    ["ok ? 'a' : 'b'", '?', 3, undefined],
+    ['-count', '-', 0, undefined],
+    ['count + 1', '+', 6, undefined],
+    ['members.length > 3', '>', 15, 'hasMembers'],
+    ['members.length > 0 && open', '>', 15, 'hasMembers'],
   ]
-  for (const [source, operator, offset] of operators) {
+  for (const [source, operator, offset, name] of operators) {
     test(`operators get one message that names the workaround: ${JSON.stringify(source)}`, () => {
       expect(parseConditionDirective('m-if', source)).toEqual({
         ok: false,
-        message: `'${operator}' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes`,
+        message: `'${operator}' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field${name === undefined ? '' : ` such as ${name}`}`,
+        offset,
+      })
+    })
+  }
+
+  // A count already holds while its list has items (D34), so comparing it with 0 or 1 gets the count itself.
+  const counts: [string, string, number, string][] = [
+    ['members.length > 0', '>', 15, 'members.length'],
+    ['members.length != 0', '!=', 15, 'members.length'],
+    ['members.length !== 0', '!==', 15, 'members.length'],
+    ['members.length >= 1', '>=', 15, 'members.length'],
+    ['poll.options.length>0', '>', 19, 'poll.options.length'],
+    ['members.length === 0', '===', 15, '!members.length'],
+    ['members.length == 0', '==', 15, '!members.length'],
+    ['members.length < 1', '<', 15, '!members.length'],
+    ['members.length <= 0', '<=', 15, '!members.length'],
+  ]
+  for (const [source, operator, offset, condition] of counts) {
+    test(`a count compared with 0 or 1 gets the count: ${JSON.stringify(source)}`, () => {
+      const why = condition.startsWith('!')
+        ? `${condition} holds while the list is empty`
+        : 'a count already holds while the list has items'
+      expect(parseConditionDirective('m-show', source)).toEqual({
+        ok: false,
+        message: `'${operator}' isn't supported yet, and ${why}: write m-show="${condition}"`,
         offset,
       })
     })
@@ -317,7 +347,7 @@ describe('positional paths', () => {
   test("conditions still name the operator for ':'", () => {
     expect(parseConditionDirective('m-if', 'a: b')).toEqual({
       ok: false,
-      message: "':' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes",
+      message: "':' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field",
       offset: 1,
     })
   })
@@ -362,6 +392,16 @@ describe('parseForDirective', () => {
     ['m in members.', "expected a name after '.', found end of value", 13],
     ['m in !members', "expected a list after 'in', as in m-for=\"member in members\", found '!'", 5],
     ['m in a + b', shaped, 7],
+    // Only an operator after the list starts a filter; any other stray character is named where it is.
+    ['member in members\u00a0', 'unexpected character U+00A0 (no-break space)', 17],
+    ['member in members\u200b', 'unexpected character U+200B (zero-width space)', 17],
+    ['member in mem\u200bbers', 'unexpected character U+200B (zero-width space)', 13],
+    ['member in m\u00e9mbers', "unexpected character '\u00e9'", 11],
+    ['tag in t\u00e4gs', "unexpected character '\u00e4'", 8],
+    ['member in members;', "unexpected character ';'", 17],
+    ['member in members"', 'unterminated string', 17],
+    ['member in members\\', "unexpected character '\\'", 17],
+    ['member in members => x', shaped, 18],
   ]
   for (const [source, message, offset] of errors) {
     test(`error: ${JSON.stringify(source)}`, () => {

@@ -453,6 +453,53 @@ function operatorAt(source: string, offset: number): { text: string; start: numb
   return { text: source.slice(start, end), start }
 }
 
+/** The path a source is, optionally negated (`!members.length`), or undefined when it's anything else. */
+function wholePath(source: string): { segments: string[]; negated: boolean } | undefined {
+  const tokens = lexPrefix(source)
+  if (tokens.at(-1)?.kind !== 'eof') return undefined
+  const negated = tokens[0]?.kind === '!'
+  const segments: string[] = []
+  for (let i = negated ? 1 : 0; ; i += 2) {
+    const token = tokens[i]!
+    if (token.kind !== 'word' || !isIdent(token.value)) return undefined
+    segments.push(token.value)
+    if (tokens[i + 1]?.kind === 'eof') return { segments, negated }
+    if (tokens[i + 1]?.kind !== '.') return undefined
+  }
+}
+
+// Comparisons of a count that a count alone already says (D34): it holds while the list has items, and
+// with ! while the list is empty.
+const COUNT_HAS_ITEMS = new Set(['> 0', '!= 0', '!== 0', '>= 1'])
+const COUNT_EMPTY = new Set(['== 0', '=== 0', '< 1', '<= 0'])
+
+function capitalize(name: string): string {
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`
+}
+
+/** Why a condition can't use an operator, with the condition to write instead when there's one. */
+function operatorMessage(directive: string, value: string, operator: { text: string; start: number }): string {
+  const unsupported = `'${operator.text}' isn't supported yet`
+  const left = wholePath(value.slice(0, operator.start))
+  const right = value.slice(operator.start + operator.text.length).trim()
+  const comparison = /^[=!<>]+$/.test(operator.text)
+  if (comparison && left !== undefined && !left.negated && left.segments.length >= 2 && left.segments.at(-1) === 'length') {
+    const count = left.segments.join('.')
+    const compared = `${operator.text} ${right}`
+    if (COUNT_HAS_ITEMS.has(compared)) return `${unsupported}, and a count already holds while the list has items: write ${directive}="${count}"`
+    if (COUNT_EMPTY.has(compared)) return `${unsupported}, and !${count} holds while the list is empty: write ${directive}="!${count}"`
+  }
+  // A name for the boolean, from what the condition compares: `isPaid` for status === 'paid', `hasUnread`
+  // for unread > 0, `hasMembers` for members.length > 3.
+  let name: string | undefined
+  if (comparison && left !== undefined) {
+    const literal = /^(?:'([A-Za-z_]\w*)'|"([A-Za-z_]\w*)")$/.exec(right)
+    const segments = left.segments.at(-1) === 'length' && left.segments.length >= 2 ? left.segments.slice(0, -1) : left.segments
+    name = literal !== null && operator.text.includes('=') ? `is${capitalize(literal[1] ?? literal[2]!)}` : `has${capitalize(segments.at(-1)!)}`
+  }
+  return `${unsupported}: a condition is a path, optionally negated with !, so have the host send a boolean field${name === undefined ? '' : ` such as ${name}`}`
+}
+
 /**
  * `m-if="!user.bio"` → `{ path: ['user', 'bio'], negated: true }`. `directive` names the attribute in
  * messages (m-show, m-if or m-else-if).
@@ -462,11 +509,7 @@ export function parseConditionDirective(directive: string, value: string): Condi
   if (!result.ok) {
     const operator = operatorAt(value, result.offset)
     if (operator === undefined) return result
-    return {
-      ok: false,
-      message: `'${operator.text}' isn't supported yet: a condition is a path, optionally negated with !, so have the host send a boolean field such as hasVotes`,
-      offset: operator.start,
-    }
+    return { ok: false, message: operatorMessage(directive, value, operator), offset: operator.start }
   }
   const { expr } = result
   const operand = expr.kind === 'not' ? expr.operand : expr
@@ -524,7 +567,7 @@ export function parseClickDirective(value: string): ClickDirectiveResult {
  * of an outer row's item (`option in poll.options`); whether it's a list is resolveList's to say.
  */
 export function parseForDirective(value: string): ForDirectiveResult {
-  // A character the tokenizer stops at ('|', '=>') after a whole loop starts a filter or an expression
+  // An operator the tokenizer stops at ('|', '=>') after a whole loop starts a filter or an expression
   // after the list: the tokens before it are parsed first, so that case gets the message for it.
   let tokens: Token[]
   let lexError: ExprSyntaxError | undefined
@@ -537,7 +580,11 @@ export function parseForDirective(value: string): ForDirectiveResult {
   }
   try {
     const loop = new Parser(tokens).loop()
-    if (lexError !== undefined) return { ok: false, message: SHAPED_LIST_MESSAGE, offset: lexError.offset }
+    // Only an operator starts a filter or an expression; any other character is a stray one to name.
+    if (lexError !== undefined) {
+      const message = operatorAt(value, lexError.offset) === undefined ? lexError.message : SHAPED_LIST_MESSAGE
+      return { ok: false, message, offset: lexError.offset }
+    }
     return { ok: true, alias: loop.alias, aliasStart: loop.aliasStart, path: loop.source.segments, pathStart: loop.source.start }
   } catch (error) {
     if (!(error instanceof ExprSyntaxError)) throw error
