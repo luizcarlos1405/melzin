@@ -470,7 +470,7 @@ describe('lists and routes', () => {
       two: linked([{ handle: 'ana', url: '/u/ana' }, { handle: 'bo', url: ' JavaScript:alert(1)' }, { handle: 'cy', url: 'data:text/html,x' }]),
     }
     const source = page(BODY, LINKED, snapshots)
-    const expected = [
+    const expected: Diagnostic[] = [
       { ...at(source, '"url": " JavaScript'), severity: 'error', message: `snapshots["two"].data.members[1].url: javascript: URLs aren't allowed in links; the link has no href` },
       { ...at(source, '"url": "data:'), severity: 'error', message: `snapshots["two"].data.members[2].url: data: URLs aren't allowed in links; the link has no href` },
     ]
