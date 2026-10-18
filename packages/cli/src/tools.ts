@@ -4,7 +4,10 @@
 export { buildCss, type BuildCssOptions } from './css.ts'
 export {
   checkFiles,
+  checkRoutesSource,
   checkSource,
+  linkFields,
+  loadRouteContext,
   formatDiagnostic,
   formatSummary,
   loadViewFile,
@@ -14,7 +17,9 @@ export {
   type Diagnostic,
   type FileCheckResult,
   type LoadedView,
+  type RouteContext,
+  type RoutesCheck,
   type Severity,
 } from './check.ts'
 export { VIEW_FILE_HEADERS, resolveProject, resolveViewFile, type Project, type ProjectOptions } from './project.ts'
-export { generateTypes, typesPathFor } from './types.ts'
+export { generateRouteTypes, generateTypes, typesPathFor } from './types.ts'

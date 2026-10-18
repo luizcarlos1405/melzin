@@ -2,7 +2,7 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
-import { VIEW_FILE_SUFFIX } from 'melzin/core'
+import { ROUTES_FILE, VIEW_FILE_SUFFIX } from 'melzin/core'
 
 export const DEFAULT_VIEWS_DIR = 'views'
 export const DEFAULT_THEME_FILE = 'theme.css'
@@ -23,6 +23,8 @@ export type Project = {
   viewsDir: string
   /** Absolute theme file path (check `existsSync` before reading). */
   themeFile: string
+  /** Absolute path of the route table, routes.json at the root (check `existsSync` before reading). */
+  routesFile: string
   /**
    * Absolute paths of the `*.mel.html` files directly inside viewsDir, sorted by name. Dotfiles
    * (such as an editor's `.#name.mel.html` lock file) and entries that can't be read are skipped.
@@ -38,6 +40,7 @@ export function resolveProject(options: ProjectOptions = {}): Project {
     root,
     viewsDir,
     themeFile,
+    routesFile: join(root, ROUTES_FILE),
     listViews() {
       if (!existsSync(viewsDir) || !statSync(viewsDir).isDirectory()) return []
       return readdirSync(viewsDir)

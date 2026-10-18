@@ -11,12 +11,12 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   check: {
     run: async (args) => (await import('./check.ts')).runCheck(args),
     usage: 'melzin check [files...] [--views dir]',
-    summary: 'check view files (default: every *.mel.html in the views dir)',
+    summary: 'check view files and routes.json (default: every *.mel.html in the views dir, and routes.json)',
   },
   types: {
     run: async (args) => (await import('./types.ts')).runTypes(args),
-    usage: 'melzin types <files...>',
-    summary: 'write <name>.types.ts (Data and Handlers) next to each view',
+    usage: 'melzin types <files...> [--views dir]',
+    summary: 'write <name>.types.ts (Data and Handlers) next to each view, or routes.types.ts for routes.json',
   },
   shell: {
     run: async (args) => (await import('./shell.ts')).runShell(args),

@@ -4,7 +4,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { basename, relative, resolve } from 'node:path'
+import { basename, join, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { parse, type DefaultTreeAdapterTypes } from 'parse5'
 import {
@@ -14,9 +14,14 @@ import {
   type DataBlockType,
   ELSE_DIRECTIVE,
   ELSE_IF_DIRECTIVE,
+  type FieldSchema,
+  HREF_DIRECTIVE,
   IF_DIRECTIVE,
   type Issue,
   type MelzinSchema,
+  ROUTES_FILE,
+  type RouteRef,
+  type RouteTable,
   SCHEMA_BLOCK_TYPE,
   SHOW_DIRECTIVE,
   SNAPSHOTS_BLOCK_TYPE,
@@ -28,22 +33,30 @@ import {
   classifyAttribute,
   conditionHolds,
   dataBlockType,
+  describeRouteRef,
   elementProblem,
+  findRoute,
   isInterElementWhitespace,
   joinPath,
   leafPaths,
+  matchRoute,
   parseClickDirective,
   parseConditionDirective,
   parseExpression,
+  parseHrefDirective,
+  parseRouteRef,
   parseSnapshots,
   parseTextDirective,
   resolveField,
   resolvePath,
+  routesForView,
   suggest,
+  validateRouteTable,
   validateSchema,
+  valueAt,
 } from 'melzin/core'
 import { UsageError, resolveProject } from './project.ts'
-import { generateTypes, typesPathFor } from './typegen.ts'
+import { generateRouteTypes, generateTypes, routeTypesPathFor, typesPathFor, viewTypesImport } from './typegen.ts'
 
 type Element = DefaultTreeAdapterTypes.Element
 type ChildNode = DefaultTreeAdapterTypes.ChildNode
@@ -62,7 +75,20 @@ export type CheckResult = { files: FileCheckResult[]; errorCount: number; warnin
 export type CheckOptions = {
   /** Base for relative paths in input and output; defaults to process.cwd(). */
   cwd?: string
+  /**
+   * The project's route table, for the checks between views and routes. Defaults to the routes.json
+   * in cwd; null skips those checks.
+   */
+  routes?: RouteContext | null
+  /** The views directory, relative to cwd (default `views`): routes.json's views must be in it. */
+  viewsDir?: string
 }
+
+/**
+ * The project's route table as views are checked against it. `table` is null when routes.json is
+ * missing (`present: false`) or has errors (then only its own check reports them).
+ */
+export type RouteContext = { present: boolean; table: RouteTable | null }
 
 export type LoadedView = {
   /** Text of `<title>` with whitespace collapsed (as in parseViewHtml), '' when missing. */
@@ -418,7 +444,10 @@ const MUSTACHE_RE = /\{\{[\s\S]*?\}\}/
 // Names JavaScript orders before every other key ("0", "10"), whatever the order in the file.
 const INDEX_NAME_RE = /^(0|[1-9][0-9]{0,8})$/
 
-function analyze(input: string, fileName: string | undefined): Analysis {
+/** What a view is checked against besides itself: the route table, and the view's name in it. */
+type ViewRouteContext = { routes: RouteContext; view: string }
+
+function analyze(input: string, fileName: string | undefined, context?: ViewRouteContext): Analysis {
   // Editors don't show a byte order mark as a character, so columns must not count it.
   const source = input.startsWith('\uFEFF') ? input.slice(1) : input
   const starts = lineStarts(source)
@@ -545,12 +574,14 @@ function analyze(input: string, fileName: string | undefined): Analysis {
   }
 
   let snapshots: Snapshot[] = []
+  let snapshotLocations = new Map<string, number>()
   const snapshotsBlock = blocks.get(SNAPSHOTS_BLOCK_TYPE)
   let snapshotsUnreadable = false
   let snapshotsValid = true
   if (snapshotsBlock !== undefined) {
     const parsed = parseBlock(snapshotsBlock, { rootPath: 'snapshots', bracketTopLevel: true })
     if (parsed.ok) {
+      snapshotLocations = parsed.locations
       const result = parseSnapshots(parsed.value, schema, { validateData: schemaState !== 'invalid' })
       snapshots = result.snapshots
       for (const { name } of snapshots) {
@@ -585,6 +616,21 @@ function analyze(input: string, fileName: string | undefined): Analysis {
   const emitted = new Set<string>()
   // A broken binding would also show up as "never used" or "nothing emits it"; skip those then.
   const broken = { text: false, click: false, condition: false }
+  // For the checks against the route table: what the view reads from the URL, and its static links.
+  const routeRefs: { ref: RouteRef; offset: number }[] = []
+  const staticLinks: { href: string; offset: number }[] = []
+
+  // A `route.*` path: an error when it's malformed, else recorded. Undefined for data paths.
+  const checkRouteRef = (directive: string, segments: readonly string[], offset: number): boolean | undefined => {
+    const ref = parseRouteRef(segments)
+    if (ref === undefined) return undefined
+    if (!ref.ok) {
+      error(offset, `${directive}: ${ref.message}`)
+      return false
+    }
+    routeRefs.push({ ref: ref.ref, offset })
+    return true
+  }
 
   // Where an attribute's value starts, and whether value offsets map 1:1 onto the source (they don't
   // when the value uses character references such as &quot;).
@@ -608,13 +654,15 @@ function analyze(input: string, fileName: string | undefined): Analysis {
     const { start, exact } = valueStart(element, TEXT_DIRECTIVE, value)
     const at = (offset: number): number => (exact ? start + offset : start)
     const parsed = parseTextDirective(value)
+    const expr = parseExpression(value)
+    const pathStart = expr.ok ? expr.expr.start : 0
     if (!parsed.ok) {
       broken.text = true
       error(at(parsed.offset), `${TEXT_DIRECTIVE}: ${parsed.message}`)
+    } else if (checkRouteRef(TEXT_DIRECTIVE, parsed.path, at(pathStart)) !== undefined) {
+      // the URL input: checked against the route table at the end
     } else if (checked !== null) {
       const resolved = resolvePath(checked, parsed.path)
-      const expr = parseExpression(value)
-      const pathStart = expr.ok ? expr.expr.start : 0
       if (resolved.ok) {
         used.add(parsed.path.join('.'))
       } else {
@@ -662,6 +710,47 @@ function analyze(input: string, fileName: string | undefined): Analysis {
     )
   }
 
+  // m-bind:href: a link's URL, from a link field (SPEC D23).
+  const checkHrefDirective = (element: Element, value: string): void => {
+    const { start, exact } = valueStart(element, HREF_DIRECTIVE, value)
+    const at = (offset: number): number => (exact ? start + offset : start)
+    if (element.tagName !== 'a' && element.tagName !== 'area') {
+      error(startOf(element) ?? 0, `${HREF_DIRECTIVE} only works on links (<a> and <area>)`)
+    }
+    if (getAttr(element, 'href') !== undefined) {
+      const offset = element.sourceCodeLocation?.attrs?.href?.startOffset ?? startOf(element) ?? 0
+      error(offset, `a link with ${HREF_DIRECTIVE} can't also have a static href; keep ${HREF_DIRECTIVE}`)
+    }
+    const parsed = parseHrefDirective(value)
+    if (!parsed.ok) {
+      broken.text = true
+      error(at(parsed.offset), `${HREF_DIRECTIVE}: ${parsed.message}`)
+      return
+    }
+    const expr = parseExpression(value)
+    const pathStart = at(expr.ok ? expr.expr.start : 0)
+    const name = parsed.path.join('.')
+    if (parseRouteRef(parsed.path) !== undefined) {
+      error(pathStart, `${HREF_DIRECTIVE} needs a link field; '${name}' isn't a URL (views never build URLs)`)
+      return
+    }
+    if (checked === null) return
+    const resolved = resolveField(checked, parsed.path)
+    if (!resolved.ok) {
+      broken.text = true
+      error(pathStart, `${HREF_DIRECTIVE}: ${resolved.message}${noSchemaHint}`)
+      return
+    }
+    if (resolved.field.type === 'object') {
+      error(pathStart, `${HREF_DIRECTIVE}: '${name}' is an object; it needs a link field`)
+      return
+    }
+    used.add(name)
+    if (resolved.field.type !== 'string' || resolved.field.route === undefined) {
+      error(pathStart, `${HREF_DIRECTIVE}: '${name}' isn't a link field; give it "route": "<route name>" in the schema and have the source fill it with href() (views never build URLs)`)
+    }
+  }
+
   // m-show, m-if and m-else-if: the condition, or undefined when it's broken or constant (already reported).
   const checkConditionDirective = (element: Element, directive: string, value: string): Condition | undefined => {
     const { start, exact } = valueStart(element, directive, value)
@@ -672,8 +761,10 @@ function analyze(input: string, fileName: string | undefined): Analysis {
       error(at(parsed.offset), `${directive}: ${parsed.message}`)
       return undefined
     }
-    if (checked === null) return undefined
     const { condition, pathStart } = parsed
+    const isRoute = checkRouteRef(directive, condition.path, at(pathStart))
+    if (isRoute !== undefined) return isRoute ? condition : undefined
+    if (checked === null) return undefined
     const resolved = resolveField(checked, condition.path)
     if (!resolved.ok) {
       broken.condition = true
@@ -726,12 +817,15 @@ function analyze(input: string, fileName: string | undefined): Analysis {
       if (kind.kind === 'plain') {
         const attribute = attributeProblem(name, attr.value)
         if (attribute !== undefined) error(at, attribute.message)
+        else if (name === 'href' && (node.tagName === 'a' || node.tagName === 'area')) staticLinks.push({ href: attr.value, offset: at })
       } else if (kind.kind === 'foreign' || kind.kind === 'unsupported') {
         error(at, kind.message)
       } else if (kind.name === TEXT_DIRECTIVE) {
         checkTextDirective(node, attr.value)
       } else if (kind.name === CLICK_DIRECTIVE) {
         checkClickDirective(node, attr.value)
+      } else if (kind.name === HREF_DIRECTIVE) {
+        checkHrefDirective(node, attr.value)
       } else if (kind.name === SHOW_DIRECTIVE) {
         show = { at, value: attr.value, condition: checkConditionDirective(node, SHOW_DIRECTIVE, attr.value) }
       } else if (role !== undefined) {
@@ -845,7 +939,7 @@ function analyze(input: string, fileName: string | undefined): Analysis {
       let result: Coverage
       if (conditional.tests !== undefined && (conditional.parent === undefined || parent !== undefined)) {
         const { tests } = conditional
-        const own = snapshots.map(({ data }) => tests.every(({ condition, holds }) => conditionHolds(checked, data, condition) === holds))
+        const own = snapshots.map(({ data, route }) => tests.every(({ condition, holds }) => conditionHolds(checked, data, condition, route) === holds))
         result = { own, shows: own.map((value, i) => value && (parent?.shows[i] ?? true)) }
       }
       coverage.set(conditional, result)
@@ -865,13 +959,193 @@ function analyze(input: string, fileName: string | undefined): Analysis {
     }
   }
 
+  if (context !== undefined) {
+    checkAgainstRoutes({
+      context,
+      schema: schemaState === 'valid' ? schema : null,
+      schemaAt: (path) => (schemaBlock === undefined ? 0 : schemaBlock.textStart + locate(schemaLocations, path, 0)),
+      snapshots: snapshotsValid && !snapshotsUnreadable ? snapshots : [],
+      snapshotAt: (path) => (snapshotsBlock === undefined ? 0 : snapshotsBlock.textStart + locate(snapshotLocations, path, 0)),
+      routeRefs,
+      staticLinks,
+      error,
+      warning,
+    })
+  }
+
   diagnostics.sort((a, b) => a.line - b.line || a.col - b.col)
   return { diagnostics, view: { title: title ?? '', schema, snapshots, issues } }
 }
 
-/** Checks one view's source. `fileName` (optional) is only used for the file name rule. */
-export function checkSource(source: string, fileName?: string): Diagnostic[] {
-  return analyze(source, fileName).diagnostics
+/** Every link field of a schema (SPEC D23): its path and the route it names. */
+export function linkFields(schema: MelzinSchema | null | undefined): { path: string[]; route: string }[] {
+  const links: { path: string[]; route: string }[] = []
+  const walk = (field: FieldSchema, path: string[]): void => {
+    if (field.type === 'object') {
+      for (const [name, child] of Object.entries(field.properties)) walk(child, [...path, name])
+    } else if (field.route !== undefined) {
+      links.push({ path, route: field.route })
+    }
+  }
+  if (schema?.data) walk(schema.data, [])
+  return links
+}
+
+/** `['user', 'url']` → `data.properties.user.properties.url`, the field's path in the schema block. */
+function schemaFieldPath(path: readonly string[]): string {
+  return path.reduce((result, name) => joinPath(joinPath(result, 'properties'), name), 'data')
+}
+
+type RouteCheck = {
+  context: ViewRouteContext
+  /** Null when the schema has errors (those are reported already). */
+  schema: MelzinSchema | null
+  schemaAt: (path: string) => number
+  /** Empty when the snapshots have errors. */
+  snapshots: Snapshot[]
+  snapshotAt: (path: string) => number
+  routeRefs: { ref: RouteRef; offset: number }[]
+  staticLinks: { href: string; offset: number }[]
+  error: (offset: number, message: string) => void
+  warning: (offset: number, message: string) => void
+}
+
+// A view against the route table (SPEC D21–D27): what it reads from the URL, its link fields and the
+// URLs in its snapshots, and its static links.
+function checkAgainstRoutes(check: RouteCheck): void {
+  const { context, schema, snapshots, error, warning } = check
+  const { present, table } = context.routes
+  const shownBy = table === null ? [] : routesForView(table, context.view)
+
+  for (const { ref, offset } of check.routeRefs) {
+    const name = describeRouteRef(ref)
+    if (!present) {
+      warning(offset, `${name} is always empty: the project has no ${ROUTES_FILE}, so no route shows this view`)
+      continue
+    }
+    if (table === null || ref.kind === 'name') continue
+    if (shownBy.length === 0) {
+      warning(offset, `${name} is always empty: no route in ${ROUTES_FILE} shows the view '${context.view}'`)
+      continue
+    }
+    for (const route of shownBy) {
+      if (ref.kind === 'param' && !route.params.includes(ref.name)) {
+        error(offset, `${name}: route '${route.name}' (${route.path}) has no :${ref.name} parameter${suggest(ref.name, route.params, (best) => `route.params.${best}`)}`)
+      } else if (ref.kind === 'query' && !route.query.includes(ref.name)) {
+        error(offset, `${name}: route '${route.name}' doesn't declare the query parameter '${ref.name}'; add "${ref.name}": {} to its query in ${ROUTES_FILE}`)
+      }
+    }
+  }
+
+  const links = linkFields(schema)
+  for (const link of links) {
+    const offset = check.schemaAt(joinPath(schemaFieldPath(link.path), 'route'))
+    const field = link.path.join('.')
+    if (!present) {
+      warning(offset, `link field '${field}' names route '${link.route}', but the project has no ${ROUTES_FILE}`)
+    } else if (table !== null && findRoute(table, link.route) === undefined) {
+      const hint = suggest(link.route, table.routes.map((route) => route.name))
+      error(offset, `link field '${field}' names route '${link.route}', which isn't in ${ROUTES_FILE}${hint}`)
+    }
+  }
+
+  if (table === null) return
+
+  // Snapshots show real URLs: each link field's value must be a URL of its route.
+  for (const snapshot of snapshots) {
+    const base = `snapshots[${JSON.stringify(snapshot.name)}]`
+    for (const link of links) {
+      const value = valueAt(snapshot.data, link.path)
+      const route = findRoute(table, link.route)
+      if (typeof value !== 'string' || route === undefined) continue
+      const match = value.startsWith('/') && !value.startsWith('//') ? matchRoute(table, value) : null
+      if (match?.route.name === link.route) continue
+      const path = link.path.reduce((result, name) => joinPath(result, name), `${base}.data`)
+      const other = match === null ? '' : `; it's a URL of route '${match.route.name}'`
+      error(check.snapshotAt(path), `${path}: '${value}' isn't a URL of route '${route.name}' (${route.path})${other}`)
+    }
+    if (shownBy.length === 0) continue
+    const params = snapshot.route?.params ?? {}
+    for (const name of Object.keys(params)) {
+      if (shownBy.some((route) => route.params.includes(name))) continue
+      warning(check.snapshotAt(`${base}.route.params.${name}`), `${base}.route.params.${name}: no route that shows this view has a :${name} parameter`)
+    }
+    const query = snapshot.route?.query ?? {}
+    for (const name of Object.keys(query)) {
+      if (shownBy.some((route) => route.query.includes(name))) continue
+      warning(check.snapshotAt(`${base}.route.query.${name}`), `${base}.route.query.${name}: no route that shows this view declares the query parameter '${name}'`)
+    }
+    // A parameter the view shows needs a value in every snapshot, or the snapshot shows a gap.
+    const missing = [...new Set(check.routeRefs.flatMap(({ ref }) => (ref.kind === 'param' && !Object.hasOwn(params, ref.name) ? [ref.name] : [])))]
+    if (missing.length > 0) {
+      const example = missing.map((name) => `"${name}": "..."`).join(', ')
+      warning(check.snapshotAt(base), `${base} has no ${missing.map((name) => `route.params.${name}`).join(', ')}, which the view shows; add "route": { "params": { ${example} } }`)
+    }
+  }
+
+  for (const { href, offset } of check.staticLinks) {
+    if (!href.startsWith('/') || href.startsWith('//')) continue
+    if (matchRoute(table, href) === null) {
+      warning(offset, `no route in ${ROUTES_FILE} matches '${href}', so following it loads another page instead of switching screens`)
+    }
+  }
+}
+
+/**
+ * Checks one view's source. `fileName` (optional) is used for the file name rule and, with `routes`,
+ * names the view in the route table.
+ */
+export function checkSource(source: string, fileName?: string, routes?: RouteContext): Diagnostic[] {
+  const view = fileName?.endsWith(VIEW_FILE_SUFFIX) ? basename(fileName).slice(0, -VIEW_FILE_SUFFIX.length) : undefined
+  return analyze(source, fileName, routes === undefined || view === undefined ? undefined : { routes, view }).diagnostics
+}
+
+/** The route table in `dir` (the project root) as views are checked against it. */
+export function loadRouteContext(dir: string): RouteContext {
+  const path = join(dir, ROUTES_FILE)
+  if (!existsSync(path)) return { present: false, table: null }
+  try {
+    return { present: true, table: validateRouteTable(JSON.parse(readFileSync(path, 'utf8'))).table }
+  } catch {
+    return { present: true, table: null }
+  }
+}
+
+/** Result of checking a route table's source: its diagnostics, and the table when it has no errors. */
+export type RoutesCheck = { diagnostics: Diagnostic[]; table: RouteTable | null }
+
+/**
+ * Checks a routes.json source (SPEC D21–D24): JSON, the table's rules, and that each route's view is
+ * in `views` (the view names in the views directory; null skips that check).
+ */
+export function checkRoutesSource(input: string, views: readonly string[] | null): RoutesCheck {
+  const source = input.startsWith('\uFEFF') ? input.slice(1) : input
+  const starts = lineStarts(source)
+  const diagnostics: Diagnostic[] = []
+  const report = (offset: number, message: string): void => {
+    let line = 0
+    while (line + 1 < starts.length && starts[line + 1]! <= offset) line++
+    diagnostics.push({ line: line + 1, col: offset - starts[line]! + 1, severity: 'error', message })
+  }
+  const parsed = parseJsonWithLocations(source)
+  if (!parsed.ok) {
+    report(parsed.offset, `invalid JSON: ${parsed.message}`)
+    return { diagnostics, table: null }
+  }
+  const { table, issues } = validateRouteTable(parsed.value)
+  for (const issue of issues) report(locate(parsed.locations, issue.path, 0), issue.path === undefined ? issue.message : `${issue.path}: ${issue.message}`)
+  // Views are checked from the raw table, so a missing view shows up even next to other problems.
+  const routes = (parsed.value as { routes?: unknown }).routes
+  if (views !== null && typeof routes === 'object' && routes !== null && !Array.isArray(routes)) {
+    for (const [name, route] of Object.entries(routes)) {
+      const view = (route as { view?: unknown } | null)?.view
+      if (typeof view !== 'string' || view.endsWith(VIEW_FILE_SUFFIX) || view.includes('/') || views.includes(view)) continue
+      const path = joinPath(joinPath('routes', name), 'view')
+      report(locate(parsed.locations, path, 0), `${path}: there's no view named '${view}' (${view}${VIEW_FILE_SUFFIX} in the views folder)${suggest(view, views)}`)
+    }
+  }
+  diagnostics.sort((a, b) => a.line - b.line || a.col - b.col)
+  return { diagnostics, table: diagnostics.length === 0 ? table : null }
 }
 
 /** Parses a view's source like loadViewFile (title, schema, snapshots and data block issues). */
@@ -895,9 +1169,25 @@ function staleTypes(absolute: string, file: string, analysis: Analysis): Diagnos
   }
 }
 
-/** Checks view files and returns their diagnostics; the CLI only formats this. */
+/** A warning when the generated `routes.types.ts` no longer matches the route table. */
+function staleRouteTypes(absolute: string, file: string, table: RouteTable | null, viewsDir: string): Diagnostic | undefined {
+  if (table === null) return undefined
+  const typesFile = routeTypesPathFor(absolute)
+  if (!existsSync(typesFile)) return undefined
+  const current = readFileSync(typesFile, 'utf8').replace(/\r\n/g, '\n')
+  const expected = generateRouteTypes(table, (view) => viewTypesImport(typesFile, viewsDir, view), basename(absolute))
+  if (current === expected) return undefined
+  return { line: 1, col: 1, severity: 'warning', message: `${basename(typesFile)} is out of date with the route table; run melzin types ${file}` }
+}
+
+/**
+ * Checks view files, and a routes.json among them, and returns their diagnostics; the CLI only
+ * formats this. Views are checked against the project's route table (see CheckOptions.routes).
+ */
 export async function checkFiles(paths: string[], options: CheckOptions = {}): Promise<CheckResult> {
   const cwd = resolve(options.cwd ?? process.cwd())
+  const routes = options.routes === undefined ? loadRouteContext(cwd) : options.routes
+  const project = resolveProject({ cwd, views: options.viewsDir })
   const files: FileCheckResult[] = []
   let errorCount = 0
   let warningCount = 0
@@ -906,10 +1196,20 @@ export async function checkFiles(paths: string[], options: CheckOptions = {}): P
     const file = relative(cwd, absolute) || absolute
     let diagnostics: Diagnostic[]
     try {
-      const analysis = analyze(await readFile(absolute, 'utf8'), absolute)
-      diagnostics = analysis.diagnostics
-      const stale = staleTypes(absolute, file, analysis)
-      if (stale !== undefined) diagnostics.unshift(stale)
+      const source = await readFile(absolute, 'utf8')
+      if (basename(absolute) === ROUTES_FILE) {
+        const views = project.listViews().map((view) => basename(view).slice(0, -VIEW_FILE_SUFFIX.length))
+        const result = checkRoutesSource(source, views)
+        diagnostics = result.diagnostics
+        const stale = staleRouteTypes(absolute, file, result.table, project.viewsDir)
+        if (stale !== undefined) diagnostics.unshift(stale)
+      } else {
+        const view = absolute.endsWith(VIEW_FILE_SUFFIX) ? basename(absolute).slice(0, -VIEW_FILE_SUFFIX.length) : undefined
+        const analysis = analyze(source, absolute, routes === null || view === undefined ? undefined : { routes, view })
+        diagnostics = analysis.diagnostics
+        const stale = staleTypes(absolute, file, analysis)
+        if (stale !== undefined) diagnostics.unshift(stale)
+      }
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code
       const reason = code === 'ENOENT' ? 'file not found' : code === 'EISDIR' ? 'is a directory' : (error as Error).message
@@ -953,7 +1253,10 @@ export function formatDiagnostics(result: CheckResult): string[] {
 
 const CHECK_USAGE = 'usage: melzin check [files...] [--views dir]'
 
-/** `melzin check [files...] [--views dir]`. Returns the exit code (1 when there are errors). */
+/**
+ * `melzin check [files...] [--views dir]`: the given files, or every view plus routes.json when
+ * there is one. Returns the exit code (1 when there are errors).
+ */
 export async function runCheck(args: string[]): Promise<number> {
   let parsed
   try {
@@ -970,9 +1273,9 @@ export async function runCheck(args: string[]): Promise<number> {
       console.error(`melzin check: no *${VIEW_FILE_SUFFIX} files in ${relative(process.cwd(), project.viewsDir) || '.'}`)
       return 1
     }
-    paths = views
+    paths = existsSync(join(project.root, ROUTES_FILE)) ? [...views, join(project.root, ROUTES_FILE)] : views
   }
-  const result = await checkFiles(paths)
+  const result = await checkFiles(paths, { viewsDir: values.views })
   for (const line of formatDiagnostics(result)) console.log(line)
   console.log(formatSummary(result))
   return result.errorCount > 0 ? 1 : 0
