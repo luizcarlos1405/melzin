@@ -56,21 +56,9 @@
   <script type="melzin/snapshots">
     {
       "signed out": {
-        "data": {
-          "membersUrl": "/",
-          "user": {
-            "name": "Bruno Lima",
-            "handle": "bruno",
-            "initials": "BL",
-            "verified": false,
-            "pronouns": "he/him",
-            "bio": "Backend engineer. Writes about queues, caches and the bugs that live between them.",
-            "location": "Lisbon, Portugal",
-            "joined": "Joined March 2021"
-          },
-          "stats": { "posts": "312", "followers": "2,481", "following": "190" }
-        },
-        "route": { "params": { "handle": "bruno" } }
+        "extends": "follows you",
+        "data": { "membersUrl": "/", "viewer": null },
+        "route": { "query": null }
       },
       "follows you": {
         "data": {
@@ -109,22 +97,12 @@
         "route": { "params": { "handle": "ana" }, "query": { "as": "bruno" } }
       },
       "your own profile": {
+        "extends": "following",
         "data": {
           "membersUrl": "/?as=ana",
-          "user": {
-            "name": "Ana Souza",
-            "handle": "ana",
-            "initials": "AS",
-            "verified": true,
-            "pronouns": "she/her",
-            "bio": "Designs tools for people who make things. Coffee, maps and long walks.",
-            "location": "Recife, Brazil",
-            "joined": "Joined June 2019"
-          },
-          "stats": { "posts": "1,204", "followers": "18.2K", "following": "312" },
-          "viewer": { "isSelf": true, "following": false, "followsYou": false }
+          "viewer": { "isSelf": true, "following": false }
         },
-        "route": { "params": { "handle": "ana" }, "query": { "as": "ana" } }
+        "route": { "query": { "as": "ana" } }
       },
       "empty profile": {
         "data": {
@@ -142,8 +120,8 @@
         "route": { "params": { "handle": "carla" }, "query": { "as": "ana" } }
       },
       "very long everything": {
+        "extends": "follows you",
         "data": {
-          "membersUrl": "/?as=ana",
           "user": {
             "name": "Maria Aparecida dos Santos Albuquerque de Oliveira e Vasconcelos Bragança",
             "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos",
@@ -154,13 +132,9 @@
             "location": "São José dos Campos, São Paulo, Brazil (and sometimes Lisbon)",
             "joined": "Joined December 2009"
           },
-          "stats": { "posts": "123.5M", "followers": "98.8M", "following": "1.2M" },
-          "viewer": { "isSelf": false, "following": false, "followsYou": true }
+          "stats": { "posts": "123.5M", "followers": "98.8M", "following": "1.2M" }
         },
-        "route": {
-          "params": { "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos" },
-          "query": { "as": "ana" }
-        }
+        "route": { "params": { "handle": "maria_aparecida_dos_santos_albuquerque_vasconcelos" } }
       }
     }
   </script>
