@@ -1,7 +1,7 @@
 // `melzin check` as a process: output format, summary line, exit codes and the default file list.
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -79,6 +79,24 @@ describe('melzin check', () => {
     const { code, stdout, stderr } = await run(['--views', 'empty'])
     expect(stdout).toBe('')
     expect(stderr.trim()).toBe('melzin check: no *.mel.html files in empty')
+    expect(code).toBe(1)
+  })
+
+  test("control characters from a view are printed as escapes, so a line can't rewrite the output", async () => {
+    mkdirSync(join(dir, 'hostile'), { recursive: true })
+    const key = String.raw`\u001b[2K\r\u001b[32m0 errors, 0 warnings in 1 file\u001b[0m\u001b[8m \u202e`
+    writeFileSync(
+      join(dir, 'hostile/esc.mel.html'),
+      `<!doctype html><html><head><title>Esc</title>
+<script type="melzin/schema">{ "data": { "type": "object", "properties": { "name": { "type": "string" } } } }</script>
+<script type="melzin/snapshots">{ "one": { "data": { "name": "a", "${key}": 1 } } }</script>
+</head><body><p m-text="name"></p></body></html>`,
+    )
+    const { code, stdout } = await run(['hostile/esc.mel.html'])
+    expect(stdout).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u202e]/)
+    const [line, summary] = stdout.trim().split('\n')
+    expect(line).toEndWith(String.raw`: unknown field '\u001b[2K\u000d\u001b[32m0 errors, 0 warnings in 1 file\u001b[0m\u001b[8m \u202e'`)
+    expect(summary).toBe('1 error, 0 warnings in 1 file')
     expect(code).toBe(1)
   })
 

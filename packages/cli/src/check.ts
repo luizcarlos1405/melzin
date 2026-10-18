@@ -1681,9 +1681,18 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
-/** `views/counter.mel.html:12:5: error: message` */
+// Control characters and bidirectional controls, which messages may quote from a view (a snapshot's
+// key, say): in a terminal or a CI log they could move the cursor, erase the line or reorder it.
+const UNPRINTABLE_RE = /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g
+
+/** `text` with the characters of UNPRINTABLE_RE written as `\u001b` escapes, so a line prints as one plain line. */
+function printable(text: string): string {
+  return text.replace(UNPRINTABLE_RE, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`)
+}
+
+/** `views/counter.mel.html:12:5: error: message`, with control characters escaped (see printable). */
 export function formatDiagnostic(file: string, diagnostic: Diagnostic): string {
-  return `${file}:${diagnostic.line}:${diagnostic.col}: ${diagnostic.severity}: ${diagnostic.message}`
+  return printable(`${file}:${diagnostic.line}:${diagnostic.col}: ${diagnostic.severity}: ${diagnostic.message}`)
 }
 
 /** `2 errors, 1 warning in 3 files` */
