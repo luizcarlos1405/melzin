@@ -212,8 +212,9 @@ view.destroy()       // removes the listeners and the view's elements
 - URL parameters such as `?view=counter&snapshot=zero&device=375x812&zoom=1` show a single frame, and
   `&chrome=0` hides the shell's own UI, so the AI can screenshot one state with any browser tool
   (SPEC §8). `<body>` gets `data-melzin-ready="true"` once every frame has finished loading, or
-  `"error"` when the view couldn't be loaded. Problems in the schema and snapshots blocks are shown
-  even with `chrome=0`.
+  `"error"` when the view couldn't be loaded (since the review in §18, also when the URL names a view,
+  route, snapshot or alternative the shell can't show, or a frame fails). Problems in the schema and
+  snapshots blocks are shown even with `chrome=0`.
 - Links and forms in a frame aren't followed; the event log records them.
 
 ## 6. Checker
@@ -567,7 +568,8 @@ conditions. `route` is reserved at the top of `data`. Snapshots may set
 ### Runtime
 
 - `mount` takes a `route` option, `view.setRoute(route)` replaces it, and `m-bind:href` sets or removes
-  `href` from a link field. `javascript:`, `vbscript:` and `data:` URLs are dropped with a warning.
+  `href` from a link field. `javascript:`, `vbscript:` and `data:` URLs are dropped with a warning
+  (since the review in §18, a data warning at the field's path, once per update).
 - `startApp(root, { routes, source, navigate?, viewUrl?, loadView?, onWarning? })` is the standalone
   host (§7 of SPEC). The URL picks the route, the route's view is fetched and mounted with the data
   from `source.<route>.load(route, { signal })`, and its events go to `source.<route>.on`. Handlers get
@@ -970,8 +972,9 @@ payload rules (`core/payload.ts`), so the runtime and the checker still agree (�
 
 - The frame passes each event's payload to the shell (`protocol.ts` accepts only an object of
   strings, numbers and booleans). The event log shows it as compact JSON on its own line under the
-  event name, `{"optionId":"pizza"}`, set as text. Past 80 characters it's cut, never inside an
-  emoji, with the whole JSON in its title.
+  event name, `{"optionId":"pizza"}`, set as text. Past 80 characters it's cut, with the whole JSON in
+  its title. The 80 are graphemes, what a reader sees as one character, and the cut falls between
+  two, so it never splits a flag, a family emoji, a skin tone or a letter from its accent.
 - The state editor already edited lists as JSON; keyed rows keep their elements through edits.
 - Checked by hand in headless Chromium: rows, nested lists and empty states, payloads in the log, cut
   and whole, and edits that reorder, change, add and remove items while the other rows keep their

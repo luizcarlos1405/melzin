@@ -302,9 +302,11 @@ payload is an object of named fields, each filled from a path:
   none is sent without. The checker matches every emit against the declaration: every required field
   is set, no field is unknown, and each value's path leads to a field of the same type (a link field
   counts as a string).
-- Values are paths: into the row's item through the alias (`option.id`), into the data (`pollId`) or
-  into the URL (`route.params.handle`). No literals, no `!`, no calls and no `.length`: have the host
-  send the value as data. `{ optionId }` is an error too; write `{ optionId: option.id }`.
+- Values are paths: into the row's item through the alias (`option.id`, or the alias alone in a list
+  of strings or numbers: `emit('pick', { tag: tag })`), into the data (`pollId`) or into the URL
+  (`route.params.handle`). No literals, no `!`, no calls and no `.length`: have the host send the
+  value as data. `{ optionId }` is an error too; write `{ optionId: option.id }`. The checker's
+  messages write the fix with the event's own fields and the row's alias.
 - A value whose path may be missing (an optional field on the way, or `route.query.<name>`) can only
   fill an optional field of the payload. A field with a default is always there. So are `route.name`
   and the route's parameters in an app (`startApp`, §12), or when the host passes `route` to `mount`
@@ -340,7 +342,10 @@ route it links to (§4).
 - In a row, bind a link field of the item: `m-bind:href="member.url"`. A list of links is a list of
   strings whose items name the route (§4): `<a m-for="link in related" m-bind:href="link">`.
 - While the field is missing, the link has no `href` at all. `javascript:`, `vbscript:` and `data:`
-  URLs never reach the link.
+  URLs never reach the link either. They're a data problem at the field's path,
+  `members[1].url: javascript: URLs aren't allowed in links; the link has no href`: the runtime warns
+  once per `mount` and `update`, with the other data warnings, and the checker reports it in snapshots
+  as an error.
 - Links to fixed pages need no field: write the URL, `<a href="/settings">`. The checker warns when
   such a link matches no route (§12).
 - Links stay real links: they open in a new tab, can be copied, and the app switches screens without
@@ -492,6 +497,8 @@ shows them. Names can be any text.
 - Every view with data fields needs snapshots. Make them hostile, not just pretty (P8): very long
   text, zero, huge numbers, every optional field missing. They are how you find where the layout
   breaks.
+- Inside snapshot or schema strings, write a closing script tag as `<\/script>`: a plain `</script>`
+  ends the block there, as in any HTML page. JSON reads `<\/script>` as `</script>`.
 - Cover every condition: each element behind `m-if`, `m-else-if`, `m-else` or `m-show` should show in
   at least one snapshot, or nobody sees its design. The checker names the condition that never holds.
   An element inside a row counts as shown when it shows in any row of any snapshot.
@@ -683,7 +690,8 @@ For lists and payloads, the checker also reports:
   item by position, a list schema without its key, and an emit whose payload doesn't match its event
 - errors for list data in snapshots: a missing or duplicate key, a `null` item, too few or too many
   items, at the item's position (`data.members[2].handle`), and each item's link field checked against
-  its route (`data.members[1].url`)
+  its route (`data.members[1].url`), where a `javascript:`, `vbscript:` or `data:` URL is an error
+  even without a `routes.json`
 - warnings when no snapshot shows a row of a list, or none shows it empty or with more than one item
   (§5), and for a static `id` inside a row
 - "never used" for item fields, named like `members[].name`. An `m-for` over a list or a `.length`
@@ -781,10 +789,11 @@ alone: `/frame?view=order&snapshot=typical` (the name or the file name), which s
 `data-melzin-ready` on `<html>`.
 
 Wait for the attribute to be present, not for a value: it is `"true"` once everything has loaded and
-`"error"` when something failed (a missing file, an invalid schema, an unknown snapshot), and the page
-then shows the error. With `chrome=0` the shell still shows notices about problems (a broken schema or
-snapshots block, a missing snapshot, an ignored URL parameter) above the frame, so a screenshot never
-looks fine by mistake.
+`"error"` when the page can't show what its URL asks for (an unknown view, route, snapshot or `alt`, a
+missing file, an invalid schema), and the page then shows the error. The main page and `/frame` agree.
+With `chrome=0` the shell still shows notices about problems (a broken schema or snapshots block, a
+missing snapshot, an ignored URL parameter) above the frame, so a screenshot never looks fine by
+mistake.
 
 A good loop: write the view, run `melzin check` until it's clean, screenshot every snapshot at phone
 and desktop sizes, fix what looks wrong, repeat.
@@ -819,6 +828,7 @@ and desktop sizes, fix what looks wrong, repeat.
 | `<li m-for="item in items" m-if="item.visible">` | the host filters the list; or the condition inside the row |
 | `m-for="item in items.slice(0, 3)"` | the host sends three items, and a `"moreLabel": "+12 more"` |
 | `m-if="items"` on a list | `m-if="items.length"`: a list holds even when it's empty |
+| `m-if="items.length > 0"`, `m-if="items.length === 0"` | `m-if="items.length"`, `m-if="!items.length"`: a count holds while the list has items |
 | `m-text="members[0].name"`, `m-text="members.name"` | rows with `m-for`; for one particular item, a field the host sends: `featured.name` |
 | fields `first`, `second`, `third` for repeated rows | one list and one row with `m-for`; the items in snapshots |
 | a list without an empty state | `m-if="items.length"` around it and an `m-else`, and a snapshot with `[]` |
