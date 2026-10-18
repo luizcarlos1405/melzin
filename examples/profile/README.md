@@ -62,8 +62,9 @@ tests/                    contract, API, view and app tests
   `"key": "handle"`, so an update keeps each member's card, and moves it when someone new sorts before
   them; the markup never names the key. The adapter sends everyone, sorted by handle, so the order is
   stable. A required list is never missing, only empty: the `<ul>` shows with `m-if="members.length"`,
-  and an `m-else` after it is the "No members yet" design. `melzin check` asks for snapshots of both
-  list states, so "one member" and "no members yet" sit next to the full page. Lists replace whole
+  and an `m-else` after it is the "No members yet" design. `melzin check` asks for a snapshot where the
+  list is empty and one with several members, so "no members yet" sits next to the full page; "one
+  member" shows the single-card layout too, which the checker doesn't ask for. Lists replace whole
   when a snapshot extends another (D36): "browsing as Ana" restates all three cards to change their
   links, and "one member" extends it with a one-item list.
 - **Navigation (D25).** Links between the pages switch screens without reloading, back and forward

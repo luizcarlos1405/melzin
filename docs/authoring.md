@@ -1072,8 +1072,8 @@ Bun.serve({
 })
 ```
 
-`examples/poll/` in this repository is a complete app built this way, with an API, a contract test and API
-tests.
+`examples/poll/` in this repository is a complete app built this way, with an API, and contract, view
+and API tests.
 
 ## 12. Routes, links and apps
 
