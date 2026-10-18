@@ -38,17 +38,25 @@ export type LoopExpr = { kind: 'loop'; alias: string; aliasStart: number; source
 /** `offset` is 0-based, into the directive value. */
 export type ParseError = { message: string; offset: number }
 
-export type ParseResult = { ok: true; expr: Expr } | { ok: false; message: string; offset: number }
+/** `fix` is there when the value is an emit whose payload is written in a form emit doesn't take. */
+export type ParseResult = { ok: true; expr: Expr } | { ok: false; message: string; offset: number; fix?: PayloadFix }
 
 export type TokenKind = 'word' | 'string' | '.' | '(' | ')' | ',' | '!' | '[' | ']' | '{' | '}' | ':' | 'eof'
 export type Token = { kind: TokenKind; value: string; start: number; end: number }
 
 class ExprSyntaxError extends Error {
   readonly offset: number
-  constructor(message: string, offset: number) {
+  readonly fix: PayloadFix | undefined
+  constructor(message: string, offset: number, fix?: PayloadFix) {
     super(message)
     this.offset = offset
+    this.fix = fix
   }
+}
+
+/** The error for a payload written in a form emit doesn't take: the fix from the value alone. */
+function payloadFixError(fix: PayloadFix, offset: number): ExprSyntaxError {
+  return new ExprSyntaxError(payloadFixText(fix, defaultPayloadFixFields(fix)), offset, fix)
 }
 
 const WHITESPACE = new Set([' ', '\t', '\n', '\r', '\f'])
@@ -66,14 +74,81 @@ const NO_INDEX_MESSAGE =
 const DESTRUCTURING_MESSAGE = 'name the item and read its fields: member in members, then member.name'
 const RANGE_MESSAGE = 'the number of rows comes from the data: put the items in snapshots'
 const SHAPED_LIST_MESSAGE = 'the host sends the list as it should show: filtered, sorted and cut to length'
-const PAYLOAD_LEAVES_MESSAGE = 'payload values are paths to strings, numbers or booleans for now, such as option.id'
+const PAYLOAD_LEAVES_MESSAGE = 'payload values are paths to strings, numbers or booleans for now; give each value a field of its own'
+const CALL_VALUE_MESSAGE = 'payload values are paths, not calls; have the host send the value as data'
 
-/** `emit('vote', option.id)`: a payload has named fields, so the fix names one. */
-function positionalPayloadMessage(callee: string, event: string, segments: readonly string[]): string {
-  const last = segments.at(-1)
-  const field = segments.length >= 2 ? `${segments.at(-2)}${last!.charAt(0).toUpperCase()}${last!.slice(1)}` : last
-  const example = field === undefined ? '{ optionId: option.id }' : `{ ${field}: ${segments.join('.')} }`
-  return `a payload is an object of named fields: ${callee}('${event}', ${example})`
+/**
+ * A payload written in a form emit doesn't take (D35), with what the value says about the fix, so a
+ * caller that knows the event's declared payload and the rows in scope can write the fix with their
+ * names (payloadFixMessage in payload.ts). The parse error's own message is the fix written from the
+ * value alone: payloadFixText with defaultPayloadFixFields.
+ *
+ * - `positional`: a value where the payload object goes, `emit('pick', member.handle)`; `path` is the
+ *   value's path when it is one.
+ * - `shorthand`: a field written without its value, `{ filter }`; `name` is the field.
+ * - `quoted`: a quoted field name, `{ 'id': x }`; `name` is what the quotes hold, and `path` the value's
+ *   path when one follows.
+ */
+export type PayloadFix = {
+  kind: 'positional' | 'shorthand' | 'quoted'
+  /** The function called (emit) and the event it names. */
+  callee: string
+  event: string
+  name?: string
+  path?: string[]
+}
+
+/** What examples show where the value names no field or no path. */
+export const FIELD_PLACEHOLDER = '<field>'
+export const PATH_PLACEHOLDER = '<path>'
+
+/** `{ a: x, b: y }`, or `{}`. */
+function formatObject(fields: readonly (readonly [string, string])[]): string {
+  return fields.length === 0 ? '{}' : `{ ${fields.map(([name, path]) => `${name}: ${path}`).join(', ')} }`
+}
+
+/** The message for a payload written in a form emit doesn't take, with the fields its fix shows: [name, path]. */
+export function payloadFixText(fix: PayloadFix, fields: readonly (readonly [string, string])[]): string {
+  const object = formatObject(fields)
+  if (fix.kind === 'positional') return `a payload is an object of named fields: ${fix.callee}('${fix.event}', ${object})`
+  if (fix.kind === 'shorthand') return `write the value's path too: ${object}`
+  return `write field names without quotes: ${object}`
+}
+
+function capitalize(name: string): string {
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`
+}
+
+/** A field name for a value's path, for examples: `member.handle` → `memberHandle`, `id` → `id`. */
+export function fieldNameFor(segments: readonly string[]): string {
+  return segments.length >= 2 ? `${segments.at(-2)}${capitalize(segments.at(-1)!)}` : (segments[0] ?? FIELD_PLACEHOLDER)
+}
+
+/** A field name from quoted text: `'optionId'` → `optionId`, `'option id'` → `optionId`; undefined when none comes out. */
+export function fieldNameFromText(text: string): string | undefined {
+  const name = text.split(/[^A-Za-z0-9_]+/).filter((word) => word !== '').map((word, i) => (i === 0 ? word : capitalize(word))).join('')
+  return isIdent(name) && name !== RESERVED_NAME ? name : undefined
+}
+
+/** The fields a PayloadFix's message shows from the value alone, with placeholders where it says nothing. */
+export function defaultPayloadFixFields(fix: PayloadFix): [string, string][] {
+  const path = fix.path === undefined || fix.path.length === 0 ? undefined : fix.path
+  if (fix.kind === 'positional') return [[path === undefined ? FIELD_PLACEHOLDER : fieldNameFor(path), path?.join('.') ?? PATH_PLACEHOLDER]]
+  // `{ filter }` means `{ filter: filter }` in JavaScript.
+  if (fix.kind === 'shorthand') return [[fix.name ?? FIELD_PLACEHOLDER, fix.name ?? PATH_PLACEHOLDER]]
+  return [[fieldNameFromText(fix.name ?? '') ?? FIELD_PLACEHOLDER, path?.join('.') ?? PATH_PLACEHOLDER]]
+}
+
+/** An argument as written, for examples: `'vote'`, `{ optionId: option.id }`. */
+function formatArgument(arg: StringLit | ObjectLit): string {
+  if (arg.kind === 'string') return arg.value.includes("'") ? JSON.stringify(arg.value) : `'${arg.value}'`
+  return formatObject(arg.fields.map((field) => [field.name, field.value.segments.join('.')] as const))
+}
+
+/** emit with more than one payload: the fix puts the fields of every payload object in one. */
+function extraArgumentMessage(callee: string, event: string, payloads: readonly (StringLit | ObjectLit)[]): string {
+  const fields = payloads.flatMap((arg) => (arg.kind === 'object' ? arg.fields.map((field) => [field.name, field.value.segments.join('.')] as const) : []))
+  return `${callee} takes the event name and one payload object: ${callee}('${event}', ${formatObject(fields)})`
 }
 
 // Words are lexed loosely (letters, digits, _ and $) so the parser can say "'1x' isn't a valid name"
@@ -258,9 +333,13 @@ class Parser {
     if (opening.kind === '{') throw new ExprSyntaxError(`the name comes first: ${callee.value}('name', { ... })`, opening.start)
     if (opening.kind !== ')') {
       for (;;) {
-        args.push(args.length === 0 ? this.string() : this.argument(callee.value, args[0]!, args.length))
-        if (this.peek().kind !== ',') break
+        args.push(args.length === 0 ? this.string() : this.argument(callee.value, args))
+        const comma = this.peek()
+        if (comma.kind !== ',') break
         this.next()
+        if (this.peek().kind === ')') {
+          throw new ExprSyntaxError(`remove the trailing comma: ${callee.value}(${args.map(formatArgument).join(', ')})`, comma.start)
+        }
       }
     }
     const close = this.peek()
@@ -270,24 +349,34 @@ class Parser {
   }
 
   // An argument after the first: a string, or an object of named paths (an event's payload, D35). A
-  // bare path or literal second is a positional payload, which gets the named form as the fix.
-  private argument(callee: string, first: StringLit | ObjectLit, index: number): StringLit | ObjectLit {
+  // bare path, literal or list second is a positional payload, which gets the named form as the fix.
+  private argument(callee: string, args: readonly (StringLit | ObjectLit)[]): StringLit | ObjectLit {
     const token = this.peek()
-    if (token.kind === '{') return this.object()
-    if (token.kind !== 'word' && token.kind !== '!') return this.string()
-    if (index > 1) throw new ExprSyntaxError(EXTRA_ARGUMENT_MESSAGE, token.start)
-    const name = first.kind === 'string' ? first.value : 'name'
-    const segments: string[] = []
-    if (token.kind === 'word' && isIdent(token.value) && !LITERAL_WORDS.has(token.value)) {
-      segments.push(token.value)
-      for (let i = 1; this.peek(i).kind === '.' && this.peek(i + 1).kind === 'word' && isIdent(this.peek(i + 1).value); i += 2) {
-        segments.push(this.peek(i + 1).value)
-      }
+    const first = args[0]!
+    const event = first.kind === 'string' ? first.value : 'name'
+    if (token.kind === '{') return this.object(callee, event)
+    if (token.kind === 'string') return this.string()
+    const payload = args[1]
+    if (payload?.kind === 'object') throw new ExprSyntaxError(extraArgumentMessage(callee, event, args.slice(1)), token.start)
+    if (payload !== undefined || token.kind === 'word' || token.kind === '!' || token.kind === '[') {
+      const path = payload === undefined ? this.pathAt(0) : []
+      throw payloadFixError({ kind: 'positional', callee, event, ...(path.length > 0 ? { path } : {}) }, (payload ?? token).start)
     }
-    throw new ExprSyntaxError(positionalPayloadMessage(callee, name, segments), token.start)
+    throw new ExprSyntaxError(`expected a payload object, found ${describe(token)}`, token.start)
   }
 
-  private object(): ObjectLit {
+  /** The path that starts `ahead` tokens on (`member.handle`), without consuming it; [] when none does. */
+  private pathAt(ahead: number): string[] {
+    const first = this.peek(ahead)
+    if (first.kind !== 'word' || !isIdent(first.value) || LITERAL_WORDS.has(first.value)) return []
+    const segments = [first.value]
+    for (let i = ahead + 1; this.peek(i).kind === '.' && this.peek(i + 1).kind === 'word' && isIdent(this.peek(i + 1).value); i += 2) {
+      segments.push(this.peek(i + 1).value)
+    }
+    return segments
+  }
+
+  private object(callee: string, event: string): ObjectLit {
     const open = this.next() // {
     const fields: ObjectField[] = []
     for (;;) {
@@ -295,17 +384,16 @@ class Parser {
       if (token.kind === '}') break
       if (token.kind === 'eof') throw new ExprSyntaxError("expected '}' to close the payload, found end of value", token.start)
       if (token.kind === 'string') {
-        throw new ExprSyntaxError(`write field names without quotes: { ${isIdent(token.value) ? token.value : 'optionId'}: option.id }`, token.start)
+        const path = this.peek(1).kind === ':' ? this.pathAt(2) : []
+        throw payloadFixError({ kind: 'quoted', callee, event, name: token.value, ...(path.length > 0 ? { path } : {}) }, token.start)
       }
-      const name = this.ident('a field name, such as optionId')
+      const name = this.ident('a field name')
       if (name.value === RESERVED_NAME) throw new ExprSyntaxError(`'${RESERVED_NAME}' isn't a valid field name (it's reserved)`, name.start)
       if (fields.some((field) => field.name === name.value)) {
         throw new ExprSyntaxError(`'${name.value}' appears twice in the payload; keep one`, name.start)
       }
       const colon = this.peek()
-      if (colon.kind === ',' || colon.kind === '}') {
-        throw new ExprSyntaxError(`write the value's path too, such as { ${name.value}: option.id }`, colon.start)
-      }
+      if (colon.kind === ',' || colon.kind === '}') throw payloadFixError({ kind: 'shorthand', callee, event, name: name.value }, colon.start)
       if (colon.kind !== ':') throw new ExprSyntaxError(`expected ':' after '${name.value}', found ${describe(colon)}`, colon.start)
       this.next()
       fields.push({ name: name.value, nameStart: name.start, value: this.payloadValue() })
@@ -328,9 +416,10 @@ class Parser {
     if (literal) throw new ExprSyntaxError('payload values are paths for now; have the host send the value as data', token.start)
     if (token.kind === '!') throw new ExprSyntaxError("payload values are paths; '!' only works in conditions (m-if, m-show)", token.start)
     if (token.kind === '{' || token.kind === '[') throw new ExprSyntaxError(PAYLOAD_LEAVES_MESSAGE, token.start)
-    const first = this.ident('a path, such as option.id')
-    if (this.peek().kind === '(') throw new ExprSyntaxError('payload values are paths, not calls', this.peek().start)
-    return this.path(first)
+    // A call after a path too: option.label.trim().
+    const path = this.path(this.ident("the value's path"))
+    if (this.peek().kind === '(') throw new ExprSyntaxError(CALL_VALUE_MESSAGE, this.peek().start)
+    return path
   }
 
   /** `member in members`, the value of m-for; every other form gets the message that names its fix. */
@@ -387,8 +476,9 @@ export function parseExpression(source: string): ParseResult {
   try {
     return { ok: true, expr: new Parser(tokenize(source)).parse() }
   } catch (error) {
-    if (error instanceof ExprSyntaxError) return { ok: false, message: error.message, offset: error.offset }
-    throw error
+    if (!(error instanceof ExprSyntaxError)) throw error
+    const failure = { ok: false as const, message: error.message, offset: error.offset }
+    return error.fix === undefined ? failure : { ...failure, fix: error.fix }
   }
 }
 
@@ -400,10 +490,13 @@ export type TextDirectiveResult = { ok: true; path: string[] } | { ok: false; me
 export type PayloadField = { name: string; nameStart: number; path: string[]; pathStart: number; pathEnd: number }
 /** An emit's payload object: its fields in order, and where the object starts and ends. */
 export type EmitPayload = { fields: PayloadField[]; start: number; end: number }
-/** `payload` is there only when the emit passes one: `emit('vote', { optionId: option.id })`. */
+/**
+ * `payload` is there only when the emit passes one: `emit('vote', { optionId: option.id })`. A failure
+ * has `fix` when the payload is written in a form emit doesn't take (see PayloadFix).
+ */
 export type ClickDirectiveResult =
   | { ok: true; event: string; payload?: EmitPayload }
-  | { ok: false; message: string; offset: number }
+  | { ok: false; message: string; offset: number; fix?: PayloadFix }
 /** `m-for="member in members"`: the alias, the list's path, and the offset of each in the value. */
 export type ForDirectiveResult =
   | { ok: true; alias: string; aliasStart: number; path: string[]; pathStart: number }
@@ -473,10 +566,6 @@ function wholePath(source: string): { segments: string[]; negated: boolean } | u
 const COUNT_HAS_ITEMS = new Set(['> 0', '!= 0', '!== 0', '>= 1'])
 const COUNT_EMPTY = new Set(['== 0', '=== 0', '< 1', '<= 0'])
 
-function capitalize(name: string): string {
-  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`
-}
-
 /** Why a condition can't use an operator, with the condition to write instead when there's one. */
 function operatorMessage(directive: string, value: string, operator: { text: string; start: number }): string {
   const unsupported = `'${operator.text}' isn't supported yet`
@@ -519,8 +608,6 @@ export function parseConditionDirective(directive: string, value: string): Condi
   return { ok: true, condition: { path: operand.segments, negated: expr.kind === 'not' }, pathStart: operand.start }
 }
 
-const EXTRA_ARGUMENT_MESSAGE = "emit takes the event name and at most one payload object: emit('vote', { optionId: option.id })"
-
 /**
  * `m-on:click="emit('increment')"` → `'increment'`; `emit('vote', { optionId: option.id })` also gives
  * the payload's fields (D35).
@@ -548,9 +635,10 @@ export function parseClickDirective(value: string): ClickDirectiveResult {
     }
   }
   if (payload?.kind === 'string') {
-    return { ok: false, message: positionalPayloadMessage(EMIT_FUNCTION, arg.value, []), offset: payload.start }
+    const fix: PayloadFix = { kind: 'positional', callee: EMIT_FUNCTION, event: arg.value }
+    return { ok: false, message: payloadFixText(fix, defaultPayloadFixFields(fix)), offset: payload.start, fix }
   }
-  if (extra !== undefined) return { ok: false, message: EXTRA_ARGUMENT_MESSAGE, offset: extra.start }
+  if (extra !== undefined) return { ok: false, message: extraArgumentMessage(EMIT_FUNCTION, arg.value, expr.args.slice(1)), offset: extra.start }
   if (payload === undefined) return { ok: true, event: arg.value }
   const fields = payload.fields.map(({ name, nameStart, value: path }) => ({
     name,

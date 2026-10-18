@@ -37,6 +37,7 @@ import {
   parseHrefDirective,
   parseRouteRef,
   parseTextDirective,
+  payloadFixMessage,
   payloadIssues,
   readPath,
   resolveField,
@@ -356,7 +357,9 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     const where = describeElement(el, CLICK_DIRECTIVE, value)
     const parsed = parseClickDirective(value)
     if (!parsed.ok) {
-      warn(`${where}: ${parsed.message} (at column ${parsed.offset + 1}); skipped`)
+      // A payload in a form emit doesn't take gets its fix with the event's fields and the row's alias.
+      const message = parsed.fix === undefined ? parsed.message : payloadFixMessage(schema, parsed.fix, scope)
+      warn(`${where}: ${message} (at column ${parsed.offset + 1}); skipped`)
       return undefined
     }
     const name = parsed.event

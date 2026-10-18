@@ -2,8 +2,18 @@
 // data or the URL. The checker matches each emit against its event's payload (D15) and the runtime
 // builds the payload from current values, both with the rules here.
 
+import { isIdent } from './constants.ts'
 import { readPath } from './data.ts'
-import type { EmitPayload } from './expr.ts'
+import {
+  type EmitPayload,
+  FIELD_PLACEHOLDER,
+  PATH_PLACEHOLDER,
+  type PayloadFix,
+  defaultPayloadFixFields,
+  fieldNameFor,
+  fieldNameFromText,
+  payloadFixText,
+} from './expr.ts'
 import { type RouteInput, parseRouteRef } from './routes.ts'
 import { type LeafType, type MelzinSchema, type Scope, lengthMessage, resolveField, suggest } from './schema.ts'
 
@@ -33,6 +43,11 @@ export function resolvePayloadValue(schema: MelzinSchema | null | undefined, seg
   return { ok: true, type: field.type, required: resolved.required || field.default !== undefined }
 }
 
+/** For a payload sent with an event that declares none. */
+function noPayloadMessage(event: string): string {
+  return `event '${event}' has no payload; send emit('${event}'), or declare its payload in the schema's events`
+}
+
 /** `'a'`, `'a' and 'b'`, `'a', 'b' and 'c'`. */
 function names(list: readonly string[]): string {
   const quoted = list.map((name) => `'${name}'`)
@@ -55,10 +70,7 @@ export function payloadIssues(
   const events = schema?.events ?? {}
   if (!Object.hasOwn(events, event)) return []
   const declared = events[event]!.payload
-  if (declared === undefined) {
-    if (payload === undefined) return []
-    return [{ message: `event '${event}' has no payload; send emit('${event}'), or declare its payload in the schema's events`, offset: payload.start }]
-  }
+  if (declared === undefined) return payload === undefined ? [] : [{ message: noPayloadMessage(event), offset: payload.start }]
   const fields = Object.keys(declared.properties)
   const required = declared.required ?? []
   if (payload === undefined) {
@@ -107,4 +119,69 @@ export function buildPayload(
     Object.defineProperty(result, field.name, { value, enumerable: true, writable: true, configurable: true })
   }
   return result
+}
+
+/**
+ * A path that could fill the payload field `name` (of `type`, when declared), for the fix of a payload
+ * that doesn't parse: an item field of that name in the rows in scope (innermost first), a string or
+ * number item named like it, a data field of that name, or else the innermost row's key (`option.id`)
+ * or item. Only paths that resolve to a leaf of the field's type count; undefined when none does.
+ */
+function pathFor(schema: MelzinSchema | null | undefined, name: string, type: LeafType | undefined, scope: Scope | undefined): string | undefined {
+  const rows = [...(scope ?? [])].reverse()
+  const candidates: string[][] = []
+  for (const [alias, entry] of rows) {
+    const { items } = entry.list
+    if (items.type === 'object' ? Object.hasOwn(items.properties, name) : alias === name) candidates.push(items.type === 'object' ? [alias, name] : [alias])
+  }
+  candidates.push([name])
+  const innermost = rows[0]
+  if (innermost !== undefined) {
+    const [alias, entry] = innermost
+    if (entry.list.items.type !== 'object') candidates.push([alias])
+    else if (entry.list.key !== undefined) candidates.push([alias, entry.list.key])
+  }
+  const fits = candidates.find((path) => {
+    const value = resolvePayloadValue(schema, path, scope)
+    return value.ok && (type === undefined || value.type === type)
+  })
+  return fits?.join('.')
+}
+
+/**
+ * The message for a payload written in a form emit doesn't take (see PayloadFix), with the fix in the
+ * event's own terms: its declared fields, filled from the rows in scope. In a row of `notification in
+ * notifications`, `emit('markRead', $event)` gets `emit('markRead', { notificationId: notification.id })`.
+ * The checker and the runtime both write the message with this; without a declared payload to go by,
+ * it's the parse error's own message.
+ */
+export function payloadFixMessage(schema: MelzinSchema | null | undefined, fix: PayloadFix, scope?: Scope): string {
+  const events = schema?.events ?? {}
+  const event = Object.hasOwn(events, fix.event) ? events[fix.event]! : undefined
+  if (event !== undefined && event.payload === undefined) return noPayloadMessage(fix.event)
+  const declared = event?.payload
+  if (declared === undefined) return payloadFixText(fix, defaultPayloadFixFields(fix))
+  const fields = Object.keys(declared.properties)
+  const required = declared.required ?? []
+  const typeOf = (name: string): LeafType | undefined => (Object.hasOwn(declared.properties, name) ? declared.properties[name]!.type : undefined)
+  const fill = (name: string): string => pathFor(schema, name, typeOf(name), scope) ?? PATH_PLACEHOLDER
+  // The one field a single value goes in: the only field, the only required one, or the one it's named after.
+  const only = fields.length === 1 ? fields[0] : required.length === 1 ? required[0] : undefined
+  if (fix.kind === 'positional') {
+    if (fix.path === undefined || fix.path.length === 0) {
+      const shown = required.length > 0 ? required : fields.slice(0, 1)
+      return payloadFixText(fix, shown.map((name) => [name, fill(name)]))
+    }
+    const guess = fieldNameFor(fix.path)
+    const named = [fix.path.at(-1)!, guess].find((name) => fields.includes(name))
+    return payloadFixText(fix, [[only ?? named ?? guess, fix.path.join('.')]])
+  }
+  if (fix.kind === 'shorthand') {
+    const name = fix.name ?? only ?? FIELD_PLACEHOLDER
+    // `{ filter }` is `{ filter: filter }` when there's a filter to read.
+    const itself = isIdent(name) && resolvePayloadValue(schema, [name], scope).ok
+    return payloadFixText(fix, [[name, itself ? name : fill(name)]])
+  }
+  const name = fieldNameFromText(fix.name ?? '') ?? only ?? FIELD_PLACEHOLDER
+  return payloadFixText(fix, [[name, fix.path?.join('.') ?? (name === FIELD_PLACEHOLDER ? PATH_PLACEHOLDER : fill(name))]])
 }

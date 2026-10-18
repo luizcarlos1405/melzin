@@ -91,7 +91,7 @@ describe('parseExpression', () => {
     ['count + 1', "unexpected character '+'", 6],
     ["f('a'", "expected ',' or ')', found end of value", 5],
     ["f('a' 'b')", `expected ',' or ')', found string "b"`, 6],
-    ["f('a',)", "expected a string, found ')'", 6],
+    ["f('a',)", "remove the trailing comma: f('a')", 5],
     ['f(x)', "expected a string, found 'x' (quote it: 'x')", 2],
     ["f('abc", 'unterminated string', 2],
     ['f("a\nb")', "strings can't contain line breaks", 4],
@@ -271,8 +271,9 @@ describe('parseClickDirective', () => {
     })
     expect(parseClickDirective("emit('a', 'b')")).toEqual({
       ok: false,
-      message: "a payload is an object of named fields: emit('a', { optionId: option.id })",
+      message: "a payload is an object of named fields: emit('a', { <field>: <path> })",
       offset: 10,
+      fix: { kind: 'positional', callee: 'emit', event: 'a' },
     })
   })
 
@@ -310,13 +311,15 @@ describe('diagnostics for common slips', () => {
   test('a positional payload is shown in the named form, not called an unquoted string', () => {
     expect(parseClickDirective("emit('like', 1)")).toEqual({
       ok: false,
-      message: "a payload is an object of named fields: emit('like', { optionId: option.id })",
+      message: "a payload is an object of named fields: emit('like', { <field>: <path> })",
       offset: 13,
+      fix: { kind: 'positional', callee: 'emit', event: 'like' },
     })
     expect(parseClickDirective("emit('like', post.id)")).toEqual({
       ok: false,
       message: "a payload is an object of named fields: emit('like', { postId: post.id })",
       offset: 13,
+      fix: { kind: 'positional', callee: 'emit', event: 'like', path: ['post', 'id'] },
     })
     expect(parseClickDirective("emit('like', { id: 1 })")).toEqual({
       ok: false,
@@ -436,32 +439,64 @@ describe('parseClickDirective: payloads (D35)', () => {
   const errors: [string, string, number][] = [
     ["emit('vote', option.id)", "a payload is an object of named fields: emit('vote', { optionId: option.id })", 13],
     ["emit('vote', id)", "a payload is an object of named fields: emit('vote', { id: id })", 13],
-    ["emit('vote', true)", "a payload is an object of named fields: emit('vote', { optionId: option.id })", 13],
-    ["emit('vote', !x)", "a payload is an object of named fields: emit('vote', { optionId: option.id })", 13],
-    ["emit('vote', { optionId })", "write the value's path too, such as { optionId: option.id }", 24],
-    ["emit('vote', { optionId, label })", "write the value's path too, such as { optionId: option.id }", 23],
+    ["emit('vote', true)", "a payload is an object of named fields: emit('vote', { <field>: <path> })", 13],
+    ["emit('vote', !x)", "a payload is an object of named fields: emit('vote', { <field>: <path> })", 13],
+    ["emit('vote', [x])", "a payload is an object of named fields: emit('vote', { <field>: <path> })", 13],
+    ["emit('vote', { optionId })", "write the value's path too: { optionId: optionId }", 24],
+    ["emit('vote', { optionId, label })", "write the value's path too: { optionId: optionId }", 23],
     ["emit('vote', { optionId: 'pizza' })", 'payload values are paths for now; have the host send the value as data', 25],
     ["emit('vote', { count: 1 })", 'payload values are paths for now; have the host send the value as data', 22],
     ["emit('vote', { done: false })", 'payload values are paths for now; have the host send the value as data', 21],
     ["emit('vote', { done: null })", 'payload values are paths for now; have the host send the value as data', 21],
     ["emit('vote', { done: !option.done })", "payload values are paths; '!' only works in conditions (m-if, m-show)", 21],
-    ["emit('vote', { id: f(x) })", 'payload values are paths, not calls', 20],
-    ["emit('vote', { o: { id: x } })", 'payload values are paths to strings, numbers or booleans for now, such as option.id', 18],
+    ["emit('vote', { id: f(x) })", 'payload values are paths, not calls; have the host send the value as data', 20],
+    ["emit('vote', { id: option.id() })", 'payload values are paths, not calls; have the host send the value as data', 28],
+    ["emit('vote', { label: option.label.trim() })", 'payload values are paths, not calls; have the host send the value as data', 39],
+    ["emit('vote', { o: { id: x } })", 'payload values are paths to strings, numbers or booleans for now; give each value a field of its own', 18],
     ["emit('vote', { a: x, a: y })", "'a' appears twice in the payload; keep one", 21],
-    ["emit('vote', { 'a': x })", 'write field names without quotes: { a: option.id }', 15],
+    ["emit('vote', { 'a': x })", 'write field names without quotes: { a: x }', 15],
+    ["emit('vote', { 'option id': option.id })", 'write field names without quotes: { optionId: option.id }', 15],
+    ["emit('vote', { 'a' })", 'write field names without quotes: { a: <path> }', 15],
     ["emit('vote', { a x })", "expected ':' after 'a', found 'x'", 17],
     ["emit('vote', { a: x y })", "expected ',' or '}', found 'y'", 20],
     ["emit('vote', { a: x", "expected ',' or '}', found end of value", 19],
     ["emit('vote', {", "expected '}' to close the payload, found end of value", 14],
     ["emit('vote', { __proto__: x })", "'__proto__' isn't a valid field name (it's reserved)", 15],
-    ["emit('vote', { a: x }, { b: y })", "emit takes the event name and at most one payload object: emit('vote', { optionId: option.id })", 23],
-    ["emit('vote', { a: x }, b)", "emit takes the event name and at most one payload object: emit('vote', { optionId: option.id })", 23],
+    ["emit('vote', { a: x }, { b: y })", "emit takes the event name and one payload object: emit('vote', { a: x, b: y })", 23],
+    ["emit('vote', { a: x }, b)", "emit takes the event name and one payload object: emit('vote', { a: x })", 23],
+    ["emit('vote', {}, 'b')", "emit takes the event name and one payload object: emit('vote', {})", 17],
+    ["emit('vote', 'a', b)", "a payload is an object of named fields: emit('vote', { <field>: <path> })", 13],
+    // A trailing comma or a missing payload names what to write, never a string.
+    ["emit('vote', { a: x }, )", "remove the trailing comma: emit('vote', { a: x })", 21],
+    ["emit('vote',)", "remove the trailing comma: emit('vote')", 11],
+    ["emit('vote', ,)", "expected a payload object, found ','", 13],
+    ["emit('vote', ", 'expected a payload object, found end of value', 13],
+    ["emit('vote', { : x })", "expected a field name, found ':'", 15],
+    ["emit('vote', { a: })", "expected the value's path, found '}'", 18],
     ["emit('vote', { a: members[0].id })", POSITION('members[0]'), 25],
     ["emit({ a: x })", "the name comes first: emit('name', { ... })", 5],
   ]
   for (const [source, message, offset] of errors) {
     test(`error: ${JSON.stringify(source)}`, () => {
-      expect(parseClickDirective(source)).toEqual({ ok: false, message, offset })
+      const { fix: _, ...result } = parseClickDirective(source) as { fix?: unknown }
+      expect(result).toEqual({ ok: false, message, offset })
     })
   }
+
+  // What the value says about the fix, for payloadFixMessage to write it with the event's own fields.
+  test('payload forms emit does not take come with their fix', () => {
+    const fixOf = (value: string) => {
+      const parsed = parseClickDirective(value)
+      return parsed.ok ? undefined : parsed.fix
+    }
+    expect(fixOf("emit('pick', member.handle)")).toEqual({ kind: 'positional', callee: 'emit', event: 'pick', path: ['member', 'handle'] })
+    expect(fixOf("emit('pick', $event)")).toEqual({ kind: 'positional', callee: 'emit', event: 'pick' })
+    expect(fixOf("emit('pick', true)")).toEqual({ kind: 'positional', callee: 'emit', event: 'pick' })
+    expect(fixOf("emit('pick', 'ana')")).toEqual({ kind: 'positional', callee: 'emit', event: 'pick' })
+    expect(fixOf("emit('pick', { handle })")).toEqual({ kind: 'shorthand', callee: 'emit', event: 'pick', name: 'handle' })
+    expect(fixOf("emit('pick', { 'handle': member.handle })")).toEqual({ kind: 'quoted', callee: 'emit', event: 'pick', name: 'handle', path: ['member', 'handle'] })
+    expect(fixOf("emit('pick', { 'handle' })")).toEqual({ kind: 'quoted', callee: 'emit', event: 'pick', name: 'handle' })
+    // The rest have no fix to fill in.
+    for (const value of ["emit('pick', { a: 'x' })", "emit('pick', { a: x }, b)", "emit('pick',)", "emit('pick', { a: x() })"]) expect(fixOf(value)).toBeUndefined()
+  })
 })

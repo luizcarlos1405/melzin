@@ -3,7 +3,7 @@
 
 import { describe, expect, test } from 'bun:test'
 import { type EmitPayload, parseClickDirective } from '../src/core/expr.ts'
-import { buildPayload, payloadIssues, resolvePayloadValue } from '../src/core/payload.ts'
+import { buildPayload, payloadFixMessage, payloadIssues, resolvePayloadValue } from '../src/core/payload.ts'
 import { type MelzinSchema, type Scope, resolveList, validateSchema } from '../src/core/schema.ts'
 
 const poll = {
@@ -186,6 +186,84 @@ describe('payloadIssues (D15)', () => {
     expect(issues(value)).toEqual([{ message: "unknown field 'option.idd' (did you mean 'option.id'?)", offset: value.indexOf('option.idd') }])
     // Outside the row, the alias isn't in scope.
     expect(issues("emit('vote', { optionId: option.id })", null)).toMatchObject([{ message: "unknown field 'option' (did you mean 'options'?)" }])
+  })
+})
+
+// A payload that doesn't parse gets its fix in the event's terms: its declared fields, filled from the
+// rows in scope (the innermost alias and its key), never a fixed example.
+describe('payloadFixMessage', () => {
+  const inbox = valid({
+    data: {
+      type: 'object',
+      properties: {
+        filters: { type: 'array', uniqueItems: true, items: { type: 'string' } },
+        notifications: {
+          type: 'array',
+          key: 'id',
+          items: { type: 'object', properties: { id: { type: 'string' }, title: { type: 'string' }, rank: { type: 'number' } }, required: ['id', 'title'] },
+        },
+        members: {
+          type: 'array',
+          key: 'handle',
+          items: { type: 'object', properties: { handle: { type: 'string' }, name: { type: 'string' } }, required: ['handle'] },
+        },
+        owner: { type: 'string' },
+      },
+      required: ['filters', 'notifications', 'members', 'owner'],
+    },
+    events: {
+      selectFilter: { payload: { type: 'object', properties: { filter: { type: 'string' } }, required: ['filter'] } },
+      markRead: { payload: { type: 'object', properties: { notificationId: { type: 'string' }, note: { type: 'string' } }, required: ['notificationId'] } },
+      pick: { payload: { type: 'object', properties: { handle: { type: 'string' } }, required: ['handle'] } },
+      move: { payload: { type: 'object', properties: { id: { type: 'string' }, rank: { type: 'number' } }, required: ['id', 'rank'] } },
+      clear: {},
+    },
+  })
+  const rowsOf = (alias: string, list: string): Scope => {
+    const rows = resolveList(inbox, alias, [list])
+    if (!rows.ok) throw new Error(rows.message)
+    return rows.scope
+  }
+  const filters = rowsOf('filter', 'filters')
+  const notifications = rowsOf('notification', 'notifications')
+  const members = rowsOf('member', 'members')
+  /** The message for one m-on:click value that doesn't parse, as the checker and the runtime write it. */
+  const fixOf = (value: string, scope?: Scope): string => {
+    const parsed = parseClickDirective(value)
+    if (parsed.ok || parsed.fix === undefined) throw new Error(`expected a payload fix for ${value}`)
+    return payloadFixMessage(inbox, parsed.fix, scope)
+  }
+
+  test("a positional value goes in the event's field", () => {
+    expect(fixOf("emit('pick', member.handle)", members)).toBe("a payload is an object of named fields: emit('pick', { handle: member.handle })")
+    expect(fixOf("emit('markRead', $event)", notifications)).toBe("a payload is an object of named fields: emit('markRead', { notificationId: notification.id })")
+    expect(fixOf("emit('markRead', 'n1')", notifications)).toBe("a payload is an object of named fields: emit('markRead', { notificationId: notification.id })")
+    expect(fixOf("emit('move', true)", notifications)).toBe("a payload is an object of named fields: emit('move', { id: notification.id, rank: notification.rank })")
+    // Outside any row there is nothing to fill a field from but data.
+    expect(fixOf("emit('markRead', 'n1')")).toBe("a payload is an object of named fields: emit('markRead', { notificationId: <path> })")
+    expect(fixOf("emit('pick', [1])", members)).toBe("a payload is an object of named fields: emit('pick', { handle: member.handle })")
+  })
+
+  test('a shorthand field means the path of the same name when there is one', () => {
+    expect(fixOf("emit('selectFilter', { filter })", filters)).toBe("write the value's path too: { filter: filter }")
+    expect(fixOf("emit('markRead', { notificationId })", notifications)).toBe("write the value's path too: { notificationId: notification.id }")
+    expect(fixOf("emit('selectFilter', { owner })")).toBe("write the value's path too: { owner: owner }")
+    expect(fixOf("emit('markRead', { notificationId })")).toBe("write the value's path too: { notificationId: <path> }")
+  })
+
+  test('a quoted field name keeps its value, or gets one from the row', () => {
+    expect(fixOf("emit('markRead', { 'notificationId': notification.id })", notifications)).toBe("write field names without quotes: { notificationId: notification.id }")
+    expect(fixOf("emit('markRead', { 'notificationId' })", notifications)).toBe("write field names without quotes: { notificationId: notification.id }")
+    expect(fixOf("emit('markRead', { 'notification id': x })", notifications)).toBe("write field names without quotes: { notificationId: x }")
+    expect(fixOf("emit('pick', { '1': member.handle })", members)).toBe("write field names without quotes: { handle: member.handle }")
+  })
+
+  test("an event without a payload sends none; an undeclared one gets the parse error's own message", () => {
+    expect(fixOf("emit('clear', member.handle)", members)).toBe("event 'clear' has no payload; send emit('clear'), or declare its payload in the schema's events")
+    expect(fixOf("emit('clear', { x })", members)).toBe("event 'clear' has no payload; send emit('clear'), or declare its payload in the schema's events")
+    expect(fixOf("emit('nope', member.handle)", members)).toBe("a payload is an object of named fields: emit('nope', { memberHandle: member.handle })")
+    expect(fixOf("emit('nope', { x })", members)).toBe("write the value's path too: { x: x }")
+    expect(payloadFixMessage(null, { kind: 'positional', callee: 'emit', event: 'pick' })).toBe("a payload is an object of named fields: emit('pick', { <field>: <path> })")
   })
 })
 

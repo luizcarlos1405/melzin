@@ -176,6 +176,19 @@ describe('emits that do not match the payload', () => {
     expect(calls).toEqual([['vote', {}], ['vote', { optionId: 'p' }]])
   })
 
+  test("a payload in a form emit doesn't take warns with the event's fields and the row's alias", () => {
+    mountBody(
+      `<button m-for="option in options" m-on:click="emit('vote', option.id)"></button><button m-on:click="emit('vote', { 'optionId' })"></button>`,
+      { pollId: 1, options: options('a', 'b') },
+    )
+    expect(warnings).toEqual([
+      `<button m-on:click="emit('vote', option.id)">: a payload is an object of named fields: emit('vote', { optionId: option.id }) (at column 14); skipped`,
+      `<button m-on:click="emit('vote', { 'optionId' })">: write field names without quotes: { optionId: <path> } (at column 16); skipped`,
+    ])
+    buttons()[0]!.click()
+    expect(calls).toEqual([])
+  })
+
   test('an undeclared event sends the fields it can read', () => {
     const extra: unknown[] = []
     mountSource(root, view({ schema: SCHEMA, body: `<button m-for="option in options" m-on:click="emit('pick', { id: option.id, nope: option.nope })"></button>` }), {
