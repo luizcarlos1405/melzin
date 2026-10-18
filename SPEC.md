@@ -1032,6 +1032,14 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
   `"signed out": { "extends": "follows you", "data": { "viewer": null } }`. The `extends` key names
   the base, as in `tsconfig.json`; chains are fine, cycles are errors, and the checker validates each
   snapshot once it's resolved. Changing one list item means restating the list (D30).
+- **Q15. Should `<template>` group elements, as in Vue's `<template v-for>` and `<template v-if>`?** It
+  would repeat or hide several siblings without a wrapper element: a `<dt>` and `<dd>` per item, two
+  table rows per item. Today `<template>` is an error, because a browser keeps its content out of the
+  document, so nothing in it would bind or show. A list repeats one element (D34), and one wrapper covers
+  the known cases: `class="contents"`, a `<div>` around each `<dt>`/`<dd>` pair, a `<tbody>` per item. A
+  template would also show nothing in the raw file opened without the runtime. Lean: not until a real
+  screen needs it; allowing it later only adds to the format. Models will write `<template v-for>` out of
+  habit, and the checker points them at `m-for` on the element.
 
 ## 13. Why this could beat "just let the AI write React"
 
@@ -1195,3 +1203,4 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-18: D34–D36 (lists as JSON Schema arrays that declare their key, event payloads as objects
   of named fields built from paths, and snapshot overrides as JSON Merge Patch, which settles Q14).
   Aligned §6, §9.1, §9.5, §10 and §11 with them; the markup for lists and payloads stays provisional.
+- 2026-10-18: Q15 (`<template>` for grouping elements), kept out until a real screen needs it.
