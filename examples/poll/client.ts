@@ -3,8 +3,6 @@
 import { mount, type MelzinView } from 'melzin'
 import type { Data, Handlers } from './views/poll.types.ts'
 
-type Option = 'pizza' | 'tacos' | 'sushi'
-
 const REFRESH_MS = 3000
 
 function element(selector: string): Element {
@@ -55,13 +53,13 @@ async function main(): Promise<void> {
   }
   let next = 0
 
-  const vote = async (option: Option) => {
+  const vote = async (optionId: string) => {
     const sequence = ++next
     try {
       const data = await request('/api/poll/votes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ option }),
+        body: JSON.stringify({ optionId }),
       })
       apply(sequence, data)
     } catch (error) {
@@ -69,13 +67,12 @@ async function main(): Promise<void> {
     }
   }
 
-  // The generated types make tsc reject a missing or misspelled handler and data of the wrong shape.
+  // The generated types make tsc reject a missing or misspelled handler, a payload read as the wrong
+  // shape and data of the wrong shape. Each row's Vote button sends its option's id (the list's key).
   const view: MelzinView<Data> = await mount<Data, Handlers>(element('#poll'), '/views/poll.mel.html', {
     data: initial,
     on: {
-      votePizza: () => void vote('pizza'),
-      voteTacos: () => void vote('tacos'),
-      voteSushi: () => void vote('sushi'),
+      vote: ({ optionId }) => void vote(optionId),
     },
   })
 

@@ -5,18 +5,33 @@ import { VIEW_FILE_HEADERS, buildCss, resolveProject, resolveViewFile } from '@m
 import indexPage from './index.html'
 import type { Data } from './views/poll.types.ts'
 
-export const QUESTION = 'What should we eat at the next team meetup?'
-export const OPTIONS = ['pizza', 'tacos', 'sushi'] as const
-export type Option = (typeof OPTIONS)[number]
-/** What the backend stores: votes per option. */
-export type PollState = Record<Option, number>
+/** One choice of a poll, as the backend defines it. */
+export type PollOption = { id: string; label: string; emoji: string }
+/** A poll's fixed parts: the question and its options, in the order to show. */
+export type Poll = { question: string; options: readonly PollOption[] }
+/** What the backend stores: votes per option id. An option that isn't in it has no votes yet. */
+export type PollState = Record<string, number>
 
-export function emptyState(): PollState {
-  return { pizza: 0, tacos: 0, sushi: 0 }
+export const MEETUP_POLL: Poll = {
+  question: 'What should we eat at the next team meetup?',
+  options: [
+    { id: 'pizza', label: 'Pizza', emoji: '🍕' },
+    { id: 'tacos', label: 'Tacos', emoji: '🌮' },
+    { id: 'sushi', label: 'Sushi', emoji: '🍣' },
+  ],
 }
 
-export function isOption(value: unknown): value is Option {
-  return typeof value === 'string' && (OPTIONS as readonly string[]).includes(value)
+export function emptyState(poll: Poll = MEETUP_POLL): PollState {
+  return Object.fromEntries(poll.options.map((option) => [option.id, 0]))
+}
+
+/** The poll's option with that id, if any. A request's id is only compared, so only the poll's own ids index the counts. */
+export function findOption(poll: Poll, id: unknown): PollOption | undefined {
+  return typeof id === 'string' ? poll.options.find((option) => option.id === id) : undefined
+}
+
+function votesOf(state: PollState, id: string): number {
+  return Object.hasOwn(state, id) ? (state[id] ?? 0) : 0
 }
 
 function percent(votes: number, total: number): string {
@@ -30,15 +45,18 @@ function totalLabel(total: number): string {
 
 /**
  * The adapter (P3): turns stored counts into exactly the data the poll view displays, so the view
- * never computes anything. The contract test checks its output against the view's schema.
+ * never computes anything. The options keep the poll's order rather than sorting by votes, so a row
+ * never moves away from the pointer that's about to vote on it. The contract test checks the output
+ * against the view's schema, keys and minItems included.
  */
-export function toViewModel(state: PollState, question: string = QUESTION): Data {
-  const total = state.pizza + state.tacos + state.sushi
+export function toViewModel(state: PollState, poll: Poll = MEETUP_POLL): Data {
+  const total = poll.options.reduce((sum, option) => sum + votesOf(state, option.id), 0)
   return {
-    question,
-    pizza: { votes: state.pizza, percent: percent(state.pizza, total) },
-    tacos: { votes: state.tacos, percent: percent(state.tacos, total) },
-    sushi: { votes: state.sushi, percent: percent(state.sushi, total) },
+    question: poll.question,
+    options: poll.options.map(({ id, label, emoji }) => {
+      const votes = votesOf(state, id)
+      return { id, label, emoji, votes, percent: percent(votes, total) }
+    }),
     totalLabel: totalLabel(total),
   }
 }
@@ -47,7 +65,9 @@ export type PollServerOptions = {
   /** Defaults to 3000; 0 picks a free port. */
   port?: number
   hostname?: string
-  /** Starting counts (copied). */
+  /** The question and options. Defaults to MEETUP_POLL. */
+  poll?: Poll
+  /** Starting counts (copied; ids the poll doesn't have are ignored). */
   state?: PollState
   /** Rebuilds the CSS on every request and enables Bun's dev bundling. Defaults to NODE_ENV !== 'production'. */
   development?: boolean
@@ -60,7 +80,8 @@ function json(body: unknown, status = 200): Response {
 }
 
 export function createPollServer(options: PollServerOptions = {}) {
-  const state: PollState = { ...emptyState(), ...options.state }
+  const poll = options.poll ?? MEETUP_POLL
+  const state: PollState = Object.fromEntries(poll.options.map(({ id }) => [id, votesOf(options.state ?? {}, id)]))
   const development = options.development ?? process.env.NODE_ENV !== 'production'
   const project = resolveProject({ cwd: import.meta.dir })
 
@@ -79,7 +100,7 @@ export function createPollServer(options: PollServerOptions = {}) {
     routes: {
       '/': indexPage,
       '/api/poll': {
-        GET: () => json(toViewModel(state)),
+        GET: () => json(toViewModel(state, poll)),
       },
       '/api/poll/votes': {
         POST: async (request) => {
@@ -92,14 +113,16 @@ export function createPollServer(options: PollServerOptions = {}) {
           try {
             body = await request.json()
           } catch {
-            return json({ error: 'the body must be JSON like {"option": "pizza"}' }, 400)
+            return json({ error: 'the body must be JSON like {"optionId": "pizza"}' }, 400)
           }
-          const option = typeof body === 'object' && body !== null ? (body as { option?: unknown }).option : undefined
-          if (!isOption(option)) {
-            return json({ error: `option must be one of ${OPTIONS.join(', ')}` }, 400)
+          // The same shape as the view's vote payload, so the client passes it through.
+          const id = typeof body === 'object' && body !== null ? (body as { optionId?: unknown }).optionId : undefined
+          const option = findOption(poll, id)
+          if (option === undefined) {
+            return json({ error: `optionId must be one of ${poll.options.map((known) => known.id).join(', ')}` }, 400)
           }
-          state[option] += 1
-          return json(toViewModel(state))
+          state[option.id] = votesOf(state, option.id) + 1
+          return json(toViewModel(state, poll))
         },
       },
       '/views/*': (request) => {

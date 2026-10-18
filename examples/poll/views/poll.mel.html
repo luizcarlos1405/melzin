@@ -10,38 +10,38 @@
         "type": "object",
         "properties": {
           "question": { "type": "string" },
-          "pizza": {
-            "type": "object",
-            "properties": {
-              "votes": { "type": "number" },
-              "percent": { "type": "string", "description": "Share of all votes, like \"42%\"" }
-            },
-            "required": ["votes", "percent"]
-          },
-          "tacos": {
-            "type": "object",
-            "properties": {
-              "votes": { "type": "number" },
-              "percent": { "type": "string", "description": "Share of all votes, like \"42%\"" }
-            },
-            "required": ["votes", "percent"]
-          },
-          "sushi": {
-            "type": "object",
-            "properties": {
-              "votes": { "type": "number" },
-              "percent": { "type": "string", "description": "Share of all votes, like \"42%\"" }
-            },
-            "required": ["votes", "percent"]
+          "options": {
+            "type": "array",
+            "key": "id",
+            "minItems": 2,
+            "description": "The choices, in the order to show",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "description": "What the vote event sends back, like \"pizza\"" },
+                "label": { "type": "string", "description": "Like \"Pizza\"" },
+                "emoji": { "type": "string", "description": "One emoji for the option's icon, like \"🍕\"" },
+                "votes": { "type": "number" },
+                "percent": { "type": "string", "description": "Share of all votes, like \"42%\"" }
+              },
+              "required": ["id", "label", "emoji", "votes", "percent"]
+            }
           },
           "totalLabel": { "type": "string", "description": "Like \"12 votes\", or \"No votes yet\"" }
         },
-        "required": ["question", "pizza", "tacos", "sushi", "totalLabel"]
+        "required": ["question", "options", "totalLabel"]
       },
       "events": {
-        "votePizza": { "description": "One vote for pizza" },
-        "voteTacos": { "description": "One vote for tacos" },
-        "voteSushi": { "description": "One vote for sushi" }
+        "vote": {
+          "description": "One vote for an option",
+          "payload": {
+            "type": "object",
+            "properties": {
+              "optionId": { "type": "string", "description": "The id of the option voted for" }
+            },
+            "required": ["optionId"]
+          }
+        }
       }
     }
   </script>
@@ -50,36 +50,44 @@
       "no votes yet": {
         "data": {
           "question": "What should we eat at the next team meetup?",
-          "pizza": { "votes": 0, "percent": "0%" },
-          "tacos": { "votes": 0, "percent": "0%" },
-          "sushi": { "votes": 0, "percent": "0%" },
+          "options": [
+            { "id": "pizza", "label": "Pizza", "emoji": "🍕", "votes": 0, "percent": "0%" },
+            { "id": "tacos", "label": "Tacos", "emoji": "🌮", "votes": 0, "percent": "0%" },
+            { "id": "sushi", "label": "Sushi", "emoji": "🍣", "votes": 0, "percent": "0%" }
+          ],
           "totalLabel": "No votes yet"
         }
       },
       "close race": {
         "data": {
           "question": "What should we eat at the next team meetup?",
-          "pizza": { "votes": 14, "percent": "36%" },
-          "tacos": { "votes": 13, "percent": "33%" },
-          "sushi": { "votes": 12, "percent": "31%" },
+          "options": [
+            { "id": "pizza", "label": "Pizza", "emoji": "🍕", "votes": 14, "percent": "36%" },
+            { "id": "tacos", "label": "Tacos", "emoji": "🌮", "votes": 13, "percent": "33%" },
+            { "id": "sushi", "label": "Sushi", "emoji": "🍣", "votes": 12, "percent": "31%" }
+          ],
           "totalLabel": "39 votes"
         }
       },
       "landslide": {
         "data": {
           "question": "What should we eat at the next team meetup?",
-          "pizza": { "votes": 2, "percent": "4%" },
-          "tacos": { "votes": 41, "percent": "89%" },
-          "sushi": { "votes": 3, "percent": "7%" },
+          "options": [
+            { "id": "pizza", "label": "Pizza", "emoji": "🍕", "votes": 2, "percent": "4%" },
+            { "id": "tacos", "label": "Tacos", "emoji": "🌮", "votes": 41, "percent": "89%" },
+            { "id": "sushi", "label": "Sushi", "emoji": "🍣", "votes": 3, "percent": "7%" }
+          ],
           "totalLabel": "46 votes"
         }
       },
       "huge numbers": {
         "data": {
           "question": "What should we eat at the next team meetup?",
-          "pizza": { "votes": 1284031, "percent": "28%" },
-          "tacos": { "votes": 987654, "percent": "21%" },
-          "sushi": { "votes": 2345678, "percent": "51%" },
+          "options": [
+            { "id": "pizza", "label": "Pizza", "emoji": "🍕", "votes": 1284031, "percent": "28%" },
+            { "id": "tacos", "label": "Tacos", "emoji": "🌮", "votes": 987654, "percent": "21%" },
+            { "id": "sushi", "label": "Sushi", "emoji": "🍣", "votes": 2345678, "percent": "51%" }
+          ],
           "totalLabel": "4,617,363 votes"
         }
       },
@@ -87,6 +95,20 @@
         "extends": "close race",
         "data": {
           "question": "What should we eat at the next team meetup, keeping in mind that half the team is vegetarian, two people can't have gluten, and the venue only has a microwave and a very old toaster?"
+        }
+      },
+      "six options with long labels": {
+        "extends": "close race",
+        "data": {
+          "options": [
+            { "id": "pizza", "label": "Pizza from the wood-fired place on the corner", "emoji": "🍕", "votes": 8, "percent": "25%" },
+            { "id": "tacos", "label": "Tacos al pastor, with the extra-spicy salsa on the side", "emoji": "🌮", "votes": 11, "percent": "34%" },
+            { "id": "sushi", "label": "Sushi and sashimi platters for everyone to share", "emoji": "🍣", "votes": 3, "percent": "9%" },
+            { "id": "curry", "label": "Vegetable curry with rice, naan and a big bowl of raita", "emoji": "🍛", "votes": 9, "percent": "28%" },
+            { "id": "burgers", "label": "Burgers", "emoji": "🍔", "votes": 0, "percent": "0%" },
+            { "id": "salad", "label": "Something gluten-free that also works with a microwave and a very old toaster", "emoji": "🥗", "votes": 1, "percent": "3%" }
+          ],
+          "totalLabel": "32 votes"
         }
       }
     }
@@ -104,74 +126,25 @@
         <p class="mt-2 text-sm text-brand-100">Pick one. You can vote as often as you like; it's a demo.</p>
       </div>
 
+      <!-- One row per option, in the order the host sends; the schema keys them by id. -->
       <ul class="divide-y divide-stone-100">
-        <li class="flex items-center gap-4 px-6 py-4">
-          <span class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700" aria-hidden="true">
-            <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
-              <path d="M3.5 5.5c5.6-2.8 11.4-2.8 17 0L12 21.5Z"></path>
-              <path d="M5.2 8.6c4.5-1.9 9.1-1.9 13.6 0"></path>
-              <circle cx="10" cy="11.5" r="1.1"></circle>
-              <circle cx="14" cy="14" r="1.1"></circle>
-              <circle cx="11.6" cy="16.8" r="0.8"></circle>
-            </svg>
-          </span>
+        <li class="flex items-center gap-3 px-6 py-4 sm:gap-4" m-for="option in options">
+          <span class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-brand-50 text-xl leading-none sm:size-12 sm:text-2xl" aria-hidden="true" m-text="option.emoji"></span>
           <div class="min-w-0 flex-1">
-            <p class="font-semibold text-stone-900">Pizza</p>
+            <p class="font-semibold text-pretty wrap-anywhere text-stone-900" m-text="option.label"></p>
             <p class="mt-0.5 flex items-center gap-1.5 text-sm text-stone-500">
               <svg class="size-4 shrink-0 text-stone-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-7 8a7 7 0 1 1 14 0H3Z"></path>
               </svg>
               <span class="sr-only">Votes:</span>
-              <span class="truncate tabular-nums" m-text="pizza.votes"></span>
+              <span class="truncate tabular-nums" m-text="option.votes"></span>
             </p>
           </div>
-          <p class="w-14 shrink-0 text-right text-xl font-bold tabular-nums text-stone-900" m-text="pizza.percent"></p>
-          <button type="button" class="shrink-0 cursor-pointer rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-900/20 transition hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 active:scale-95" aria-label="Vote for pizza" m-on:click="emit('votePizza')">Vote</button>
-        </li>
-
-        <li class="flex items-center gap-4 px-6 py-4">
-          <span class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-lime-100 text-lime-700" aria-hidden="true">
-            <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
-              <path d="M2.5 18a9.5 9.5 0 0 1 19 0Z"></path>
-              <path d="M5 12.5c1 .9 1.8-.9 2.8 0s1.8-.9 2.8 0 1.8-.9 2.8 0 1.8-.9 2.8 0 1.4-.6 2 0"></path>
-              <circle cx="9" cy="15" r="0.9"></circle>
-              <circle cx="14.5" cy="15.5" r="0.9"></circle>
-            </svg>
-          </span>
-          <div class="min-w-0 flex-1">
-            <p class="font-semibold text-stone-900">Tacos</p>
-            <p class="mt-0.5 flex items-center gap-1.5 text-sm text-stone-500">
-              <svg class="size-4 shrink-0 text-stone-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-7 8a7 7 0 1 1 14 0H3Z"></path>
-              </svg>
-              <span class="sr-only">Votes:</span>
-              <span class="truncate tabular-nums" m-text="tacos.votes"></span>
-            </p>
+          <!-- On a phone the share sits above the button, so a long label keeps most of the row. -->
+          <div class="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+            <p class="text-right text-lg font-bold tabular-nums text-stone-900 sm:w-14 sm:text-xl" m-text="option.percent"></p>
+            <button type="button" class="cursor-pointer rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-900/20 transition hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 active:scale-95" m-on:click="emit('vote', { optionId: option.id })">Vote<span class="sr-only"> for <span m-text="option.label"></span></span></button>
           </div>
-          <p class="w-14 shrink-0 text-right text-xl font-bold tabular-nums text-stone-900" m-text="tacos.percent"></p>
-          <button type="button" class="shrink-0 cursor-pointer rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-900/20 transition hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 active:scale-95" aria-label="Vote for tacos" m-on:click="emit('voteTacos')">Vote</button>
-        </li>
-
-        <li class="flex items-center gap-4 px-6 py-4">
-          <span class="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-rose-100 text-rose-700" aria-hidden="true">
-            <svg class="size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round">
-              <ellipse cx="12" cy="9" rx="8" ry="3.5"></ellipse>
-              <path d="M4 9v6c0 1.9 3.6 3.5 8 3.5s8-1.6 8-3.5V9"></path>
-              <ellipse cx="12" cy="9" rx="3.2" ry="1.3"></ellipse>
-            </svg>
-          </span>
-          <div class="min-w-0 flex-1">
-            <p class="font-semibold text-stone-900">Sushi</p>
-            <p class="mt-0.5 flex items-center gap-1.5 text-sm text-stone-500">
-              <svg class="size-4 shrink-0 text-stone-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-7 8a7 7 0 1 1 14 0H3Z"></path>
-              </svg>
-              <span class="sr-only">Votes:</span>
-              <span class="truncate tabular-nums" m-text="sushi.votes"></span>
-            </p>
-          </div>
-          <p class="w-14 shrink-0 text-right text-xl font-bold tabular-nums text-stone-900" m-text="sushi.percent"></p>
-          <button type="button" class="shrink-0 cursor-pointer rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand-900/20 transition hover:bg-brand-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600 active:scale-95" aria-label="Vote for sushi" m-on:click="emit('voteSushi')">Vote</button>
         </li>
       </ul>
 

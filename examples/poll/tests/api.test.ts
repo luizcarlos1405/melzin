@@ -6,7 +6,7 @@ import { connect } from 'node:net'
 import { join } from 'node:path'
 import { validateData } from 'melzin/core'
 import { loadViewFile } from '@melzin/cli/tools'
-import { createPollServer, toViewModel } from '../server.ts'
+import { createPollServer, toViewModel, type Poll } from '../server.ts'
 
 let server: ReturnType<typeof createPollServer>
 let base: string
@@ -53,11 +53,11 @@ describe('poll API', () => {
     expect(validateData(schema, body)).toEqual([])
   })
 
-  test('POST /api/poll/votes counts the vote and returns the new model', async () => {
-    const response = await vote(JSON.stringify({ option: 'sushi' }))
+  test('POST /api/poll/votes takes the view\'s vote payload, counts the vote and returns the new model', async () => {
+    const response = await vote(JSON.stringify({ optionId: 'sushi' }))
     expect(response.status).toBe(200)
     const body = (await response.json()) as ReturnType<typeof toViewModel>
-    expect(body.sushi.votes).toBe(1)
+    expect(body.options.map((option) => [option.id, option.votes])).toEqual([['pizza', 2], ['tacos', 1], ['sushi', 1]])
     expect(body.totalLabel).toBe('4 votes')
     const after = (await (await fetch(`${base}/api/poll`)).json()) as ReturnType<typeof toViewModel>
     expect(after).toEqual(body)
@@ -66,29 +66,59 @@ describe('poll API', () => {
   test('POST with a bad option is a 400 and changes nothing', async () => {
     const before = await (await fetch(`${base}/api/poll`)).json()
     for (const body of [
-      JSON.stringify({ option: 'burgers' }),
-      JSON.stringify({ option: '__proto__' }),
-      JSON.stringify({ option: 'toString' }),
-      JSON.stringify({ option: 1 }),
+      JSON.stringify({ optionId: 'burgers' }),
+      JSON.stringify({ optionId: '__proto__' }),
+      JSON.stringify({ optionId: 'toString' }),
+      JSON.stringify({ optionId: 1 }),
+      JSON.stringify({ optionId: 'Pizza' }),
+      JSON.stringify({ option: 'pizza' }),
       JSON.stringify({}),
       JSON.stringify(null),
       JSON.stringify(['pizza']),
       'not json',
     ]) {
       const response = await vote(body)
-      expect(response.status).toBe(400)
+      expect({ body, status: response.status }).toEqual({ body, status: 400 })
       expect(((await response.json()) as { error: string }).error).toBeString()
     }
     expect(await (await fetch(`${base}/api/poll`)).json()).toEqual(before)
   })
 
+  test('the error names the options the poll has', async () => {
+    const response = await vote(JSON.stringify({ optionId: 'burgers' }))
+    expect(await response.json()).toEqual({ error: 'optionId must be one of pizza, tacos, sushi' })
+  })
+
   test('votes must be sent as JSON (a cross-site form or no-cors fetch would be text/plain)', async () => {
     for (const type of ['text/plain', 'application/x-www-form-urlencoded', '']) {
-      const response = await fetch(`${base}/api/poll/votes`, { method: 'POST', headers: type ? { 'Content-Type': type } : {}, body: '{"option":"pizza"}' })
+      const response = await fetch(`${base}/api/poll/votes`, { method: 'POST', headers: type ? { 'Content-Type': type } : {}, body: '{"optionId":"pizza"}' })
       expect({ type, status: response.status }).toEqual({ type, status: 415 })
     }
-    expect((await (await fetch(`${base}/api/poll`)).json()).pizza.votes).toBe(2)
-    expect((await fetch(`${base}/api/poll/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: '{"option":"pizza"}' })).status).toBe(200)
+    expect((await (await fetch(`${base}/api/poll`)).json()).options[0].votes).toBe(2)
+    expect((await fetch(`${base}/api/poll/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: '{"optionId":"pizza"}' })).status).toBe(200)
+  })
+
+  test('another poll: its own options, in its order, whatever the starting counts name', async () => {
+    const poll: Poll = {
+      question: 'Where to next?',
+      options: [
+        { id: 'beach', label: 'The beach', emoji: '🏖️' },
+        { id: 'hills', label: 'The hills', emoji: '⛰️' },
+      ],
+    }
+    const other = createPollServer({ port: 0, hostname: '127.0.0.1', poll, state: { hills: 3, pizza: 9 } })
+    try {
+      const url = `${other.url.href}api/poll`
+      const body = (await (await fetch(url)).json()) as ReturnType<typeof toViewModel>
+      expect(body).toEqual(toViewModel({ hills: 3 }, poll))
+      expect(body.options.map((option) => option.id)).toEqual(['beach', 'hills'])
+      const voted = await fetch(`${other.url.href}api/poll/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"optionId":"beach"}' })
+      expect(((await voted.json()) as ReturnType<typeof toViewModel>).totalLabel).toBe('4 votes')
+      const pizza = await fetch(`${other.url.href}api/poll/votes`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"optionId":"pizza"}' })
+      expect(await pizza.json()).toEqual({ error: 'optionId must be one of beach, hills' })
+    } finally {
+      await other.stop(true)
+    }
   })
 
   test('view files carry the sandbox CSP', async () => {
