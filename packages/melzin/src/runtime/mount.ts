@@ -1,6 +1,8 @@
 // mount / mountSource: copy a view's body into the host page, bind it once, then update in place.
 
 import {
+  BIND_PREFIX,
+  CLASS_DIRECTIVE,
   CLICK_DIRECTIVE,
   type ChainDirective,
   ELSE_DIRECTIVE,
@@ -20,7 +22,11 @@ import {
   TEXT_DIRECTIVE,
   VOID_ELEMENTS,
   attributeProblem,
+  attributeText,
+  bindTargetProblem,
+  bindTypeProblem,
   blockedLinkScheme,
+  classTokens,
   buildPayload,
   classifyAttribute,
   conditionHolds,
@@ -32,6 +38,8 @@ import {
   isInterElementWhitespace,
   itemKey,
   lengthMessage,
+  parseBindDirective,
+  parseClassDirective,
   parseClickDirective,
   parseConditionDirective,
   parseForDirective,
@@ -102,6 +110,8 @@ type Send = { event: string; payload: EmitPayload | undefined; where: string; re
 type Plan = {
   texts: { at: NodePath; segments: readonly string[] }[]
   hrefs: { at: NodePath; segments: readonly string[] }[]
+  attrs: { at: NodePath; target: string; segments: readonly string[] }[]
+  classes: { at: NodePath; entries: ClassToggle[] }[]
   shows: { at: NodePath; test: Test }[]
   clicks: { at: NodePath; send: Send }[]
   chains: { anchor: NodePath; branches: { at: NodePath; test: Test }[] }[]
@@ -121,6 +131,15 @@ type ListPlan = {
   path: readonly string[]
 }
 
+/** A key of m-bind:class: its class tokens and the condition that adds them. */
+type ClassToggle = { classes: readonly string[]; test: Test }
+/** m-bind:<attr>: the attribute's text from a leaf, or no attribute while the value is missing (D37). */
+type AttrBinding = { target: string; segments: readonly string[]; el: Element; last: string | null | undefined }
+/**
+ * m-bind:class: the element's static classes stay; the keys' classes come and go (Vue's merge). `owned`
+ * holds the classes the binding added, so classes other code adds are left alone.
+ */
+type ClassBinding = { el: Element; entries: readonly ClassToggle[]; static: ReadonlySet<string>; owned: Set<string>; last: string | undefined }
 type TextBinding = { segments: readonly string[]; el: Element; lastText: string | null }
 /** m-bind:href: the link field's URL, or no href at all while the field is missing. */
 type HrefBinding = { segments: readonly string[]; el: Element; lastHref: string | null | undefined }
@@ -144,6 +163,8 @@ type Block = {
   scope: Scope | undefined
   texts: TextBinding[]
   hrefs: HrefBinding[]
+  attrs: AttrBinding[]
+  classes: ClassBinding[]
   shows: ShowBinding[]
   clicks: ClickBinding[]
   chains: ChainBinding[]
@@ -460,6 +481,59 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     return parsed.path
   }
 
+  // m-bind:<attr> (D37): an allowlisted attribute from a leaf. A broken binding warns and leaves the
+  // attribute as written.
+  const attrPath = (el: Element, target: string, value: string, scope: Scope | undefined): readonly string[] | undefined => {
+    const directive = `${BIND_PREFIX}${target}`
+    const where = describeElement(el, directive, value)
+    const problem = bindTargetProblem(target, dom.localName(el))
+    if (problem !== undefined) {
+      warn(`${where}: ${problem}; ignored`)
+      return undefined
+    }
+    const parsed = parseBindDirective(directive, value)
+    if (!parsed.ok) {
+      warn(`${where}: ${parsed.message} (at column ${parsed.offset + 1}); skipped`)
+      return undefined
+    }
+    const ref = parseRouteRef(parsed.path)
+    if (ref === undefined) {
+      const resolved = resolvePath(schema, parsed.path, scope)
+      if (!resolved.ok) {
+        warn(`${where}: ${resolved.message.replace('m-text needs', `${directive} needs`)}; skipped`)
+        return undefined
+      }
+      const typeProblem = bindTypeProblem(target, resolved.type)
+      if (typeProblem !== undefined) warn(`${where}: ${typeProblem}`)
+    } else if (!ref.ok) {
+      warn(`${where}: ${ref.message}; skipped`)
+      return undefined
+    }
+    if (dom.hasAttribute(el, target)) warn(`${where}: the element also has a static ${target}, which the binding replaces; keep one`)
+    return parsed.path
+  }
+
+  // m-bind:class (D37): keys whose condition holds add their classes. A broken object adds none.
+  const classToggles = (el: Element, value: string, scope: Scope | undefined): ClassToggle[] | undefined => {
+    const where = describeElement(el, CLASS_DIRECTIVE, value)
+    const parsed = parseClassDirective(value)
+    if (!parsed.ok) {
+      warn(`${where}: ${parsed.message} (at column ${parsed.offset + 1}); skipped`)
+      return undefined
+    }
+    const toggles: ClassToggle[] = []
+    for (const entry of parsed.entries) {
+      const resolved = parseRouteRef(entry.condition.path) ?? resolveField(schema, entry.condition.path, scope)
+      if (!resolved.ok) {
+        warn(`${where}: ${resolved.message}; '${entry.classes.join(' ')}' treated as off`)
+        continue
+      }
+      const { condition } = entry
+      toggles.push({ classes: entry.classes, test: (rowScope) => conditionHolds(schema, data, condition, route, rowScope) })
+    }
+    return toggles
+  }
+
   const elseTest = (el: Element): Test => {
     const value = dom.getAttribute(el, ELSE_DIRECTIVE) ?? ''
     if (value.trim() !== '') {
@@ -476,6 +550,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   const compile = (root: Element | DocumentFragment, scope: Scope | undefined): Plan => {
     const texts: { node: Node; segments: readonly string[] }[] = []
     const hrefs: { node: Node; segments: readonly string[] }[] = []
+    const attrs: { node: Node; target: string; segments: readonly string[] }[] = []
+    const classes: { node: Node; entries: ClassToggle[] }[] = []
     const shows: { node: Node; test: Test }[] = []
     const clicks: { node: Node; send: Send }[] = []
     const chains: { anchor: Node; branches: { node: Node; test: Test }[] }[] = []
@@ -545,6 +621,12 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       for (const name of dom.getAttributeNames(el)) {
         const kind = classifyAttribute(name)
         if (kind.kind === 'plain') continue
+        if (kind.kind === 'binding') {
+          const value = dom.getAttribute(el, name) ?? ''
+          const segments = attrPath(el, kind.target, value, scope)
+          if (segments !== undefined) attrs.push({ node: el, target: kind.target, segments })
+          continue
+        }
         if (kind.kind !== 'directive') {
           warn(`<${dom.tagName(el).toLowerCase()}>: ${kind.message}; ignored`)
           continue
@@ -559,6 +641,9 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
         } else if (kind.name === HREF_DIRECTIVE) {
           const segments = hrefPath(el, value, scope)
           if (segments !== undefined) hrefs.push({ node: el, segments })
+        } else if (kind.name === CLASS_DIRECTIVE) {
+          const entries = classToggles(el, value, scope)
+          if (entries !== undefined && entries.length > 0) classes.push({ node: el, entries })
         } else if (kind.name === SHOW_DIRECTIVE) {
           if (dom.style(el) === undefined) {
             warn(`${describeElement(el, SHOW_DIRECTIVE, value)}: <${dom.localName(el)}> has no style to hide it with; skipped`)
@@ -593,6 +678,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     return {
       texts: texts.map(({ node, segments }) => ({ at: at(node), segments })),
       hrefs: hrefs.map(({ node, segments }) => ({ at: at(node), segments })),
+      attrs: attrs.map(({ node, target, segments }) => ({ at: at(node), target, segments })),
+      classes: classes.map(({ node, entries }) => ({ at: at(node), entries })),
       shows: shows.map(({ node, test }) => ({ at: at(node), test })),
       clicks: clicks.map(({ node, send }) => ({ at: at(node), send })),
       chains: chains.map(({ anchor, branches }) => ({ anchor: at(anchor), branches: branches.map(({ node, test }) => ({ at: at(node), test })) })),
@@ -609,6 +696,11 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       scope,
       texts: plan.texts.map(({ at, segments }) => ({ segments, el: elementAt(at), lastText: null })),
       hrefs: plan.hrefs.map(({ at, segments }) => ({ segments, el: elementAt(at), lastHref: undefined })),
+      attrs: plan.attrs.map(({ at, target, segments }) => ({ target, segments, el: elementAt(at), last: undefined })),
+      classes: plan.classes.map(({ at, entries }) => {
+        const el = elementAt(at)
+        return { el, entries, static: new Set(classTokens(dom.getAttribute(el, 'class'))), owned: new Set<string>(), last: undefined }
+      }),
       shows: plan.shows.map(({ at, test }) => {
         const style = dom.style(elementAt(at))!
         return { style, test, display: style.display, shown: null }
@@ -695,6 +787,20 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     binding.rows = next
   }
 
+  // Vue's merge: the static classes, plus the classes of every key that holds. Only classes this
+  // binding added are taken away, so a static class stays whatever its keys say.
+  const renderClasses = (binding: ClassBinding, scope: Scope | undefined): void => {
+    const active = new Set<string>()
+    for (const entry of binding.entries) if (entry.test(scope)) for (const name of entry.classes) active.add(name)
+    const current = classTokens(dom.getAttribute(binding.el, 'class'))
+    const next = current.filter((name) => active.has(name) || binding.static.has(name) || !binding.owned.has(name))
+    for (const name of active) if (!next.includes(name)) next.push(name)
+    binding.owned = new Set([...active].filter((name) => !binding.static.has(name)))
+    const text = next.join(' ')
+    if (text !== current.join(' ') || text !== binding.last) dom.setAttribute(binding.el, 'class', text)
+    binding.last = text
+  }
+
   const renderBlock = (block: Block): void => {
     const { scope } = block
     for (const chain of block.chains) {
@@ -718,6 +824,14 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
         binding.lastText = text
       }
     }
+    for (const binding of block.attrs) {
+      const text = attributeText(binding.target, readPath(schema, data, route, binding.segments, scope))
+      if (text === binding.last) continue
+      if (text === null) dom.removeAttribute(binding.el, binding.target)
+      else dom.setAttribute(binding.el, binding.target, text)
+      binding.last = text
+    }
+    for (const binding of block.classes) renderClasses(binding, scope)
     for (const binding of block.hrefs) {
       const value = valueOrDefault(schema, data, binding.segments, scope)
       // A URL that would run code never reaches the link; checkData warned about it with its path.
@@ -799,6 +913,8 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
       topLevelChains.length = 0
       view.texts.length = 0
       view.hrefs.length = 0
+      view.attrs.length = 0
+      view.classes.length = 0
       view.shows.length = 0
       view.chains.length = 0
       view.lists.length = 0

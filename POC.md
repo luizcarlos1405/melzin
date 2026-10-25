@@ -1109,8 +1109,10 @@ this section's place when it's built.
 Provisional, and the binding-language battle can still change them. Their shape (the allowlist, both
 style mechanisms, the boolean rule, the class merge) is SPEC D37.
 
-- **Paths only.** A binding's value, and a class key's value, is a path, as in payloads (D35). `!` is an
-  error whose message names the fix: a field the host sends already negated (P3).
+- **Paths for attributes, conditions for classes.** An attribute binding's value is a path, as in
+  payloads (D35); `!` there is an error that names `not-data-…:`/`not-aria-…:` variants or a field the
+  host sends negated (P3). A class key's value is a condition, as in `m-if` (§14): `!` and `.length`
+  allowed.
 - **Strings and numbers are text on `data-*`.** A boolean follows D37's rule, so `data-state="open"` can
   come from an enum and `data-unread` from a flag.
 - **An ARIA table.** The checker holds the value-carrying `aria-*` attributes it allows, and a name that

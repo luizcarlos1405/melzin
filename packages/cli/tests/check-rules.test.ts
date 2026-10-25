@@ -107,14 +107,14 @@ const errors: Case[] = [
   {
     file: 'foreign-other.mel.html',
     severity: 'error',
-    message: "':class' is Vue/Alpine syntax; classes and styles are static for now (m-bind:href is the only binding, for links); to switch styles, show one of two elements with m-if and m-else (docs/authoring.md §7)",
+    message: "':class' is Vue/Alpine syntax; use m-bind:class",
     at: pos('foreign-other.mel.html', ':class'),
   },
   {
     file: 'unsupported-directive.mel.html',
     severity: 'error',
     message:
-      "'m-model' is not supported yet; Melzin supports only m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href; forms and inputs aren't supported yet (docs/authoring.md §7)",
+      "'m-model' is not supported yet; Melzin supports only m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click, m-bind:href, m-bind:class and m-bind:<attr>; forms and inputs aren't supported yet (docs/authoring.md §7)",
     at: pos('unsupported-directive.mel.html', 'm-model'),
   },
   {

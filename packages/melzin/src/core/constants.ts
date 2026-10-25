@@ -34,8 +34,12 @@ export const ELSE_DIRECTIVE = 'm-else'
 /** Repeats its element once per item of a list (SPEC D34): `m-for="member in members"`. */
 export const FOR_DIRECTIVE = 'm-for'
 export const CLICK_DIRECTIVE = 'm-on:click'
-/** A link's URL, from a link field (SPEC D23). The only m-bind for now. */
+/** A link's URL, from a link field (SPEC D23). */
 export const HREF_DIRECTIVE = 'm-bind:href'
+/** Classes switched by conditions, in Vue's object syntax (SPEC D37). */
+export const CLASS_DIRECTIVE = 'm-bind:class'
+/** The prefix of an attribute binding, `m-bind:aria-label` (SPEC D37); core/bind.ts says which targets work. */
+export const BIND_PREFIX = 'm-bind:'
 export const SUPPORTED_DIRECTIVES = [
   TEXT_DIRECTIVE,
   SHOW_DIRECTIVE,
@@ -45,6 +49,7 @@ export const SUPPORTED_DIRECTIVES = [
   FOR_DIRECTIVE,
   CLICK_DIRECTIVE,
   HREF_DIRECTIVE,
+  CLASS_DIRECTIVE,
 ] as const
 export type DirectiveName = (typeof SUPPORTED_DIRECTIVES)[number]
 
@@ -83,6 +88,9 @@ export const FOREIGN_DIRECTIVE_HINTS: Readonly<Record<string, DirectiveName>> = 
   'v-bind:href': HREF_DIRECTIVE,
   ':href': HREF_DIRECTIVE,
   'x-bind:href': HREF_DIRECTIVE,
+  'v-bind:class': CLASS_DIRECTIVE,
+  ':class': CLASS_DIRECTIVE,
+  'x-bind:class': CLASS_DIRECTIVE,
 }
 
 /** Names inside expressions that deserve a hint instead of a generic error. */
@@ -90,11 +98,14 @@ export const NAME_HINTS: Readonly<Record<string, string>> = {
   $emit: "use emit('name') instead of Vue's $emit",
 }
 
-// `m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href`, for messages.
-const DIRECTIVE_LIST = SUPPORTED_DIRECTIVES.join(', ').replace(/, ([^,]+)$/, ' and $1')
+// `m-text, m-show, ..., m-bind:class and m-bind:<attr>`, for messages.
+const DIRECTIVE_LIST = `${SUPPORTED_DIRECTIVES.join(', ')}, ${BIND_PREFIX}<attr>`.replace(/, ([^,]+)$/, ' and $1')
 
 export const FOREIGN_SYNTAX_MESSAGE = `Vue/Alpine syntax isn't supported; Melzin has ${DIRECTIVE_LIST}`
 export const UNSUPPORTED_DIRECTIVE_MESSAGE = `not supported yet; Melzin supports only ${DIRECTIVE_LIST}`
+
+/** What m-bind:<attr> may set (core/bind.ts has the rules). */
+export const BINDABLE_TARGETS = 'aria-* attributes that hold values, data-* and title'
 
 /** For a <template> with m-for, v-for or x-for (core/markup.ts): where an m-for goes instead. */
 export const TEMPLATE_FOR_MESSAGE = "put m-for on the element to repeat; <template> isn't supported"
@@ -117,27 +128,16 @@ export function positionMessage(path: string): string {
 
 /** The attribute a binding sets: `class` for m-bind:class or m-class, '' for a bare m-bind; undefined for other names. */
 function bindingTarget(name: string): string | undefined {
-  if (name === 'm-bind') return ''
-  if (name.startsWith('m-bind:')) return name.slice('m-bind:'.length).split('.')[0]
   return /^m-(class|style)(:|$)/.exec(name)?.[1]
 }
 
-/** Attributes that name or describe an element, which sr-only text can stand in for. */
-const ACCESSIBLE_TEXT = new Set(['title', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-description'])
-
 function bindingHint(target: string): string {
-  const only = '(m-bind:href is the only binding, for links)'
-  if (target === 'class' || target === 'style') {
-    return `classes and styles are static for now ${only}; to switch styles, show one of two elements with m-if and m-else`
-  }
-  if (ACCESSIBLE_TEXT.has(target)) {
-    return `attributes are static for now ${only}; for an accessible name from data, put sr-only text with m-text inside the element`
-  }
-  return `attributes are static for now ${only}; to switch one, show one of two elements with m-if and m-else`
+  if (target === 'style') return `styles never come from data (D9); switch classes with ${CLASS_DIRECTIVE}="{ 'classes': condition }"`
+  return `write ${BIND_PREFIX}${target === '' ? '<attr>' : target}`
 }
 
 const OTHER_HINTS: readonly [RegExp, string][] = [
-  [/^m-model$/, "forms and inputs aren't supported yet"],
+  [/^m-model(\.|$)/, "forms and inputs aren't supported yet"],
   [/^m-html$/, 'only plain text, through m-text'],
   [/^m-on:click\./, 'modifiers aren\'t supported yet: write m-on:click (a button with type="button" has no default action to prevent)'],
   [/^m-on:/, 'only clicks for now: m-on:click'],
@@ -145,6 +145,11 @@ const OTHER_HINTS: readonly [RegExp, string][] = [
 
 /** What to write instead of an m-* directive Melzin doesn't have, if there's something to say. */
 function unsupportedHint(name: string): string | undefined {
+  const classMatch = /^m-class:(.+)$/.exec(name)
+  if (classMatch !== null) {
+    return `toggle a class with ${CLASS_DIRECTIVE}="{ '${classMatch[1]}': condition }" (attribute names are lowercased and can't hold every class, and Tailwind doesn't see them)`
+  }
+  if (name === 'm-class') return `write ${CLASS_DIRECTIVE}="{ 'classes': condition }"`
   const target = bindingTarget(name)
   return target === undefined ? OTHER_HINTS.find(([pattern]) => pattern.test(name))?.[1] : bindingHint(target)
 }
@@ -164,6 +169,8 @@ function unsupportedMessage(name: string): string {
 export type AttributeKind =
   | { kind: 'plain' }
   | { kind: 'directive'; name: DirectiveName }
+  /** `m-bind:<target>` (or a bare m-bind, target ''): core/bind.ts's bindTargetProblem says whether it works. */
+  | { kind: 'binding'; target: string }
   | { kind: 'foreign'; message: string; suggestion?: DirectiveName }
   | { kind: 'unsupported'; message: string }
 
@@ -185,6 +192,12 @@ export function classifyAttribute(name: string): AttributeKind {
     const use = name === 'x-for' ? `${suggestion} on the element to repeat (<template> isn't supported)` : suggestion
     return { kind: 'foreign', suggestion, message: `'${name}' is Vue/Alpine syntax; use ${use}` }
   }
+  const foreignBind = /^(?:v-bind|x-bind)?:(.+)$/.exec(name)
+  if (foreignBind !== null && !name.startsWith('x-on') && !name.startsWith('v-on')) {
+    const target = foreignBind[1]!.split('.')[0]!
+    const use = target === 'style' ? bindingHint('style') : `use ${BIND_PREFIX}${target} (${BINDABLE_TARGETS} can be bound)`
+    return { kind: 'foreign', message: `'${name}' is Vue/Alpine syntax; ${use}` }
+  }
   if (name.startsWith('v-') || name.startsWith('x-') || name.startsWith('@') || name.startsWith(':')) {
     // `:class`, `v-bind:title`, `@submit`, `v-model`: the hint for the m-* spelling, which isn't supported either.
     const hint = unsupportedHint(melzinSpelling(name))
@@ -192,6 +205,7 @@ export function classifyAttribute(name: string): AttributeKind {
       ? { kind: 'foreign', message: `'${name}': ${FOREIGN_SYNTAX_MESSAGE}` }
       : { kind: 'foreign', message: `'${name}' is Vue/Alpine syntax; ${hint} (docs/authoring.md §7)` }
   }
+  if (name === 'm-bind' || name.startsWith(BIND_PREFIX)) return { kind: 'binding', target: name.slice(BIND_PREFIX.length) }
   if (name.startsWith(DIRECTIVE_PREFIX)) {
     return { kind: 'unsupported', message: unsupportedMessage(name) }
   }

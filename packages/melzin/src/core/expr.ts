@@ -527,6 +527,23 @@ function parsePathDirective(directive: string, example: string, value: string): 
   return { ok: true, path: expr.segments }
 }
 
+/**
+ * `m-bind:aria-label="task.label"` → `['task', 'label']`: an attribute binding's path (D37). `!` gets a
+ * message naming the variants that test an attribute's absence, or a field the host sends negated.
+ */
+export function parseBindDirective(directive: string, value: string): TextDirectiveResult {
+  const result = parseExpression(value)
+  if (result.ok && result.expr.kind === 'not') {
+    const target = directive.slice(directive.indexOf(':') + 1)
+    return {
+      ok: false,
+      message: `${directive} needs a path; '!' only works in conditions: style the opposite with not-${target}: variants, or have the host send the negated field`,
+      offset: result.expr.start,
+    }
+  }
+  return parsePathDirective(directive, 'task.label', value)
+}
+
 /** `m-text="user.name"` → `['user', 'name']`. */
 export function parseTextDirective(value: string): TextDirectiveResult {
   return parsePathDirective(TEXT_DIRECTIVE, 'user.name', value)

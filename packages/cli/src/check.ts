@@ -8,6 +8,8 @@ import { basename, join, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { parse, type DefaultTreeAdapterTypes } from 'parse5'
 import {
+  BIND_PREFIX,
+  CLASS_DIRECTIVE,
   CLICK_DIRECTIVE,
   type ChainDirective,
   type Condition,
@@ -36,8 +38,13 @@ import {
   TEXT_DIRECTIVE,
   VIEW_FILE_SUFFIX,
   VOID_ELEMENTS,
+  ariaNameProblem,
+  ariaValueProblem,
   attributeProblem,
+  bindTargetProblem,
+  bindTypeProblem,
   bindingValueIsPath,
+  classTokens,
   classifyAttribute,
   conditionHolds,
   dataBlockType,
@@ -56,6 +63,8 @@ import {
   lengthMessage,
   linkFields,
   matchRoute,
+  parseBindDirective,
+  parseClassDirective,
   parseClickDirective,
   parseConditionDirective,
   parseExpression,
@@ -66,6 +75,7 @@ import {
   parseTextDirective,
   payloadFixMessage,
   payloadIssues,
+  readPath,
   resolveField,
   resolveList,
   resolvePath,
@@ -81,6 +91,7 @@ import {
   viewStage,
   withAlias,
 } from 'melzin/core'
+import { type ClassInfo, loadClassInfo } from './classes.ts'
 import { UsageError, misplacedViewProblem, misplacedViews, resolveProject } from './project.ts'
 import { generateRouteTypes, generateTypes, routeTypesPathFor, typesPathFor, viewTypesImport } from './typegen.ts'
 
@@ -546,7 +557,7 @@ const INDEX_NAME_RE = /^(0|[1-9][0-9]{0,8})$/
 /** What a view is checked against besides itself: the route table, and the view's name in it. */
 type ViewRouteContext = { routes: RouteContext; view: string }
 
-function analyze(input: string, fileName: string | undefined, context?: ViewRouteContext): Analysis {
+function analyze(input: string, fileName: string | undefined, context?: ViewRouteContext, classInfo?: ClassInfo): Analysis {
   // Editors don't show a byte order mark as a character, so columns must not count it.
   const source = input.startsWith('\uFEFF') ? input.slice(1) : input
   const starts = lineStarts(source)
@@ -748,6 +759,27 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   // A broken binding would also show up as "never used" or "nothing emits it"; skip those then. `markup`
   // is for bindings inside an element the runtime drops (a <template>), whose error is reported alone.
   const broken = { text: false, click: false, condition: false, loop: false, payload: false, markup: false }
+  // Attribute and class bindings (D37), for the coverage and variant checks once the gates are known.
+  type Binding = {
+    offset: number
+    /** For messages: `'line-through' (m-bind:class)` or `m-bind:data-done`. */
+    label: string
+    /** A class key's condition, or the path a bound attribute reads. */
+    condition?: Condition
+    segments?: readonly string[]
+    target?: string
+    /** A boolean attribute or a class key: on or off in each row. */
+    boolean: boolean
+    context: Context
+    gate: Gate | undefined
+  }
+  const bindings: Binding[] = []
+  // data-* names the view sets, statically or by binding (with whether the bound field is a boolean),
+  // and the class tokens it writes, for the variant checks.
+  const staticData = new Set<string>()
+  const boundData = new Map<string, { boolean: boolean; binding: Binding }>()
+  const classUses: { token: string; offset: number }[] = []
+
   // For the checks against the route table: what the view reads from the URL, and its static links.
   const routeRefs: { ref: RouteRef; offset: number }[] = []
   const staticLinks: { href: string; offset: number }[] = []
@@ -979,6 +1011,146 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     }
   }
 
+  // m-bind:<attr> (D37): an allowlisted attribute from a leaf. Returns the binding for the coverage
+  // checks, or undefined when it's broken (already reported).
+  const checkBindDirective = (element: Element, target: string, value: string, attributeAt: number, context: Context): Binding | undefined => {
+    const directive = `${BIND_PREFIX}${target}`
+    const { start, exact } = valueStart(element, directive, value)
+    const at = (offset: number): number => (exact ? start + offset : start)
+    const problem = bindTargetProblem(target, element.tagName)
+    if (problem !== undefined) {
+      error(attributeAt, `${directive}: ${problem}`)
+      useRejectedBinding(directive, value, context)
+      return undefined
+    }
+    if (getAttr(element, target) !== undefined) {
+      error(element.sourceCodeLocation?.attrs?.[target]?.startOffset ?? attributeAt, `an element with ${directive} can't also have a static ${target}; keep one (a fallback goes in the schema's default)`)
+    }
+    const parsed = parseBindDirective(directive, value)
+    if (!parsed.ok) {
+      broken.text = true
+      error(at(parsed.offset), `${directive}: ${parsed.message}`)
+      return undefined
+    }
+    const expr = parseExpression(value)
+    const pathStart = at(expr.ok ? expr.expr.start : 0)
+    const isRoute = checkRouteRef(directive, parsed.path, pathStart)
+    if (isRoute === false) return undefined
+    let boolean = false
+    if (isRoute === undefined) {
+      if (checked === null || unchecked(parsed.path, context)) return undefined
+      const resolved = resolvePath(checked, parsed.path, context.scope)
+      if (!resolved.ok) {
+        broken.text = true
+        error(pathStart, `${directive}: ${resolved.message.replace('m-text needs', `${directive} needs`)}${noSchemaHint}`)
+        return undefined
+      }
+      useField(parsed.path, context.scope)
+      const typeProblem = bindTypeProblem(target, resolved.type)
+      if (typeProblem !== undefined) error(pathStart, `${directive}: ${typeProblem}`)
+      boolean = resolved.type === 'boolean'
+    }
+    const binding: Binding = { offset: attributeAt, label: directive, segments: parsed.path, target, boolean, context, gate: undefined }
+    bindings.push(binding)
+    if (target.startsWith('data-')) boundData.set(target.slice('data-'.length), { boolean, binding })
+    return binding
+  }
+
+  // m-bind:class (D37): Vue's object syntax with literal class names and conditions. Returns its keys
+  // for the coverage checks.
+  const checkClassDirective = (element: Element, value: string, attributeAt: number, context: Context): Binding[] => {
+    const { start, exact } = valueStart(element, CLASS_DIRECTIVE, value)
+    const at = (offset: number): number => (exact ? start + offset : start)
+    const parsed = parseClassDirective(value)
+    if (!parsed.ok) {
+      broken.condition = true
+      error(at(parsed.offset), `${CLASS_DIRECTIVE}: ${parsed.message}`)
+      return []
+    }
+    const statics = classTokens(getAttr(element, 'class'))
+    const keys: { classes: readonly string[]; condition: Condition; at: number; binding: Binding }[] = []
+    for (const entry of parsed.entries) {
+      for (const name of entry.classes) classUses.push({ token: name, offset: at(entry.keyStart) })
+      const label = `'${entry.classes.join(' ')}'`
+      const repeated = entry.classes.filter((name) => statics.includes(name))
+      if (repeated.length > 0) {
+        error(at(entry.keyStart), `${CLASS_DIRECTIVE}: '${repeated.join(' ')}' is also in class, so it stays on whatever its condition says; remove it from one of them`)
+      }
+      const { condition } = entry
+      const isRoute = checkRouteRef(CLASS_DIRECTIVE, condition.path, at(entry.pathStart))
+      if (isRoute === false) continue
+      if (isRoute === undefined) {
+        if (checked === null || unchecked(condition.path, context)) continue
+        const resolved = resolveField(checked, condition.path, context.scope)
+        if (!resolved.ok) {
+          broken.condition = true
+          error(at(entry.pathStart), `${CLASS_DIRECTIVE}: ${resolved.message}${noSchemaHint}`)
+          continue
+        }
+        const name = condition.path.join('.')
+        if (resolved.length !== undefined) useField(condition.path.slice(0, -1), context.scope)
+        else if (resolved.field.type === 'array') {
+          error(at(entry.pathStart), `${CLASS_DIRECTIVE}: '${name}' is a list, which holds even when it's empty; test ${condition.negated ? '!' : ''}${name}.length`)
+          continue
+        } else if (resolved.field.type === 'object' && resolved.required) {
+          warning(at(entry.pathStart), `${CLASS_DIRECTIVE}: '${name}' is a required object, so ${label} is always ${condition.negated ? 'off' : 'on'}`)
+        } else if (resolved.field.type !== 'object') useField(condition.path, context.scope)
+      }
+      const binding: Binding = { offset: at(entry.keyStart), label: `${label} (${CLASS_DIRECTIVE})`, condition, boolean: true, context, gate: undefined }
+      bindings.push(binding)
+      keys.push({ classes: entry.classes, condition, at: at(entry.keyStart), binding })
+    }
+    if (classInfo !== undefined) checkClassConflicts(statics, keys)
+    return keys.map(({ binding }) => binding)
+  }
+
+  // Tailwind's CSS order, not the class attribute, decides between two classes that set the same
+  // property, so a key can lose to a static class without any sign but a screenshot.
+  const checkClassConflicts = (statics: readonly string[], keys: readonly { classes: readonly string[]; condition: Condition; at: number }[]): void => {
+    const shared = (a: string, b: string): string | undefined => {
+      const left = classInfo!.properties(a)
+      const right = classInfo!.properties(b)
+      if (left === null || right === null) return undefined
+      const found = left.find((pair) => right.includes(pair))
+      return found?.slice(found.indexOf('|') + 1)
+    }
+    const negation = (condition: Condition): string => `${condition.negated ? '' : '!'}${condition.path.join('.')}`
+    const reported = new Set<string>()
+    for (const key of keys) {
+      for (const name of key.classes) {
+        for (const fixed of statics) {
+          const property = shared(name, fixed)
+          if (property === undefined) continue
+          const order = classInfo!.order([name, fixed])
+          const display = property === 'display' ? '; to hide or show the element, m-show beats any class' : ''
+          const pair = `{ '${key.classes.join(' ')}': ${key.condition.negated ? '!' : ''}${key.condition.path.join('.')}, '${fixed}': ${negation(key.condition)} }`
+          if ((order.get(fixed) ?? 0n) > (order.get(name) ?? 0n)) {
+            error(key.at, `${CLASS_DIRECTIVE}: '${name}' never applies: the static '${fixed}' also sets ${property} and comes later in Tailwind's CSS (its order, not the class attribute's, decides); move '${fixed}' into the binding: ${pair}${display}`)
+          } else {
+            warning(key.at, `${CLASS_DIRECTIVE}: '${name}' and the static '${fixed}' both set ${property}; '${name}' wins only because of Tailwind's CSS order; put both looks in the binding: ${pair}${display}`)
+          }
+        }
+      }
+    }
+    // Two keys that can hold together and set one property: which one shows is up to Tailwind's order.
+    for (let i = 0; i < keys.length; i++) {
+      for (let j = i + 1; j < keys.length; j++) {
+        const a = keys[i]!
+        const b = keys[j]!
+        const exclusive = a.condition.path.join('.') === b.condition.path.join('.') && a.condition.negated !== b.condition.negated
+        if (exclusive) continue
+        for (const x of a.classes) {
+          for (const y of b.classes) {
+            const property = shared(x, y)
+            if (property === undefined || reported.has(`${x} ${y}`)) continue
+            reported.add(`${x} ${y}`)
+            warning(b.at, `${CLASS_DIRECTIVE}: '${x}' and '${y}' both set ${property} and their conditions can hold together, so Tailwind's CSS order picks one; make the conditions exclusive (x and !x)`)
+          }
+        }
+      }
+    }
+  }
+
   // m-show, m-if and m-else-if: the condition, or undefined when it's broken (already reported).
   const checkConditionDirective = (element: Element, directive: string, value: string, context: Context): Condition | undefined => {
     const { start, exact } = valueStart(element, directive, value)
@@ -1093,6 +1265,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     }
     let role: { directive: ChainDirective; at: number; value: string; condition: Condition | undefined } | undefined
     let show: { at: number; value: string; condition: Condition | undefined } | undefined
+    // The element's own bindings: they show where the element does, so they get its gate below.
+    const own: Binding[] = []
     for (const attr of node.attrs) {
       const name = attributeName(attr)
       const at = attributeAt(name)
@@ -1102,6 +1276,10 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         if (attribute !== undefined) error(at, attribute.message)
         else if (name === 'href' && (node.tagName === 'a' || node.tagName === 'area')) staticLinks.push({ href: attr.value, offset: at })
         if (name === 'id' && row.inRow) warning(at, 'every row gets the same id, but ids must be unique in a page; remove the id')
+        const aria = ariaNameProblem(name)
+        if (aria !== undefined) (aria.includes('deprecated') ? warning : error)(at, aria)
+        if (name.startsWith('data-')) staticData.add(name.slice('data-'.length))
+        if (name === 'class') for (const token of classTokens(attr.value)) classUses.push({ token, offset: at })
       } else if (kind.kind === 'foreign' && FOREIGN_LOOPS.has(name)) {
         // The m-for to write, with the loop's own names: m-for="member in members".
         const { alias, list } = looseLoop(attr.value)
@@ -1110,6 +1288,11 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       } else if (kind.kind === 'foreign' || kind.kind === 'unsupported') {
         error(at, kind.message)
         useRejectedBinding(name, attr.value, row)
+      } else if (kind.kind === 'binding') {
+        const binding = checkBindDirective(node, kind.target, attr.value, at, row)
+        if (binding !== undefined) own.push(binding)
+      } else if (kind.name === CLASS_DIRECTIVE) {
+        own.push(...checkClassDirective(node, attr.value, at, row))
       } else if (kind.name === TEXT_DIRECTIVE) {
         checkTextDirective(node, attr.value, row)
       } else if (kind.name === CLICK_DIRECTIVE) {
@@ -1186,6 +1369,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       }
       gates.push(conditional)
     }
+    for (const binding of own) binding.gate = conditional ?? row.gate
     walkNodes(node.childNodes, node.tagName === 'form' ? { ...(conditional === undefined ? row : { ...row, gate: conditional }), inForm: true } : conditional === undefined ? row : { ...row, gate: conditional })
     return next
   }
@@ -1253,6 +1437,37 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         startOf(schemaBlock.element) ?? 0,
         `the view has data fields but no snapshots; add a ${SNAPSHOTS_BLOCK_TYPE} block with sample states, awkward ones included (very long text, zero, huge numbers)`,
       )
+    }
+  }
+
+  // --- data-* variants against what the view sets (D37): a variant on a name nothing sets never
+  // matches, a presence variant (data-x:) matches every value of a bound string or number, even 0
+  // and "", and data-[x=false]: never matches a bound boolean, which removes the attribute instead.
+  const variantUses: { name: string; value: string | undefined; offset: number; token: string }[] = []
+  const VARIANT_RE = /(?:^|[:-])data-(?:\[([a-z][a-z0-9-]*)(?:=([^\]]*))?\]|([a-z][a-z0-9-]*))(?:\/[\w-]+)?:/g
+  for (const { token, offset } of classUses) {
+    for (const match of token.matchAll(VARIANT_RE)) {
+      const name = match[1] ?? match[3]!
+      const raw = match[2]
+      const value = raw === undefined ? undefined : raw.replace(/^(['"])(.*)\1$/, '$2')
+      variantUses.push({ name, value, offset, token })
+    }
+  }
+  const variantWarned = new Set<string>()
+  for (const use of variantUses) {
+    const key = `${use.name}=${use.value ?? ''}`
+    if (variantWarned.has(key)) continue
+    const bound = boundData.get(use.name)
+    if (bound === undefined) {
+      if (staticData.has(use.name) || use.name.startsWith('melzin-')) continue
+      variantWarned.add(key)
+      warning(use.offset, `'${use.token}' styles data-${use.name}, which nothing in the view sets; bind it with m-bind:data-${use.name}="path", or check the name`)
+    } else if (bound.boolean && use.value === 'false') {
+      variantWarned.add(key)
+      warning(use.offset, `'${use.token}' never matches: a bound boolean removes data-${use.name} when false; style the false look with not-data-${use.name}:`)
+    } else if (!bound.boolean && use.value === undefined) {
+      variantWarned.add(key)
+      warning(use.offset, `'${use.token}' tests only that data-${use.name} is there, and a bound string or number always is (0 and "" included); test a value with data-[${use.name}=<value>]:, or bind a boolean`)
     }
   }
 
@@ -1362,6 +1577,50 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
           : `; add one, or set "maxItems": 1 if it never has more`
         warning(offset, `no snapshot shows '${name}' with more than one item${fix}`)
       }
+    }
+
+    // Bindings (D37): a class key or a bound boolean that's the same in every snapshot where its
+    // element shows leaves one of its looks undesigned; a data-[x=v]: variant whose value no snapshot
+    // sends is never seen; an ARIA token that WAI-ARIA doesn't define does nothing.
+    const valuesOf = (binding: Binding): unknown[] | undefined => {
+      const rows = shown(binding.gate)
+      if (rows === undefined) return undefined
+      return rows.flatMap((scopes, i) =>
+        scopes.map((scope) => {
+          const { data, route } = snapshots[i]!
+          return binding.condition !== undefined
+            ? conditionHolds(checked, data, binding.condition, route, scope)
+            : readPath(checked, data, route, binding.segments!, scope)
+        }),
+      )
+    }
+    for (const binding of bindings) {
+      const values = valuesOf(binding)
+      if (values === undefined || values.length === 0) continue
+      if (binding.boolean) {
+        const on = values.filter((value) => value === true).length
+        const look = binding.condition !== undefined ? `${binding.label} is` : `${binding.label} is`
+        if (on === 0) warning(binding.offset, `no snapshot shows ${look} on where its element shows; add one where it's on, to design that look`)
+        else if (on === values.length) warning(binding.offset, `${look} on in every snapshot that shows its element; add one where it's off, to design that look`)
+      }
+      if (binding.target !== undefined && binding.target.startsWith('aria-')) {
+        const bad = values.map((value) => ariaValueProblem(binding.target!, value)).find((problem) => problem !== undefined)
+        if (bad !== undefined) warning(binding.offset, `${binding.label}: a snapshot sends a value ARIA doesn't define: ${bad}`)
+      }
+    }
+    const sent = new Map<string, Set<string>>()
+    for (const [name, { binding }] of boundData) {
+      const values = valuesOf(binding) ?? []
+      sent.set(name, new Set(values.flatMap((value) => (typeof value === 'string' || typeof value === 'number' || value === true ? [String(value)] : []))))
+    }
+    const unseen = new Set<string>()
+    for (const use of variantUses) {
+      const values = sent.get(use.name)
+      if (values === undefined || use.value === undefined || values.has(use.value) || use.value === 'false') continue
+      const key = `${use.name}=${use.value}`
+      if (unseen.has(key)) continue
+      unseen.add(key)
+      warning(use.offset, `no snapshot sends data-${use.name}="${use.value}" where it's bound, so '${use.token}' is never seen; add one`)
     }
   }
 
@@ -1549,9 +1808,9 @@ function checkAgainstRoutes(check: RouteCheck): void {
  * Checks one view's source. `fileName` (optional) is used for the file name rule and, with `routes`,
  * names the view in the route table.
  */
-export function checkSource(source: string, fileName?: string, routes?: RouteContext): Diagnostic[] {
+export function checkSource(source: string, fileName?: string, routes?: RouteContext, classInfo?: ClassInfo): Diagnostic[] {
   const view = fileName?.endsWith(VIEW_FILE_SUFFIX) ? basename(fileName).slice(0, -VIEW_FILE_SUFFIX.length) : undefined
-  return analyze(source, fileName, routes === undefined || view === undefined ? undefined : { routes, view }).diagnostics
+  return analyze(source, fileName, routes === undefined || view === undefined ? undefined : { routes, view }, classInfo).diagnostics
 }
 
 /** The route table in `dir` (the project root) as views are checked against it. */
@@ -1643,6 +1902,15 @@ export async function checkFiles(paths: string[], options: CheckOptions = {}): P
   const routes = options.routes === undefined ? loadRouteContext(cwd) : options.routes
   const project = resolveProject({ cwd, views: options.viewsDir })
   const files: FileCheckResult[] = []
+  // Tailwind's design system per theme combination, for the class conflict check (loaded once each).
+  const classInfos = new Map<string, Promise<ClassInfo | undefined>>()
+  const classInfoFor = (absolute: string): Promise<ClassInfo | undefined> => {
+    const alternative = project.listAlternatives().find((alt) => absolute.startsWith(`${alt.dir}/`))
+    const themes = alternative === undefined ? [project.themeFile] : [project.themeFile, alternative.themeFile]
+    const key = themes.join('\n')
+    if (!classInfos.has(key)) classInfos.set(key, loadClassInfo(themes))
+    return classInfos.get(key)!
+  }
   let errorCount = 0
   let warningCount = 0
   for (const path of paths) {
@@ -1660,7 +1928,8 @@ export async function checkFiles(paths: string[], options: CheckOptions = {}): P
       } else {
         // An alternative in explore/<alternative>/ is checked as the view it stands in for (SPEC D31).
         const view = absolute.endsWith(VIEW_FILE_SUFFIX) ? basename(absolute).slice(0, -VIEW_FILE_SUFFIX.length) : undefined
-        const analysis = analyze(source, absolute, routes === null || view === undefined ? undefined : { routes, view })
+        const classInfo = /m-bind:class/i.test(source) ? await classInfoFor(absolute) : undefined
+        const analysis = analyze(source, absolute, routes === null || view === undefined ? undefined : { routes, view }, classInfo)
         diagnostics = analysis.diagnostics
         const stale = staleTypes(absolute, file, analysis)
         if (stale !== undefined) diagnostics.unshift(stale)

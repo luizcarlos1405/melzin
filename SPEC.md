@@ -219,7 +219,7 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   is ever needed, would need its own marker, so that a plain list keeps meaning "replace".
 - **D37. Bindings reach attributes and classes through a short allowlist, and a binding is a path.**
   `m-bind:<attr>="path"` writes one attribute, and `m-bind:class` takes Vue's object syntax, literal
-  class names as keys and boolean paths as values: `m-bind:class="{ 'font-bold': item.unread }"`. The
+  class names as keys and conditions as values, as in `m-if`: `m-bind:class="{ 'font-bold': item.unread }"`. The
   allowlist is the value-carrying `aria-*` attributes, `data-*` (with `data-melzin-*` reserved for the
   runtime) and `title`. Binding is refused on custom elements, where `m-bind:` already means props
   (D18); `src` waits for the richer field types (#11). A view has two ways to style a state: the class
@@ -228,8 +228,9 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   removes the attribute when false, except `aria-*`, which keeps `"false"` because `aria-expanded="false"`
   says something; a missing value removes it. On `data-*`, strings and numbers are written as text. A
   static attribute and a binding of the same name are an error. For `class` they merge at runtime, as in
-  Vue, and the checker lints conflicts between the static and the bound classes. Values are paths only,
-  as in D35: no literals, `!` or expressions. There are no modifiers, and a bare `m-bind` on a plain
+  Vue, and the checker lints conflicts between the static and the bound classes. An attribute's value
+  is a path only, as in D35, and a class key's value a condition (`!` and `.length` allowed, so a pair
+  `{ 'a': x, 'b': !x }` covers both looks): no literals or other expressions. There are no modifiers, and a bare `m-bind` on a plain
   element is an error (it stays the all-props form on components, D18). Class names stay literal in the
   file (#52).
 - **D38. Forms are native, and the form's controls fill the event's payload.** A form is a `<form>` with

@@ -273,13 +273,13 @@ describe('directive warnings', () => {
   })
 
   test('Vue/Alpine attributes are dropped; unsupported m-* directives are warned and ignored', () => {
-    mountBody(`<p v-text="count"></p><button @click="go"></button><a m-bind:title="url"></a><p m-html="count"></p><p :title="x"></p>`)
-    const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href'
+    mountBody(`<p v-text="count"></p><button @click="go"></button><a m-bind:id="count"></a><p m-html="count"></p><p :title="x"></p>`)
+    const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click, m-bind:href, m-bind:class and m-bind:<attr>'
     expect(warnings).toEqual([
       "<p>: 'v-text' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
       "<button>: '@click' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
       "<p>: ':title' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
-      `<a>: 'm-bind:title' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7); ignored`,
+      '<a m-bind:id="count">: id names elements in the whole host page, so it can\'t come from data; ignored',
       `<p>: 'm-html' is not supported yet; Melzin supports only ${supported}; only plain text, through m-text (docs/authoring.md §7); ignored`,
     ])
   })

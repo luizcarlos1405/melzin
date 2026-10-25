@@ -231,7 +231,7 @@ describe('security', () => {
       `<p m-text="count"></p><button type="button" x-init="document.title='x'">x</button><button type="button" form="host-form" formaction="https://evil.example/">y</button><button m-on:click="emit('increment')">+</button>`,
     )
     expect(messages(checkSource(source))).toEqual([
-      "error: 'x-init': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href",
+      "error: 'x-init': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click, m-bind:href, m-bind:class and m-bind:<attr>",
       "error: 'form' would submit a form in the host page; views send events with m-on:click=\"emit('name')\"",
       "error: 'formaction' would submit a form in the host page; views send events with m-on:click=\"emit('name')\"",
     ])
@@ -249,13 +249,13 @@ describe('security', () => {
 describe('rejected bindings and "never used"', () => {
   const LABEL = '{ "data": { "type": "object", "properties": { "label": { "type": "string" } }, "required": ["label"] } }'
   const SNAPSHOTS = '{ "one": { "data": { "label": "Hello" } } }'
-  const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href'
+  const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click, m-bind:href, m-bind:class and m-bind:<attr>'
 
   test("a rejected attribute binding counts as a use of the field it reads", () => {
-    const source = page('<button m-bind:aria-label="label">x</button><i :title="label">y</i>', { schema: LABEL, snapshots: SNAPSHOTS })
+    const source = page('<button m-bind:id="label">x</button><i :title="label">y</i>', { schema: LABEL, snapshots: SNAPSHOTS })
     expect(messages(checkSource(source))).toEqual([
-      `error: 'm-bind:aria-label' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7)`,
-      `error: ':title' is Vue/Alpine syntax; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7)`,
+      "error: m-bind:id: id names elements in the whole host page, so it can't come from data",
+      "error: ':title' is Vue/Alpine syntax; use m-bind:title (aria-* attributes that hold values, data-* and title can be bound)",
     ])
   })
 
@@ -267,13 +267,11 @@ describe('rejected bindings and "never used"', () => {
     ])
   })
 
-  test('a rejected binding with an unknown path still leaves the field unused', () => {
+  test('a binding with an unknown path is an error that names the field', () => {
     const source = page('<button m-bind:aria-label="lbael">x</button>', { schema: LABEL, snapshots: SNAPSHOTS })
-    expect(messages(checkSource(source))).toEqual([
-      `warning: data field 'label' is never used`,
-      `error: 'm-bind:aria-label' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7)`,
-    ])
+    expect(messages(checkSource(source))).toEqual(["error: m-bind:aria-label: unknown field 'lbael' (did you mean 'label'?)"])
   })
+
 })
 
 describe('review fixes', () => {
