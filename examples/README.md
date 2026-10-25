@@ -7,6 +7,7 @@ everything.
 | Example | What it shows |
 |---|---|
 | [poll](poll/) | a meetup poll: a list of options keyed by id (`m-for`), one `vote` event with a payload, a small Bun backend, generated types, and contract, view and API tests |
+| [chores](chores/) | a chore list styled from data: `m-bind:data-*` with Tailwind's `data-[…]:` and named-group variants, `aria-pressed` toggles and an `aria-label` from data, class pairs with `m-bind:class`, and contract, view and API tests |
 | [profile](profile/) | a routed app: a members list with an empty state, and profiles whose follow button depends on who is looking (`m-if`, `m-else-if`, `m-else`, `m-show`), fallbacks for optional fields, a remote and a local source, and contract, view, app and API tests |
 
 ## Adding an example

@@ -777,6 +777,8 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   // data-* names the view sets, statically or by binding (with whether the bound field is a boolean),
   // and the class tokens it writes, for the variant checks.
   const staticData = new Set<string>()
+  // Every data-* name a binding sets, even one whose path couldn't be checked.
+  const boundNames = new Set<string>()
   const boundData = new Map<string, { boolean: boolean; binding: Binding }>()
   const classUses: { token: string; offset: number }[] = []
 
@@ -1023,6 +1025,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       useRejectedBinding(directive, value, context)
       return undefined
     }
+    if (target.startsWith('data-')) boundNames.add(target.slice('data-'.length))
     if (getAttr(element, target) !== undefined) {
       error(element.sourceCodeLocation?.attrs?.[target]?.startOffset ?? attributeAt, `an element with ${directive} can't also have a static ${target}; keep one (a fallback goes in the schema's default)`)
     }
@@ -1459,7 +1462,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     if (variantWarned.has(key)) continue
     const bound = boundData.get(use.name)
     if (bound === undefined) {
-      if (staticData.has(use.name) || use.name.startsWith('melzin-')) continue
+      if (staticData.has(use.name) || boundNames.has(use.name) || use.name.startsWith('melzin-')) continue
       variantWarned.add(key)
       warning(use.offset, `'${use.token}' styles data-${use.name}, which nothing in the view sets; bind it with m-bind:data-${use.name}="path", or check the name`)
     } else if (bound.boolean && use.value === 'false') {

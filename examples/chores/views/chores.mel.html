@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Chores</title>
+  <meta name="description" content="This week's chores: tick them off, filter the list, see how far along the week is">
+  <script type="melzin/schema">
+    {
+      "data": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "progressLabel": { "type": "string", "description": "Shown under the dots and read for them, such as \"2 of 5 done\"" },
+          "progress": {
+            "type": "array",
+            "key": "id",
+            "description": "One dot per chore, whatever the filter",
+            "items": {
+              "type": "object",
+              "properties": { "id": { "type": "string" }, "done": { "type": "boolean" } },
+              "required": ["id", "done"]
+            }
+          },
+          "filters": {
+            "type": "array",
+            "key": "id",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "label": { "type": "string" },
+                "current": { "type": "boolean" }
+              },
+              "required": ["id", "label", "current"]
+            }
+          },
+          "chores": {
+            "type": "array",
+            "key": "id",
+            "description": "The chores the current filter shows",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "done": { "type": "boolean" },
+                "priority": { "type": "string", "description": "high, normal or low" },
+                "priorityLabel": { "type": "string" },
+                "toggleLabel": { "type": "string", "description": "The toggle's accessible name, such as \"Water the plants\"" }
+              },
+              "required": ["id", "title", "done", "priority", "priorityLabel", "toggleLabel"]
+            }
+          },
+          "emptyLabel": { "type": "string" }
+        },
+        "required": ["title", "progressLabel", "progress", "filters", "chores", "emptyLabel"]
+      },
+      "events": {
+        "toggle": {
+          "description": "Tick a chore off, or put it back",
+          "payload": { "type": "object", "properties": { "choreId": { "type": "string" } }, "required": ["choreId"] }
+        },
+        "filter": {
+          "description": "Show all chores, only the open ones or only the done ones",
+          "payload": { "type": "object", "properties": { "filterId": { "type": "string" } }, "required": ["filterId"] }
+        }
+      }
+    }
+  </script>
+  <script type="melzin/snapshots">
+    {
+      "a typical week": {
+        "data": {
+          "title": "Chores this week",
+          "progressLabel": "2 of 5 done",
+          "progress": [
+            { "id": "plants", "done": true },
+            { "id": "bins", "done": false },
+            { "id": "laundry", "done": true },
+            { "id": "bathroom", "done": false },
+            { "id": "groceries", "done": false }
+          ],
+          "filters": [
+            { "id": "all", "label": "All", "current": true },
+            { "id": "open", "label": "Open", "current": false },
+            { "id": "done", "label": "Done", "current": false }
+          ],
+          "chores": [
+            { "id": "plants", "title": "Water the plants", "done": true, "priority": "normal", "priorityLabel": "Normal", "toggleLabel": "Water the plants" },
+            { "id": "bins", "title": "Take the bins out", "done": false, "priority": "high", "priorityLabel": "Today", "toggleLabel": "Take the bins out" },
+            { "id": "laundry", "title": "Do the laundry", "done": true, "priority": "normal", "priorityLabel": "Normal", "toggleLabel": "Do the laundry" },
+            { "id": "bathroom", "title": "Clean the bathroom", "done": false, "priority": "normal", "priorityLabel": "Normal", "toggleLabel": "Clean the bathroom" },
+            { "id": "groceries", "title": "Buy groceries", "done": false, "priority": "low", "priorityLabel": "Whenever", "toggleLabel": "Buy groceries" }
+          ],
+          "emptyLabel": "No chores yet"
+        }
+      },
+      "only the open ones": {
+        "extends": "a typical week",
+        "data": {
+          "filters": [
+            { "id": "all", "label": "All", "current": false },
+            { "id": "open", "label": "Open", "current": true },
+            { "id": "done", "label": "Done", "current": false }
+          ],
+          "chores": [
+            { "id": "bins", "title": "Take the bins out", "done": false, "priority": "high", "priorityLabel": "Today", "toggleLabel": "Take the bins out" },
+            { "id": "bathroom", "title": "Clean the bathroom", "done": false, "priority": "normal", "priorityLabel": "Normal", "toggleLabel": "Clean the bathroom" },
+            { "id": "groceries", "title": "Buy groceries", "done": false, "priority": "low", "priorityLabel": "Whenever", "toggleLabel": "Buy groceries" }
+          ],
+          "emptyLabel": "Nothing left to do"
+        }
+      },
+      "all done": {
+        "extends": "a typical week",
+        "data": {
+          "progressLabel": "All 2 done",
+          "progress": [{ "id": "plants", "done": true }, { "id": "bins", "done": true }],
+          "chores": [
+            { "id": "plants", "title": "Water the plants", "done": true, "priority": "normal", "priorityLabel": "Normal", "toggleLabel": "Water the plants" },
+            { "id": "bins", "title": "Take the bins out", "done": true, "priority": "high", "priorityLabel": "Today", "toggleLabel": "Take the bins out" }
+          ]
+        }
+      },
+      "nothing open": {
+        "extends": "all done",
+        "data": {
+          "filters": [
+            { "id": "all", "label": "All", "current": false },
+            { "id": "open", "label": "Open", "current": true },
+            { "id": "done", "label": "Done", "current": false }
+          ],
+          "chores": [],
+          "emptyLabel": "Nothing left to do"
+        }
+      },
+      "a new week": {
+        "extends": "a typical week",
+        "data": { "progressLabel": "Nothing to do yet", "progress": [], "chores": [], "emptyLabel": "No chores yet" }
+      },
+      "very long titles": {
+        "extends": "a typical week",
+        "data": {
+          "progressLabel": "1 of 2 done",
+          "progress": [{ "id": "a", "done": true }, { "id": "b", "done": false }],
+          "chores": [
+            { "id": "a", "title": "Sort out the cupboard under the stairs, including the box of cables nobody remembers buying", "done": true, "priority": "low", "priorityLabel": "Whenever", "toggleLabel": "Sort out the cupboard under the stairs" },
+            { "id": "b", "title": "Call the landlord about the dripping kitchen tap before it floods the neighbours again", "done": false, "priority": "high", "priorityLabel": "Today", "toggleLabel": "Call the landlord about the tap" }
+          ]
+        }
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="mx-auto flex min-h-screen w-full max-w-xl flex-col gap-6 px-4 py-8 sm:py-12">
+    <header class="flex flex-col gap-3">
+      <h1 class="text-2xl font-semibold tracking-tight" m-text="title"></h1>
+      <div class="flex items-center gap-3">
+        <div role="img" class="flex flex-wrap gap-1.5 empty:hidden" m-bind:aria-label="progressLabel">
+          <span m-for="dot in progress" class="size-2.5 rounded-full transition-colors duration-300"
+                m-bind:class="{ 'bg-brand-500': dot.done, 'bg-zinc-300': !dot.done }"></span>
+        </div>
+        <p class="text-sm text-zinc-600" aria-hidden="true" m-text="progressLabel"></p>
+      </div>
+    </header>
+
+    <nav aria-label="Filter chores" class="flex gap-1 self-start rounded-full bg-zinc-100 p-1">
+      <button m-for="filter in filters" type="button"
+              class="rounded-full px-3.5 py-1.5 text-sm font-medium text-zinc-600 transition-colors hover:text-zinc-900 aria-pressed:bg-white aria-pressed:text-zinc-900 aria-pressed:shadow-sm"
+              m-bind:aria-pressed="filter.current" m-text="filter.label"
+              m-on:click="emit('filter', { filterId: filter.id })"></button>
+    </nav>
+
+    <ul class="flex flex-col gap-2" m-if="chores.length">
+      <li m-for="chore in chores"
+          class="group/chore flex items-center gap-3 rounded-xl border border-l-4 border-zinc-200 border-l-zinc-300 bg-white px-3 py-3 shadow-xs transition-opacity data-[priority=high]:border-l-red-500 data-[priority=low]:border-l-sky-300 data-done:opacity-70"
+          m-bind:data-priority="chore.priority" m-bind:data-done="chore.done">
+        <button type="button"
+                class="grid size-6 shrink-0 place-items-center rounded-full border-2 border-zinc-300 text-white transition-colors hover:border-brand-500 aria-pressed:border-brand-600 aria-pressed:bg-brand-600"
+                m-bind:aria-pressed="chore.done" m-bind:aria-label="chore.toggleLabel"
+                m-on:click="emit('toggle', { choreId: chore.id })">
+          <svg viewBox="0 0 16 16" class="size-3.5 opacity-0 transition-opacity group-data-done/chore:opacity-100" aria-hidden="true">
+            <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <p class="min-w-0 flex-1 truncate text-[0.95rem] transition-colors"
+           m-bind:class="{ 'text-zinc-400 line-through': chore.done, 'text-zinc-900': !chore.done }"
+           m-bind:title="chore.title" m-text="chore.title"></p>
+        <span class="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 group-data-[priority=high]/chore:bg-red-50 group-data-[priority=high]/chore:text-red-700 group-data-[priority=low]/chore:bg-sky-50 group-data-[priority=low]/chore:text-sky-700"
+              m-text="chore.priorityLabel"></span>
+      </li>
+    </ul>
+    <p m-else class="rounded-xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-500" m-text="emptyLabel"></p>
+  </main>
+</body>
+</html>

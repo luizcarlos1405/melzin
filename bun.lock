@@ -5,6 +5,19 @@
     "": {
       "name": "melzin-workspace",
     },
+    "examples/chores": {
+      "name": "melzin-example-chores",
+      "dependencies": {
+        "@melzin/cli": "workspace:*",
+        "melzin": "workspace:*",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "^21.0.3",
+        "@types/bun": "^1.4.3",
+        "happy-dom": "^21.0.3",
+        "typescript": "^7.0.2",
+      },
+    },
     "examples/poll": {
       "name": "melzin-example-poll",
       "dependencies": {
@@ -197,6 +210,8 @@
     "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
 
     "melzin": ["melzin@workspace:packages/melzin"],
+
+    "melzin-example-chores": ["melzin-example-chores@workspace:examples/chores"],
 
     "melzin-example-poll": ["melzin-example-poll@workspace:examples/poll"],
 
