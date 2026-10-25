@@ -30,12 +30,15 @@
   "dependencies": {
     "@tailwindcss/node": "^4.3.3",
     "@tailwindcss/oxide": "^4.3.3",
-    "melzin": "workspace:*",
     "parse5": "^8.0.1",
     "tailwindcss": "^4.3.3"
   },
+  "peerDependencies": {
+    "melzin": "workspace:^"
+  },
   "devDependencies": {
     "@types/bun": "^1.4.3",
+    "melzin": "workspace:*",
     "typescript": "^7.0.2"
   }
 }

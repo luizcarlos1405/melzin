@@ -1010,7 +1010,8 @@ shows both.
 ## 11. Setting up a project
 
 A project that uses Melzin is a Bun project. `melzin` is the runtime your app mounts views with, and
-`@melzin/cli` provides the `melzin` command and the server-side helpers. Inside this repository's
+`@melzin/cli` provides the `melzin` command and the server-side helpers; it lists `melzin` as a peer
+dependency, so the shell previews views with the same runtime your app ships. Inside this repository's
 workspace that's `"melzin": "workspace:*"` and `"@melzin/cli": "workspace:*"` (as in `examples/poll/`);
 elsewhere:
 

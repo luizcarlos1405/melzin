@@ -263,6 +263,16 @@ optionally negated with `!`; `m-for="item in list"`; and `emit('name', { field: 
 - [x] Publish to npm: a dependency-free `melzin` runtime and a separate `@melzin/cli` package
 - [ ] Compile the CLI so it also runs on Node, and publish with provenance from CI
 
+## Releasing
+
+Pack with `bun pm pack` (run from `packages/melzin` and `packages/cli`), never with `npm pack`: only Bun
+rewrites the `workspace:` ranges in `package.json` to real versions, and a tarball that still has one
+can't be installed outside this repository. `@melzin/cli` lists `melzin` as a peer dependency, so a
+project installs both and the shell renders views with the app's own runtime. `melzin`'s `prepack` script
+builds `dist/`. `scripts/check-packed-install.sh` packs both, installs the tarballs into a fresh project
+and fails if a manifest still contains `workspace:`; CI runs it on every push. Bump the versions by hand,
+then publish the tarballs with `bun publish` or `npm publish <tarball>`.
+
 ## Contributing
 
 Melzin is at the stage where design discussion is worth more than code. Issues about the idea, the format
