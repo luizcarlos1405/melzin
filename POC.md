@@ -1096,13 +1096,17 @@ a property of the host's document), and Tailwind's arbitrary variants
 (`[:root:has(&)_#banner]:hidden`) can restyle the host page, which waits on style isolation
 (SPEC #39).
 
-## 19. After the POC: attribute and class bindings (in progress)
+## 19. After the POC: attribute and class bindings
 
 Started on 2026-10-24, from SPEC D37 and D38, settled on paper the same day. Like §14 and §18, it comes
 ahead of the binding-language battle (SPEC §11). **Status:** built for this step: `m-bind:<attr>` and
-`m-bind:class`. Forms (D38) follow in §20. Only the decisions are recorded so far; the full build record
-(Format, Runtime, Checker and types, Shell, Examples, Decisions and After the review, as in §18) takes
-this section's place when it's built.
+`m-bind:class`. Forms (D38) follow in §20. Built on 2026-10-25: core's `bind.ts` holds the targets, the ARIA table, the
+value rule and the class object's grammar, shared by the runtime and the checker. The checker's class
+conflict lint asks Tailwind's design system (`@tailwindcss/node`'s unstable API, skipped if it fails to
+load) which properties each class sets and in what order. The guide (§3, §6) and `examples/chores`
+show the bindings. In happy-dom, `m-bind:class` reads as a namespaced `class` attribute, so tests read
+classes from the markup; browsers keep the two apart (checked in Chromium). Not built yet: the review
+and authoring trial §18 had.
 
 ### Decisions
 

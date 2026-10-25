@@ -320,9 +320,8 @@ payload is an object of named fields, each filled from a path:
 - Send a key, not the item: payload fields are strings, numbers or booleans. Send `option.id` and let
   the host look up the rest.
 - In a list, every row's button says the same thing. Give each one a name that says which item it's
-  for with text only screen readers get, since attribute bindings (`aria-label`, `title`, `data-*`)
-  aren't supported yet:
-  `Vote<span class="sr-only"> for <span m-text="option.label"></span></span>`.
+  for: `m-bind:aria-label="option.voteLabel"`, a field the host writes ("Vote for Pizza"), or text
+  only screen readers get: `Vote<span class="sr-only"> for <span m-text="option.label"></span></span>`.
 - `m-on:click="like()"` is an error too: the host's handlers aren't callable from the view. Write
   `emit('like')`.
 - Several elements may emit the same event. An element may have both `m-text` and `m-on:click`.
@@ -351,6 +350,57 @@ route it links to (§4).
   such a link matches no route (§12).
 - Links stay real links: they open in a new tab, can be copied, and the app switches screens without
   reloading when they lead to one of its routes.
+
+### `m-bind:<attr>="path"`
+
+Sets one attribute from a field (SPEC D37). The attributes it can set: the `aria-*` attributes that
+hold values (`aria-label`, `aria-pressed`, `aria-expanded`, `aria-current`, `aria-valuenow`...),
+`data-*` (except `data-melzin-*`) and `title`.
+
+```html
+<li m-for="task in tasks" m-bind:data-done="task.done" m-bind:data-priority="task.priority"
+    class="data-done:opacity-60 data-[priority=high]:border-red-500">
+  <button type="button" m-bind:aria-pressed="task.done" m-bind:aria-label="task.toggleLabel"
+          class="aria-pressed:bg-emerald-600" m-on:click="emit('toggle', { taskId: task.id })">...</button>
+</li>
+```
+
+- **Values.** A string or number is written as text. A boolean writes `"true"` when true and removes
+  the attribute when false, except on `aria-*`, which keeps `"false"` (a toggle that's off is still a
+  toggle). A missing value removes the attribute; a fallback is the schema's `default`.
+- **Style a state with Tailwind's variants:** `data-done:` (the attribute is there), `not-data-done:`,
+  `data-[priority=high]:` (one value; this is how a field with several values, an enum, gets its
+  looks), `aria-pressed:`, and `group-data-done/row:` from a parent with `class="group/row"`. Name
+  groups: a bare `group-*` or `in-*` matches any ancestor, the host page's too. `data-done:` on a
+  string or number field matches every value, `0` and `""` included; the checker warns.
+- The value is a path; `!` isn't allowed (`not-aria-expanded:` styles the opposite). ARIA attributes
+  take the field type WAI-ARIA gives them: `aria-pressed` and `aria-expanded` a boolean,
+  `aria-valuenow` a number, `aria-label` a string, `aria-current` one of its tokens.
+- Not with a static attribute of the same name on the element.
+- Never bindable: `id`, `for`, `name`, `form`, `aria-labelledby` and other attributes that name ids
+  (they reach the whole host page), `style` and `on*`, `src` and `alt` (they wait for image fields),
+  and anything on a custom element (`<my-card>`).
+
+### `m-bind:class="{ 'classes': condition }"`
+
+Vue's object syntax: each key is literal class names, each value a condition as in `m-if` (`!` and
+`.length` work). The element's own `class` stays; a key's classes are added while its condition holds.
+
+```html
+<p class="text-sm" m-bind:class="{ 'text-zinc-400 line-through': task.done, 'text-zinc-900': !task.done }"
+   m-text="task.title"></p>
+```
+
+- **Put every look of a property in the binding, as a pair with `!`.** Tailwind's CSS order, not the
+  class attribute, decides between two classes that set the same property: with
+  `class="bg-white" m-bind:class="{ 'bg-rose-600': liked }"` the like never shows. The checker
+  reports it and writes the pair for you. To hide an element, use `m-show`.
+- Class names are written out in full (Tailwind finds them in the file). No string paths, arrays,
+  ternaries or template literals; `m-class:x` isn't Melzin (use the object).
+- Variant classes (`data-[…]:`, `aria-*:`) always win over plain ones, so a bound attribute with
+  variants needs no pair.
+- Snapshots should show each key both on and off; the checker warns when one is the same in every
+  snapshot.
 
 ## 4. Schema
 
@@ -610,11 +660,13 @@ and keeps the fields around it. For members with a handle and a name:
   `@font-face` rule in `theme.css`, pointing at a URL the host serves or at a file in the project's
   `public/` folder, which the shell serves at its root (so `/fonts/Brand.woff2` loads in the frames).
   Otherwise the next font in the list shows, in the shell too.
-- Classes can't change with data yet. For a state such as "liked", put both versions in the view and
-  let a condition pick one: `<button m-if="post.liked" class="bg-rose-600 ...">` and
-  `<button m-else class="bg-white ...">`. Variants that react to content, such as `empty:hidden`,
-  work too. In a list, the same goes for one row that looks different: a field of the item, such as
-  `isFeatured`, and a condition inside the row.
+- Classes change with data through `m-bind:class` or a bound `data-*`/`aria-*` attribute (§3): for a
+  state such as "liked", `class="rounded-full px-4 py-2" m-bind:class="{ 'bg-rose-600 text-white':
+  post.liked, 'bg-white text-stone-800': !post.liked }"`. Variants that react to content, such as
+  `empty:hidden`, work too. In a list, one row that looks different gets a field of the item, such as
+  `isFeatured`.
+- Tailwind's `starting:` (enter) transitions run whenever an element is inserted, the first render
+  included. To animate a change on an element that stays, toggle classes with `transition-*`.
 - Rows of a list (§3): style them by position with `first:`, `last:`, `odd:`, `even:`, `only:` and
   `nth-*`, space them from the container with `divide-y`, `space-y-*` or `gap-*`, and hide a container
   that holds only the list, while it's empty, with `empty:hidden`.
@@ -631,7 +683,7 @@ choices still open, such as Q15 for `<template>`.
 
 | Not yet | What to do now |
 |---|---|
-| Attribute and class bindings other than links (`m-bind:class`, `:title`, `:aria-label`) | Static attributes and classes; to switch styles, two elements with `m-if` and `m-else`; for an accessible name from data, `sr-only` text with `m-text` |
+| Binding `id`, `for`, `src`, `alt`, `style`, `value`, `disabled` and other attributes outside `aria-*`, `data-*` and `title` | A bound `data-*` or `aria-*` styled with variants; for images, initials or an emoji with `m-text` |
 | Layouts shared by several pages, nested routes | Each route shows one whole view; repeat the shared part in each |
 | Route paths with wildcards, optional or partial segments (`*`, `:id?`, `/@:handle`) | Literal segments and whole-segment parameters: `/u/:handle` |
 | Comparisons and `&&`, `\|\|` in conditions | A boolean the host computes: `m-if="hasVotes"`; for a list's count, `.length` alone: `m-if="items.length"`, `m-if="!items.length"` |

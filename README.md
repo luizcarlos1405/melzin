@@ -205,6 +205,10 @@ Since then:
   elements, empty states with `.length`, and events that carry named fields built from paths, such as
   `emit('vote', { optionId: option.id })`. The checker asks for empty and several-item snapshots, the
   generated types cover both, and the members page and the poll use them
+- [x] Attribute and class bindings: `m-bind:aria-*`, `m-bind:data-*` and `m-bind:title` from data, styled
+  with Tailwind's `data-[…]:` and `aria-*:` variants, and `m-bind:class` in Vue's object syntax. The
+  checker types ARIA values, catches a static class that would beat a bound one, and asks for a
+  snapshot of each look; the chores example uses them
 
 ## Roadmap
 
@@ -218,7 +222,7 @@ optionally negated with `!`; `m-for="item in list"`; and `emit('name', { field: 
 **First real prototype: a profile page**, growing from [examples/profile](examples/profile/).
 - [x] `m-show`, `m-if`, `m-else-if` and `m-else`
 - [x] Snapshots that extend a base snapshot and override only what differs
-- [ ] `m-bind` for attributes, including `m-bind:class` with literal Tailwind classes
+- [x] `m-bind` for attributes, including `m-bind:class` with literal Tailwind classes
 - [x] `m-for` with keys and empty states
 - [ ] Internal UI state (open menus, selected tabs, drafts) and state operations in handlers
 - [ ] Formatters for numbers, dates and plurals, built on `Intl`
