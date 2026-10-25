@@ -320,7 +320,8 @@ payload is an object of named fields, each filled from a path:
 - Send a key, not the item: payload fields are strings, numbers or booleans. Send `option.id` and let
   the host look up the rest.
 - In a list, every row's button says the same thing. Give each one a name that says which item it's
-  for with text only screen readers get, since attributes such as `aria-label` can't be bound yet:
+  for with text only screen readers get, since attribute bindings (`aria-label`, `title`, `data-*`)
+  aren't supported yet:
   `Vote<span class="sr-only"> for <span m-text="option.label"></span></span>`.
 - `m-on:click="like()"` is an error too: the host's handlers aren't callable from the view. Write
   `emit('like')`.
@@ -643,7 +644,7 @@ choices still open, such as Q15 for `<template>`.
 | Snapshots that change one item of a base's list | Restate the whole list (§5) |
 | Events other than click, modifiers | Clicks only, on buttons |
 | Internal state (`ui`) | Let the host send the state as data |
-| Forms and inputs (`m-model`, `<form>`) | `<button type="button">` with `m-on:click` |
+| Forms and inputs (`m-model`, `<form>`) | A plain `<input>` or `<textarea>` the host reads from the DOM; `<button type="button">` with `m-on:click` |
 | Formatters, expressions | The host sends preformatted strings |
 | `m-html`, components | Plain static HTML |
 

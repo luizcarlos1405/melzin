@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import * as core from '../src/core/index.ts'
-import { type DirectiveName, classifyAttribute, forChainMessage, isChainDirective, isIdent } from '../src/core/constants.ts'
+import { type DirectiveName, bindingValueIsPath, classifyAttribute, forChainMessage, isChainDirective, isIdent } from '../src/core/constants.ts'
 
 const ONLY_HREF = '(m-bind:href is the only binding, for links)'
 const CLASS_HINT = `classes and styles are static for now ${ONLY_HREF}; to switch styles, show one of two elements with m-if and m-else`
@@ -137,6 +137,15 @@ describe('constants', () => {
     expect(classifyAttribute('m-bind:href')).toEqual({ kind: 'directive', name: 'm-bind:href' })
     for (const name of ['class', 'id', 'data-x', 'aria-label', 'href', 'mtext']) {
       expect(classifyAttribute(name)).toEqual({ kind: 'plain' })
+    }
+  })
+
+  test('bindingValueIsPath: attribute and form bindings read a path, events and bare m-bind do not', () => {
+    for (const name of ['m-bind:title', 'm-bind:aria-label', 'm-class', 'm-style', 'm-model', 'm-html', ':title', ':href', 'v-bind:class', 'x-bind:src', 'v-model', 'v-html']) {
+      expect({ name, reads: bindingValueIsPath(name) }).toEqual({ name, reads: true })
+    }
+    for (const name of ['m-bind', 'v-bind', 'x-bind', 'm-on:click', 'm-on:submit', '@click', 'v-on:click', 'x-on:click', 'm-text', 'm-if']) {
+      expect({ name, reads: bindingValueIsPath(name) }).toEqual({ name, reads: false })
     }
   })
 

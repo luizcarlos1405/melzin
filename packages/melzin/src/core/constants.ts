@@ -197,3 +197,17 @@ export function classifyAttribute(name: string): AttributeKind {
   }
   return { kind: 'plain' }
 }
+
+/**
+ * Whether a (lowercased) binding name's value reads a data path: an attribute binding (`m-bind:<attr>`,
+ * `m-class`, `m-style` and their Vue/Alpine spellings) or a form or HTML binding (`m-model`, `m-html`).
+ * The checker reads such a value as a path, so a binding it rejects (not supported yet) doesn't also
+ * warn that the field it reads is never used. Event bindings (`m-on:*`, `@*`, `v-on:*`, `x-on:*`) and a
+ * bare `m-bind` (all props on a component) aren't single paths.
+ */
+export function bindingValueIsPath(name: string): boolean {
+  if (name === 'm-bind' || name === 'v-bind' || name === 'x-bind') return false
+  if (name.startsWith('m-bind:') || name.startsWith('v-bind:') || name.startsWith('x-bind:') || name.startsWith(':')) return true
+  if (/^m-(class|style)(:|$)/.test(name)) return true
+  return name === 'm-model' || name === 'm-html' || name === 'v-model' || name === 'x-model' || name === 'v-html' || name === 'x-html'
+}

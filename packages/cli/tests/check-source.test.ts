@@ -246,6 +246,36 @@ describe('security', () => {
   })
 })
 
+describe('rejected bindings and "never used"', () => {
+  const LABEL = '{ "data": { "type": "object", "properties": { "label": { "type": "string" } }, "required": ["label"] } }'
+  const SNAPSHOTS = '{ "one": { "data": { "label": "Hello" } } }'
+  const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href'
+
+  test("a rejected attribute binding counts as a use of the field it reads", () => {
+    const source = page('<button m-bind:aria-label="label">x</button><i :title="label">y</i>', { schema: LABEL, snapshots: SNAPSHOTS })
+    expect(messages(checkSource(source))).toEqual([
+      `error: 'm-bind:aria-label' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7)`,
+      `error: ':title' is Vue/Alpine syntax; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7)`,
+    ])
+  })
+
+  test('m-model and m-html also read their path, so the field is used', () => {
+    const source = page('<input m-model="label"><p v-html="label"></p>', { schema: LABEL, snapshots: SNAPSHOTS })
+    expect(messages(checkSource(source))).toEqual([
+      `error: 'm-model' is not supported yet; Melzin supports only ${supported}; forms and inputs aren't supported yet (docs/authoring.md §7)`,
+      `error: 'v-html' is Vue/Alpine syntax; only plain text, through m-text (docs/authoring.md §7)`,
+    ])
+  })
+
+  test('a rejected binding with an unknown path still leaves the field unused', () => {
+    const source = page('<button m-bind:aria-label="lbael">x</button>', { schema: LABEL, snapshots: SNAPSHOTS })
+    expect(messages(checkSource(source))).toEqual([
+      `warning: data field 'label' is never used`,
+      `error: 'm-bind:aria-label' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7)`,
+    ])
+  })
+})
+
 describe('review fixes', () => {
   test('a byte order mark does not shift columns', () => {
     const source = page('<p m-text="zz"></p>')

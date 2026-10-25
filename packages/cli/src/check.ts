@@ -37,6 +37,7 @@ import {
   VIEW_FILE_SUFFIX,
   VOID_ELEMENTS,
   attributeProblem,
+  bindingValueIsPath,
   classifyAttribute,
   conditionHolds,
   dataBlockType,
@@ -805,6 +806,16 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     used.add(formatFieldPath(fieldPathOf(segments, scope)))
   }
 
+  // A rejected binding (foreign or unsupported) that reads a path: mark the field it reads as used, so
+  // it doesn't also warn as never used (its error already says the binding isn't supported).
+  const useRejectedBinding = (name: string, value: string, context: Context): void => {
+    if (!bindingValueIsPath(name) || checked === null) return
+    const parsed = parseTextDirective(value)
+    if (!parsed.ok || parseRouteRef(parsed.path) !== undefined || unchecked(parsed.path, context)) return
+    if (!resolveField(checked, parsed.path, context.scope).ok) return
+    useField(parsed.path, context.scope)
+  }
+
   // A `route.*` path: an error when it's malformed, else recorded. Undefined for data paths.
   const checkRouteRef = (directive: string, segments: readonly string[], offset: number): boolean | undefined => {
     const ref = parseRouteRef(segments)
@@ -1098,6 +1109,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
         error(at, kind.message.replace(`use ${FOR_DIRECTIVE}`, `use ${example}`))
       } else if (kind.kind === 'foreign' || kind.kind === 'unsupported') {
         error(at, kind.message)
+        useRejectedBinding(name, attr.value, row)
       } else if (kind.name === TEXT_DIRECTIVE) {
         checkTextDirective(node, attr.value, row)
       } else if (kind.name === CLICK_DIRECTIVE) {
