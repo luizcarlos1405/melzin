@@ -1095,3 +1095,31 @@ Not fixed, for later: a view's markup can still reach the host page through ids 
 a property of the host's document), and Tailwind's arbitrary variants
 (`[:root:has(&)_#banner]:hidden`) can restyle the host page, which waits on style isolation
 (SPEC #39).
+
+## 19. After the POC: attribute and class bindings (in progress)
+
+Started on 2026-10-24, from SPEC D37 and D38, settled on paper the same day. Like §14 and §18, it comes
+ahead of the binding-language battle (SPEC §11). **Status:** built for this step: `m-bind:<attr>` and
+`m-bind:class`. Forms (D38) follow in §20. Only the decisions are recorded so far; the full build record
+(Format, Runtime, Checker and types, Shell, Examples, Decisions and After the review, as in §18) takes
+this section's place when it's built.
+
+### Decisions
+
+Provisional, and the binding-language battle can still change them. Their shape (the allowlist, both
+style mechanisms, the boolean rule, the class merge) is SPEC D37.
+
+- **Paths only.** A binding's value, and a class key's value, is a path, as in payloads (D35). `!` is an
+  error whose message names the fix: a field the host sends already negated (P3).
+- **Strings and numbers are text on `data-*`.** A boolean follows D37's rule, so `data-state="open"` can
+  come from an enum and `data-unread` from a flag.
+- **An ARIA table.** The checker holds the value-carrying `aria-*` attributes it allows, and a name that
+  isn't one gets a did-you-mean (`aria-lable` suggests `aria-label`).
+- **A static attribute and a binding of the same name are an error,** because which one wins would
+  depend on order. Classes are the exception: they merge, and the checker lints conflicts.
+- **No modifiers, and no bare `m-bind` on plain elements.** Both are errors that say so; bare `m-bind`
+  keeps meaning all props on components (D18).
+- **Coverage warnings (P8),** as for conditions and lists: a binding that no snapshot shows in more than
+  one state gets a warning, so the design of the other state isn't forgotten.
+- **Named groups are recommended** for styling a child from a parent's bound attribute (`group/row` with
+  `group-data-[…]/row:`), so nested groups don't style each other. The guide says so (§6).

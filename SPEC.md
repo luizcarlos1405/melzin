@@ -84,7 +84,8 @@ in an existing app or, with a small generic host, make up a whole webapp front e
 - **D5. The view holds its own internal state.** State that doesn't come from a database or anywhere
   else (menu open, selected tab, unsaved input) lives inside the view. The outside only feeds data in
   and handles events. Internal state is still declared in the file and visible to tools: snapshots can
-  set it and the shell can inspect and edit it (P6).
+  set it and the shell can inspect and edit it (P6). Forms are the exception until `m-model` exists:
+  unsaved input stays in the form's native controls and resets when the handler succeeds (D38).
 - **D6. HTML and known patterns.** The file is HTML-based, and each part leans on a widely known web
   pattern wherever one fits (P9, §6).
 - **D7. Embeddable and standalone.** A Melzin view can be mounted inside an existing app, and a whole
@@ -209,12 +210,36 @@ in an existing app or, with a small generic host, make up a whole webapp front e
   events (`follow {userId}`, D14, P6), match the DOM's single `CustomEvent.detail` (§7) and the
   field-by-field compatibility rules (§9.4), and let a field be added without breaking handlers. Paths
   keep payloads data (P1, D29). Literals, the DOM event and `ui` state wait for the binding language
-  (§11), and so does the markup that builds a payload, which is provisional.
+  (§11), and so does the markup that builds a payload, which is provisional. *Amended by D38: a form's
+  named controls fill the payload of its submit event.*
 - **D36. Snapshots override their base with JSON Merge Patch** (RFC 7396). Settles Q14 in the form
   built for D30 (POC.md §17): `extends` names the base, as in `tsconfig.json`, objects merge field by
   field, `null` removes a field, and lists and plain values replace whole, so changing one item of a
   list means restating the list. Chains are fine and cycles are errors. A keyed merge for lists, if one
   is ever needed, would need its own marker, so that a plain list keeps meaning "replace".
+- **D37. Bindings reach attributes and classes through a short allowlist, and a binding is a path.**
+  `m-bind:<attr>="path"` writes one attribute, and `m-bind:class` takes Vue's object syntax, literal
+  class names as keys and boolean paths as values: `m-bind:class="{ 'font-bold': item.unread }"`. The
+  allowlist is the value-carrying `aria-*` attributes, `data-*` (with `data-melzin-*` reserved for the
+  runtime) and `title`. Binding is refused on custom elements, where `m-bind:` already means props
+  (D18); `src` waits for the richer field types (#11). A view has two ways to style a state: the class
+  object, and a bound `data-*` or `aria-*` attribute styled with Tailwind's variants
+  (`data-[state=open]:…`, `aria-selected:…`), which suits enums. A boolean writes `"true"` when true and
+  removes the attribute when false, except `aria-*`, which keeps `"false"` because `aria-expanded="false"`
+  says something; a missing value removes it. On `data-*`, strings and numbers are written as text. A
+  static attribute and a binding of the same name are an error. For `class` they merge at runtime, as in
+  Vue, and the checker lints conflicts between the static and the bound classes. Values are paths only,
+  as in D35: no literals, `!` or expressions. There are no modifiers, and a bare `m-bind` on a plain
+  element is an error (it stays the all-props form on components, D18). Class names stay literal in the
+  file (#52).
+- **D38. Forms are native, and the form's controls fill the event's payload.** A form is a `<form>` with
+  `m-on:submit`. On submit, its named controls fill the event's declared payload by name, so
+  `saveProfile {name, bio}` reads `<input name="name">` and `<textarea name="bio">`, and the checker
+  matches the controls against the declared fields (D15). This amends D35, which built payloads from
+  paths only. Native validation still runs first (§6), and the form resets when the handler succeeds, so
+  unsaved input needs no `ui` state. That makes forms the exception to D5's rule that unsaved input lives
+  in the view's state, until `m-model` exists (§11). Anything beyond the native controls, such as
+  repeatable groups or server errors on fields, stays open (#20).
 
 ## 5. Principles
 
@@ -765,7 +790,8 @@ place the type appears (#59).
 8. ⚑ **Conditionals and variants:** show/hide, styles driven by a boolean or enum, position-based
    variants in lists. With Tailwind (D9) and Vue's directives (D13), a variant is a class binding with
    literal class names (`m-bind:class="{ 'font-bold': item.unread }"`) or a `data-*` attribute styled
-   with `data-[…]:` variants. Class names are never built from strings (#52).
+   with `data-[…]:` variants. Class names are never built from strings (#52). *Built, as D37 settles:
+   both mechanisms, with a bind-target allowlist and a boolean rule that keeps `aria-*` `"false"`.*
 9. ⚑ **Optional fields:** each one doubles the number of states and needs a designed fallback.
 10. ⚑ **Values with one of several shapes:** loading/error/ready, mixed feed items, different block
     types.
@@ -793,10 +819,15 @@ place the type appears (#59).
     composer with mentions and attachments, maps, payments. Every visual builder hits this ceiling (P7).
 20. ⚑ **Forms:** complex forms are in scope (D4): two-way binding, multi-step flows, conditional fields,
     repeatable field groups, sync and async validation, dirty/touched state, server errors shown on the
-    right fields. Native HTML validation is the known pattern to build on (§6).
+    right fields. Native HTML validation is the known pattern to build on (§6). *Settled in part by
+    D38: a native `<form m-on:submit>` whose named controls fill the event's payload, resetting when
+    the handler succeeds. Still open: two-way binding, multi-step flows, conditional and repeatable
+    fields, async validation, dirty/touched state and server errors on fields.*
 21. **UI that depends on time or measurement:** "5 min ago", "show more" when text overflows, popover
     positioning. None of these is a pure function of state.
-22. **Animations and transitions:** list items entering and leaving, state changes.
+22. **Animations and transitions:** list items entering and leaving, state changes. *Settled in part:
+    enter transitions are skipped on first render, as in Vue, so a snapshot shows the settled state.
+    The checker's stage hook (Q13, D33) is where a check on them would go.*
 23. **Overlays:** modals, toasts and dropdowns render outside their parent, which brings stacking order
     and keyboard focus trapping.
 24. **Security:** script injection (XSS) through text, rich text, URL and style bindings. A strict
@@ -817,7 +848,9 @@ place the type appears (#59).
     languages, right-to-left layouts.
 30. **Theming and design tokens:** dark mode, brand tokens, and where tokens end and data begins.
     Tailwind's theme holds the tokens and `dark:` handles dark mode (D9), and there's one theme per
-    project (D12).
+    project (D12). *Settled in part: the supported light/dark recipe is `light-dark()` tokens plus
+    `color-scheme`, not `dark:` variants on every element. Verified: Tailwind puts `@theme` variables in
+    a layer, so an unlayered `:root` rule wins without `!important`.*
 31. **Routing and multiple screens:** syncing URL and state, a shared app shell, navigation events, deep
     links to specific UI states. Needed for standalone mode (D7, §7). *Settled in part by D20–D27:
     pluggable sources, a declared route table, `URLPattern` paths, links as typed fields, loading
@@ -830,7 +863,9 @@ place the type appears (#59).
     variant? With no visual editor (D1), this falls on the AI: "make the second row red" has to become a
     field or a position rule (§9.1).
 33. **Forgotten bindings:** a hardcoded "Ana Souza" looks perfect in the design and is wrong for every
-    user in production (P8).
+    user in production (P8). *Settled in part by D37: attributes and classes can be bound too, so a
+    label, a title or a state class has somewhere to come from, and the coverage warnings catch a
+    binding that no snapshot exercises. Still open: spotting hardcoded content itself.*
 34. **Snapshot upkeep:** a base state plus overrides, updating snapshots when the schema changes, and the
     explosion of possible combinations. *Settled in part by D30 and D36: snapshots extend a base and
     override what differs with JSON Merge Patch, built in POC.md §17.*
@@ -1208,3 +1243,6 @@ internal state, optimistic sends and a long history (#16–#18, #46–#49).
 - 2026-10-18: lists and event payloads built ahead of the language battle (POC.md §18): `m-for` with
   keyed rows, `.length` in conditions for empty states, and `emit` with a payload built from paths.
   The members page and the poll use them.
+- 2026-10-24: D37–D38 (bindings for attributes and classes through an allowlist, with a boolean rule and
+  two ways to style a state; native forms whose named controls fill the event's payload, which amends
+  D35 and is the exception to D5's unsaved-input rule). Settled-part notes on #8, #20, #22, #30 and #33.
