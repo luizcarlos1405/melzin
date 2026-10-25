@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createShellServer, listViewEntries, resolveAlternativeFile, resolveViewFile } from '../src/shell.ts'
-import { resolveProject } from '../src/project.ts'
+import { resolveProject, resolvePublicFile } from '../src/project.ts'
 
 const COUNTER = `<!doctype html>
 <html lang="en">
@@ -63,6 +63,10 @@ beforeAll(() => {
   writeFileSync(join(dir, 'outside', 'counter.mel.html'), 'SECRET')
   symlinkSync(join(dir, 'outside'), join(dir, 'explore', 'escape'))
   symlinkSync(join(dir, 'secret.mel.html'), join(dir, 'explore', 'plain', 'link.mel.html'))
+  // Static files served at the shell's root (self-hosted fonts), with a symlink that leaves public/.
+  mkdirSync(join(dir, 'public', 'fonts'), { recursive: true })
+  writeFileSync(join(dir, 'public', 'fonts', 'brand.woff2'), 'FONT')
+  symlinkSync(join(dir, 'outside'), join(dir, 'public', 'escape'))
   server = createShellServer({ project: resolveProject({ cwd: dir }), port: 0, development: false })
   base = server.url.href.replace(/\/$/, '')
 })
@@ -89,6 +93,11 @@ describe('shell server', () => {
     const frame = await fetch(`${base}/frame?view=counter.mel.html&snapshot=zero`)
     expect(frame.status).toBe(200)
     expect(await frame.text()).toContain('id="melzin-root"')
+  })
+
+  test('/frame sets its own color-scheme, so it follows the OS instead of the shell\'s light palette', async () => {
+    const frame = await (await fetch(`${base}/frame`)).text()
+    expect(frame).toContain('color-scheme: light dark')
   })
 
   test('the pages never link the dynamic URLs statically', async () => {
@@ -235,6 +244,33 @@ describe('shell server', () => {
     expect((await fetch(`${base}/__melzin/other`)).status).toBe(404)
   })
 
+  test('/fonts/<file> serves a file in public/ at the shell root, with nosniff and no-store', async () => {
+    const response = await fetch(`${base}/fonts/brand.woff2`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(response.headers.get('content-security-policy')).toBeNull()
+    expect(await response.text()).toBe('FONT')
+  })
+
+  test('public/ rejects traversal, dotfiles and symlinks that leave it', async () => {
+    const paths = [
+      '/../secret.mel.html',
+      '/%2e%2e/secret.mel.html',
+      '/fonts/../../secret.mel.html',
+      '/fonts/%2e%2e%2fsecret.mel.html',
+      '/fonts/.hidden',
+      '/.hidden',
+      '/escape/counter.mel.html',
+      '/fonts/missing.woff2',
+    ]
+    for (const path of paths) {
+      const response = await fetch(base + path)
+      expect({ path, status: response.status }).toEqual({ path, status: 404 })
+      expect(await response.text()).not.toContain('SECRET')
+    }
+  })
+
   test('the favicon request gets an empty answer, not a 404 in the console', async () => {
     expect((await fetch(`${base}/favicon.ico`)).status).toBe(204)
   })
@@ -279,6 +315,34 @@ describe('resolveViewFile', () => {
   test('listViewEntries falls back to the name when the title is missing', async () => {
     const entries = await listViewEntries(resolveProject({ cwd: dir }))
     expect(entries.find((entry) => entry.name === 'untitled')?.title).toBe('untitled')
+  })
+})
+
+describe('resolvePublicFile', () => {
+  test('maps a URL path to a file in public/, subfolders included', () => {
+    const project = resolveProject({ cwd: dir })
+    expect(resolvePublicFile(project, 'fonts/brand.woff2')).toBe(join(dir, 'public', 'fonts', 'brand.woff2'))
+    expect(resolvePublicFile(project, 'fonts%2Fbrand.woff2')).toBe(join(dir, 'public', 'fonts', 'brand.woff2'))
+  })
+
+  test('rejects traversal, dotfiles, empty segments and files that leave public/', () => {
+    const project = resolveProject({ cwd: dir })
+    const rejected = [
+      '',
+      '..',
+      '../secret.mel.html',
+      'fonts/../../secret.mel.html',
+      'fonts/%2e%2e%2fsecret.mel.html',
+      '/secret.mel.html',
+      '.hidden',
+      'fonts/.hidden',
+      'fonts/',
+      'fonts//brand.woff2',
+      'escape/counter.mel.html',
+      'fonts/missing.woff2',
+      '%',
+    ]
+    for (const path of rejected) expect(resolvePublicFile(project, path)).toBeNull()
   })
 })
 

@@ -17,6 +17,7 @@ import {
   misplacedViews,
   resolveAlternativeFile,
   resolveProject,
+  resolvePublicFile,
   resolveViewFile,
 } from './project.ts'
 
@@ -74,6 +75,12 @@ export type ShellServerOptions = {
 }
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
+
+/** Headers for a static file served from public/: its type comes from the extension, nothing else. */
+const PUBLIC_FILE_HEADERS: Readonly<Record<string, string>> = {
+  'X-Content-Type-Options': 'nosniff',
+  ...NO_STORE,
+}
 
 function notFound(): Response {
   return new Response('Not found\n', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', ...NO_STORE } })
@@ -182,14 +189,20 @@ export function createShellServer(options: ShellServerOptions = {}): Bun.Server<
       const { pathname } = new URL(request.url)
       if (request.method !== 'GET' && request.method !== 'HEAD') return notFound()
       let path: string | null = null
+      let isPublic = false
       if (pathname.startsWith(VIEWS_PATH_PREFIX)) {
         path = resolveViewFile(project, pathname.slice(VIEWS_PATH_PREFIX.length))
       } else if (pathname.startsWith(EXPLORE_PATH_PREFIX)) {
         // `/explore/<alternative>/<file>`: exactly two segments, each still URL-encoded.
         const parts = pathname.slice(EXPLORE_PATH_PREFIX.length).split('/')
         if (parts.length === 2) path = resolveAlternativeFile(project, parts[0]!, parts[1]!)
+      } else {
+        // Static files in public/ at the shell's root, so self-hosted fonts load in the frames.
+        path = resolvePublicFile(project, pathname.slice(1))
+        isPublic = path !== null
       }
-      return path === null ? notFound() : new Response(Bun.file(path), { headers: { ...VIEW_FILE_HEADERS, ...NO_STORE } })
+      if (path === null) return notFound()
+      return new Response(Bun.file(path), { headers: isPublic ? PUBLIC_FILE_HEADERS : { ...VIEW_FILE_HEADERS, ...NO_STORE } })
     }),
   })
 }

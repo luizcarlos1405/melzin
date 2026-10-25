@@ -16,6 +16,7 @@ import {
   DEVICE_PRESETS,
   ZOOM_MAX,
   ZOOM_MIN,
+  alternativeName,
   clampZoom,
   defaultShellState,
   deviceLabel,
@@ -194,6 +195,14 @@ describe('URL state', () => {
     expect(viewFileUrl('my view.mel.html', 'dark mode')).toBe('/explore/dark%20mode/my%20view.mel.html')
     expect(stylesUrl()).toBe('/__melzin/styles.css')
     expect(stylesUrl('dark mode')).toBe('/__melzin/styles.css?alt=dark%20mode')
+  })
+
+  test('alternativeName maps current, empty and absent to the version in views/', () => {
+    expect(alternativeName(null)).toBeNull()
+    expect(alternativeName('')).toBeNull()
+    expect(alternativeName(CURRENT_VERSION)).toBeNull()
+    expect(alternativeName('night')).toBe('night')
+    expect(alternativeName(' dark mode ')).toBe(' dark mode ')
   })
 })
 

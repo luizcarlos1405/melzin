@@ -606,8 +606,9 @@ and keeps the fields around it. For members with a handle and a name:
   ```
 
   Views can't load fonts. A font named in `--font-sans` is used when the page has it: load it with an
-  `@font-face` rule in `theme.css` (an absolute URL) or from the host page. Otherwise the next font in
-  the list shows, in the shell too.
+  `@font-face` rule in `theme.css`, pointing at a URL the host serves or at a file in the project's
+  `public/` folder, which the shell serves at its root (so `/fonts/Brand.woff2` loads in the frames).
+  Otherwise the next font in the list shows, in the shell too.
 - Classes can't change with data yet. For a state such as "liked", put both versions in the view and
   let a condition pick one: `<button m-if="post.liked" class="bg-rose-600 ...">` and
   `<button m-else class="bg-white ...">`. Variants that react to content, such as `empty:hidden`,
@@ -766,7 +767,9 @@ not (for example `chromium --headless=new --screenshot=out.png --window-size=375
 plain URLs help without one: `/__melzin/api/views` returns the view list as JSON
 (`[{ "name", "file", "url", "title", "description", "stage" }]`), `/__melzin/api/explore` the
 alternatives (`{ "alternatives": [{ "name", "theme", "views" }], "problems" }`), and
-`/__melzin/styles.css` is the compiled CSS.
+`/__melzin/styles.css` is the compiled CSS. The project's `public/` folder is served at the shell's
+root, so self-hosted fonts and images load in the frames, and each frame follows the OS's light or
+dark palette rather than the shell's own.
 
 The URL holds the state, so you can open a precise render:
 
@@ -1255,6 +1258,8 @@ explore/
   keep their values. The shell also shows the project's other views with it, since promoting the
   alternative would restyle them too.
 - `melzin check` checks alternatives like any view. Nothing in `explore/` ships.
+- `melzin css --alt <name>` compiles Tailwind with an alternative's theme layered over the project's,
+  for a build that promotes it; the shell builds the same live.
 - `?view=plans&device=phone,desktop` shows every alternative side by side at both sizes, and `&alt=bold`
   shows one of them, for screenshots.
 

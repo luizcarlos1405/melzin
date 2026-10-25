@@ -7,6 +7,8 @@ import { CURRENT_VERSION, EXPLORE_DIR, ROUTES_FILE, VIEW_FILE_SUFFIX } from 'mel
 
 export const DEFAULT_VIEWS_DIR = 'views'
 export const DEFAULT_THEME_FILE = 'theme.css'
+/** Static files (fonts, images) served at the shell's root, next to the views. */
+export const DEFAULT_PUBLIC_DIR = 'public'
 /** The theme an alternative may bring in its folder, layered over the project's (SPEC D32). */
 export const ALTERNATIVE_THEME_FILE = 'theme.css'
 
@@ -42,6 +44,8 @@ export type Project = {
   routesFile: string
   /** Absolute path of explore/, where design alternatives live (SPEC D31). It may not exist. */
   exploreDir: string
+  /** Absolute path of public/, served at the shell's root (fonts, images). It may not exist. */
+  publicDir: string
   /**
    * Absolute paths of the `*.mel.html` files directly inside viewsDir, sorted by name. Dotfiles
    * (such as an editor's `.#name.mel.html` lock file) and entries that can't be read are skipped.
@@ -90,6 +94,7 @@ export function resolveProject(options: ProjectOptions = {}): Project {
     themeFile,
     routesFile: join(root, ROUTES_FILE),
     exploreDir,
+    publicDir: join(root, DEFAULT_PUBLIC_DIR),
     listViews: () => listViewFiles(viewsDir),
     listAlternatives() {
       const realExplore = existsSync(exploreDir) && statSync(exploreDir).isDirectory() ? realPath(exploreDir) : null
@@ -197,6 +202,38 @@ export function resolveAlternativeFile(project: Project, rawAlternative: string,
   if (name === '' || name.startsWith('.') || /[/\\\0]/.test(name) || !name.endsWith(VIEW_FILE_SUFFIX)) return null
   const found = project.listAlternatives().find((candidate) => candidate.name === alternative)
   return found?.views.find((candidate) => basename(candidate) === name) ?? null
+}
+
+/** Whether `path` (a real path) sits inside `dir` (a real path), possibly in a subfolder. */
+function isWithin(dir: string, path: string): boolean {
+  const rel = relative(dir, path)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+/**
+ * Maps a URL path to a file in public/, served at the shell's root (`/fonts/x.woff2` →
+ * `public/fonts/x.woff2`), or null. The path is URL-decoded relative segments; `..`, `.`, dotfiles,
+ * separators other than `/` and anything whose real path leaves public/ are rejected.
+ */
+export function resolvePublicFile(project: Project, rawPath: string): string | null {
+  let path: string
+  try {
+    path = decodeURIComponent(rawPath)
+  } catch {
+    return null
+  }
+  const segments = path.split('/')
+  const unsafe = (segment: string) => segment === '' || segment === '.' || segment === '..' || segment.startsWith('.') || /[\\\0]/.test(segment)
+  if (path.startsWith('/') || segments.some(unsafe)) return null
+  const full = join(project.publicDir, ...segments)
+  try {
+    const realPublic = realpathSync(project.publicDir)
+    const realFile = realpathSync(full)
+    if (!isWithin(realPublic, realFile) || !statSync(realFile).isFile()) return null
+  } catch {
+    return null
+  }
+  return full
 }
 
 /** Thrown for bad command-line usage; the CLI prints the message and exits with code 2. */

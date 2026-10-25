@@ -79,9 +79,9 @@ export async function buildCss(options: BuildCssOptions): Promise<string> {
   return options.minify ? optimize(css, { minify: true }).code : css
 }
 
-const CSS_USAGE = 'usage: melzin css [-o file] [--minify] [--views dir] [--theme file]'
+const CSS_USAGE = 'usage: melzin css [-o file] [--minify] [--views dir] [--theme file] [--alt name]'
 
-/** `melzin css [-o file] [--minify] [--views dir] [--theme file]`: prints or writes the CSS. */
+/** `melzin css [-o file] [--minify] [--views dir] [--theme file] [--alt name]`: prints or writes the CSS. */
 export async function runCss(args: string[]): Promise<number> {
   let values
   try {
@@ -93,6 +93,7 @@ export async function runCss(args: string[]): Promise<number> {
         minify: { type: 'boolean', default: false },
         views: { type: 'string' },
         theme: { type: 'string' },
+        alt: { type: 'string' },
       },
     }).values
   } catch (error) {
@@ -107,10 +108,17 @@ export async function runCss(args: string[]): Promise<number> {
     console.error(`melzin css: theme file not found: ${project.themeFile}`)
     return 1
   }
+  const alternative = values.alt === undefined ? undefined : project.listAlternatives().find((candidate) => candidate.name === values.alt)
+  if (values.alt !== undefined && alternative === undefined) {
+    const names = project.listAlternatives().map((candidate) => `'${candidate.name}'`).join(', ')
+    console.error(`melzin css: no alternative named '${values.alt}' in ${project.exploreDir}${names === '' ? '' : ` (alternatives: ${names})`}`)
+    return 1
+  }
   const css = await buildCss({
     projectDir: project.root,
     viewsDir: project.viewsDir,
     themeFile: project.themeFile,
+    alternative: alternative === undefined ? undefined : { dir: alternative.dir, themeFile: alternative.themeFile },
     minify: values.minify,
   })
   if (values.output === undefined) {

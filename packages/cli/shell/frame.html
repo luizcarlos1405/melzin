@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Melzin frame</title>
+  <!-- Follow the OS, not the shell: the shell's color-scheme would otherwise leak into this iframe,
+       so a dark OS would still render the view with the shell's light palette. -->
+  <style>
+    :root { color-scheme: light dark; }
+  </style>
   <!-- frame.ts links the project's stylesheet at runtime (a dynamic URL the bundler must not resolve). -->
   <script type="module" src="./frame.ts"></script>
 </head>

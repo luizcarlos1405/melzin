@@ -114,6 +114,28 @@ describe('melzin css', () => {
     expect(out).not.toContain('.p-4')
   })
 
+  test('builds a design alternative with --alt, its theme over the project\'s (SPEC D31, D32)', async () => {
+    mkdirSync(join(dir, 'explore/night'), { recursive: true })
+    writeFileSync(join(dir, 'explore/night/a.mel.html'), '<p class="text-brand ring-2">x</p>')
+    writeFileSync(join(dir, 'explore/night/theme.css'), '@theme { --color-brand: #0a0a0a; }\n')
+    const proc = Bun.spawn(['bun', cli, 'css', '--alt', 'night'], { cwd: dir, stdout: 'pipe' })
+    const out = await new Response(proc.stdout).text()
+    expect(await proc.exited).toBe(0)
+    expect(out).toContain('.p-4') // views/ too: views the alternative doesn't have render with its theme
+    expect(out).toContain('.ring-2')
+    expect(out).toContain('#0a0a0a')
+    expect(out).not.toContain('#ff0066')
+  })
+
+  test('--alt fails on a name that is not an alternative', async () => {
+    for (const name of ['nope', 'current']) {
+      const proc = Bun.spawn(['bun', cli, 'css', '--alt', name], { cwd: dir, stdout: 'pipe', stderr: 'pipe' })
+      const err = await new Response(proc.stderr).text()
+      expect(await proc.exited).toBe(1)
+      expect(err).toContain(`no alternative named '${name}'`)
+    }
+  })
+
   test('fails on a missing views dir or theme file, and on bad flags', async () => {
     const run = (args: string[]) => Bun.spawn(['bun', cli, 'css', ...args], { cwd: dir, stdout: 'pipe', stderr: 'pipe' }).exited
     expect(await run(['--views', 'missing'])).toBe(1)

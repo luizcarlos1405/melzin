@@ -8,7 +8,7 @@
 import { type RouteInput, VIEW_FILE_SUFFIX } from 'melzin/core'
 import { DATA_WARNING_PREFIX, type MelzinView, type Payload, mountSource, parseViewHtml } from 'melzin'
 import { type FrameMessageBody, frameMessage, isShellMessage } from './protocol.ts'
-import { stylesUrl, viewFileName, viewFileUrl } from './state.ts'
+import { alternativeName, stylesUrl, viewFileName, viewFileUrl } from './state.ts'
 
 const embedded = window.parent !== window
 let view: MelzinView<Record<string, unknown>> | null = null
@@ -121,9 +121,10 @@ async function start(): Promise<void> {
   const snapshotName = params.get('snapshot')
   // The route this frame previews (SPEC D26): its name is part of the view's URL input.
   const routeName = params.get('route')
-  // A design alternative (SPEC D31): its own file, or (theme) the views/ one with its CSS.
-  const alt = params.get('alt') || null
-  const theme = alt ?? (params.get('theme') || null)
+  // A design alternative (SPEC D31): its own file, or (theme) the views/ one with its CSS. `current`
+  // is what the shell calls the version in views/, not an alternative, so it maps back to the project.
+  const alt = alternativeName(params.get('alt'))
+  const theme = alt ?? alternativeName(params.get('theme'))
   if (!file.endsWith(VIEW_FILE_SUFFIX) || file.includes('/') || file.includes('\\')) {
     fail(`melzin: expected ?view=<name> or ?view=<name>${VIEW_FILE_SUFFIX}, got '${params.get('view') ?? ''}'`)
     return

@@ -199,6 +199,15 @@ export function viewFileName(nameOrFile: string): string {
   return nameOrFile === '' || nameOrFile.endsWith(VIEW_FILE_SUFFIX) ? nameOrFile : `${nameOrFile}${VIEW_FILE_SUFFIX}`
 }
 
+/**
+ * An alternative's name from a URL parameter: null for the version in views/ (which `current` names,
+ * as does an absent or empty value), the name otherwise. `/frame` and `melzin shell` read alt and
+ * theme this way, so `alt=current` never builds an `/explore/current/...` URL.
+ */
+export function alternativeName(raw: string | null): string | null {
+  return raw === null || raw === '' || raw === CURRENT_VERSION ? null : raw
+}
+
 export type FrameOptions = {
   snapshot?: string | null
   /** The route the frame previews (SPEC D26). */

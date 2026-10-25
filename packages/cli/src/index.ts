@@ -25,7 +25,7 @@ export const COMMANDS: Readonly<Record<string, Command>> = {
   },
   css: {
     run: async (args) => (await import('./css.ts')).runCss(args),
-    usage: 'melzin css [-o file] [--minify] [--views dir] [--theme file]',
+    usage: 'melzin css [-o file] [--minify] [--views dir] [--theme file] [--alt name]',
     summary: "compile the Tailwind CSS for the project's views",
   },
 }
