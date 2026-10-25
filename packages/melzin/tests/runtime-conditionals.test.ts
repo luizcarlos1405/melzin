@@ -248,9 +248,9 @@ describe('warnings', () => {
   test('Vue spellings get the m- equivalent', () => {
     mountBody('<p v-if="verified">A</p><p v-else>B</p><p v-show="verified">C</p>', { name: 'A' })
     expect(warnings).toEqual([
-      "<p>: 'v-if' is Vue/Alpine syntax; use m-if; ignored",
-      "<p>: 'v-else' is Vue/Alpine syntax; use m-else; ignored",
-      "<p>: 'v-show' is Vue/Alpine syntax; use m-show; ignored",
+      "<p>: 'v-if' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<p>: 'v-else' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<p>: 'v-show' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
     ])
   })
 })

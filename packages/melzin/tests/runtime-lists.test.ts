@@ -284,8 +284,8 @@ describe('bindings in rows', () => {
     })
     expect(all('li')).toHaveLength(3)
     expect(warnings).toEqual([
+      "<i>: 'v-text' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
       `<b m-text="member.nmae">: unknown field 'member.nmae' (did you mean 'member.name'?); skipped`,
-      "<i>: 'v-text' is Vue/Alpine syntax; use m-text; ignored",
     ])
   })
 
@@ -505,10 +505,10 @@ describe('broken lists', () => {
       { members: members('ana') },
     )
     expect(warnings).toEqual([
+      `<li>: ':key' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed`,
+      "<li>: 'v-for' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
       `put m-for on the element to repeat; <template> isn't supported; dropped`,
-      `<li>: ':key' is Vue/Alpine syntax; keys live in the schema: add "key": "<field>" to the list, such as "key": "id"; ignored`,
       `<li>: 'm-bind:key': keys live in the schema: add "key": "<field>" to the list, such as "key": "id"; ignored`,
-      "<li>: 'v-for' is Vue/Alpine syntax; use m-for; ignored",
     ])
   })
 

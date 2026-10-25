@@ -227,6 +227,12 @@ const errors: Case[] = [
     at: pos('srcdoc-attribute.mel.html', 'srcdoc'),
   },
   {
+    file: 'body-form-attribute.mel.html',
+    severity: 'error',
+    message: `'form' would submit a form in the host page; views send events with m-on:click="emit('name')"`,
+    at: pos('body-form-attribute.mel.html', 'form='),
+  },
+  {
     file: 'text-void-element.mel.html',
     severity: 'error',
     message: "m-text can't go on <input>: it has no content to set; use an element such as <span>",

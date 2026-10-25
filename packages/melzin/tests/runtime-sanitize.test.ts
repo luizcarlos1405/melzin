@@ -125,6 +125,51 @@ describe('attributes', () => {
       "<button>: style attributes aren't allowed; styling is Tailwind classes only, with design tokens in theme.css",
     ])
   })
+
+  test('Vue/Alpine attributes are removed, so the host page never runs them', () => {
+    mountBody(`<button id="a" x-init="document.title='pwned'">a</button><div id="b" @click="go" :title="tip" v-cloak>b</div>`)
+    expect(root.querySelector('#a')?.getAttributeNames()).toEqual(['id'])
+    expect(root.querySelector('#b')?.getAttributeNames()).toEqual(['id'])
+    expect(warnings).toEqual([
+      "<button>: 'x-init' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<div>: '@click' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<div>: ':title' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<div>: 'v-cloak' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+    ])
+  })
+
+  test('form attributes are removed, whatever their value', () => {
+    mountBody(`<button id="a" form="host-form" formaction="https://evil.example/">a</button><input id="b" formmethod="post" formtarget="_top" formenctype="text/plain">`)
+    expect(root.querySelector('#a')?.getAttributeNames()).toEqual(['id'])
+    expect(root.querySelector('#b')?.getAttributeNames()).toEqual(['id'])
+    const form = `would submit a form in the host page; views send events with m-on:click="emit('name')"; removed`
+    expect(warnings).toEqual([
+      `<button>: 'form' ${form}`,
+      `<button>: 'formaction' ${form}`,
+      `<input>: 'formmethod' ${form}`,
+      `<input>: 'formtarget' ${form}`,
+      `<input>: 'formenctype' ${form}`,
+    ])
+  })
+})
+
+describe('kept forms do not submit', () => {
+  test('a <button> without type inside a form warns, and one with type is fine', () => {
+    mountBody(`<form><button id="a">Go</button><button id="b" type="button">OK</button></form>`)
+    expect(root.querySelector('#a')?.hasAttribute('type')).toBe(false)
+    expect(root.querySelector('#b')?.getAttribute('type')).toBe('button')
+    expect(warnings).toEqual([
+      `<form> isn't supported yet; use <button type="button"> with m-on:click instead`,
+      `<button> needs type="button"; the default type="submit" would submit a form in the host page`,
+    ])
+  })
+
+  test('a submit event on a kept form is cancelled', () => {
+    mountBody(`<form id="f"><input name="x"></form>`)
+    const event = new Event('submit', { bubbles: true, cancelable: true })
+    root.querySelector('#f')!.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+  })
 })
 
 describe('schema block in the wrong place', () => {

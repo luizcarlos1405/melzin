@@ -7,7 +7,12 @@ import { CLICK_DIRECTIVE, FOR_DIRECTIVE, TEMPLATE_FOR_MESSAGE } from './constant
 
 export const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
 
-export type MarkupProblem = { message: string; drop: boolean }
+/**
+ * Why a view's markup can't be as written, shared by the runtime and the checker. `drop` tells the
+ * runtime to take the element or attribute out before it reaches the host page; `warning` tells the
+ * checker to report it as a warning rather than an error (the runtime warns either way).
+ */
+export type MarkupProblem = { message: string; drop: boolean; warning?: boolean }
 
 const STYLING = 'styling is Tailwind classes only, with design tokens in theme.css'
 const EMBEDDING = "views can't embed other documents"
@@ -43,18 +48,27 @@ const TEMPLATE_LOOPS = [FOR_DIRECTIVE, 'v-for', 'x-for']
 
 /**
  * Why an element can't be in a view's body, or undefined when it's fine. `attribute` reads one of
- * the element's attributes (null when missing).
+ * the element's attributes (null when missing). `insideForm` is true when the element sits inside a
+ * kept <form>, where a button's default `type="submit"` would submit it.
  */
 export function elementProblem(
   localName: string,
   namespace: string | null,
   attribute: (name: string) => string | null,
+  insideForm = false,
 ): MarkupProblem | undefined {
   if (Object.hasOwn(ANY_NAMESPACE, localName)) return ANY_NAMESPACE[localName]
   if (namespace === HTML_NAMESPACE || namespace === null) {
     // Vue and Alpine repeat a <template>; Melzin repeats the element itself.
     if (localName === 'template' && TEMPLATE_LOOPS.some((name) => attribute(name) !== null)) {
       return { message: TEMPLATE_FOR_MESSAGE, drop: true }
+    }
+    if (insideForm && localName === 'button' && attribute('type') === null) {
+      return {
+        message: `<button> needs type="button"; the default type="submit" would submit a form in the host page`,
+        drop: false,
+        warning: true,
+      }
     }
     return Object.hasOwn(HTML_ONLY, localName) ? HTML_ONLY[localName] : undefined
   }
@@ -100,11 +114,19 @@ export function attributeProblem(name: string, value: string): MarkupProblem | u
   }
   if (lower === 'style') return { message: `style attributes aren't allowed; ${STYLING}`, drop: false }
   if (lower === 'srcdoc') return { message: `srcdoc isn't allowed; ${EMBEDDING}`, drop: true }
+  // Vue and Alpine attributes: a host page running either would run them on the mounted view.
+  if (lower.startsWith('x-') || lower.startsWith('@') || lower.startsWith(':') || lower.startsWith('v-')) {
+    return { message: `'${name}' is Vue/Alpine syntax; a host page running Vue or Alpine would run it`, drop: true }
+  }
   if (URL_ATTRIBUTES.has(lower)) {
     const scheme = urlScheme(value)
     if (scheme !== undefined && SCRIPT_SCHEMES.has(scheme)) {
       return { message: `${scheme}: URLs aren't allowed in ${name}; views run no code`, drop: true }
     }
+  }
+  // Form attributes reach a form in the host page (or submit it), whatever their value.
+  if (lower === 'form' || lower === 'formaction' || lower === 'formmethod' || lower === 'formtarget' || lower === 'formenctype') {
+    return { message: `'${name}' would submit a form in the host page; views send events with ${CLICK_DIRECTIVE}="emit('name')"`, drop: true }
   }
   return undefined
 }

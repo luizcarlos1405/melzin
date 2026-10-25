@@ -88,6 +88,8 @@ export const namespaceURI = (el: Element): string | null => get(el, 'namespaceUR
 export const getAttribute = (el: Element, name: string): string | null => call(el, 'getAttribute', name) as string | null
 export const hasAttribute = (el: Element, name: string): boolean => call(el, 'hasAttribute', name) as boolean
 export const getAttributeNames = (el: Element): string[] => call(el, 'getAttributeNames') as string[]
+/** The nearest ancestor (or the element itself) matching `selector`, or null. */
+export const closest = (el: Element, selector: string): Element | null => call(el, 'closest', selector) as Element | null
 export const setAttribute = (el: Element, name: string, value: string): void => {
   call(el, 'setAttribute', name, value)
 }

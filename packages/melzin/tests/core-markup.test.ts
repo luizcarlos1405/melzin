@@ -45,6 +45,16 @@ describe('elementProblem', () => {
   test('ordinary elements are fine', () => {
     for (const tag of ['div', 'a', 'img', 'button', 'svg', 'noscript']) expect(elementProblem(tag, HTML_NAMESPACE, none)).toBeUndefined()
   })
+
+  test('a <button> without type inside a form is a warning; one outside is fine', () => {
+    expect(elementProblem('button', HTML_NAMESPACE, none, true)).toEqual({
+      message: `<button> needs type="button"; the default type="submit" would submit a form in the host page`,
+      drop: false,
+      warning: true,
+    })
+    expect(elementProblem('button', HTML_NAMESPACE, (name) => (name === 'type' ? 'button' : null), true)).toBeUndefined()
+    expect(elementProblem('button', HTML_NAMESPACE, none, false)).toBeUndefined()
+  })
 })
 
 describe('attributeProblem', () => {
@@ -67,6 +77,35 @@ describe('attributeProblem', () => {
     }
     expect(attributeProblem('title', 'javascript:x')).toBeUndefined()
     expect(attributeProblem('class', 'p-4')).toBeUndefined()
+  })
+
+  test('Vue/Alpine attributes are dropped, so a host page running either never runs them', () => {
+    for (const name of ['x-init', 'x-data', '@click', '@submit', ':class', ':href', 'v-if', 'v-bind:title']) {
+      expect({ name, problem: attributeProblem(name, 'x') }).toEqual({
+        name,
+        problem: { message: `'${name}' is Vue/Alpine syntax; a host page running Vue or Alpine would run it`, drop: true },
+      })
+    }
+    // Melzin's own m-* bindings aren't Vue/Alpine syntax and are kept.
+    expect(attributeProblem('m-bind:title', 'x')).toBeUndefined()
+  })
+
+  test('form attributes are dropped, whatever their value', () => {
+    for (const name of ['form', 'formmethod', 'formtarget', 'formenctype']) {
+      expect({ name, problem: attributeProblem(name, 'x') }).toEqual({
+        name,
+        problem: { message: `'${name}' would submit a form in the host page; views send events with m-on:click="emit('name')"`, drop: true },
+      })
+    }
+    // formaction keeps the javascript: message when the scheme is a script; otherwise it's dropped as a form attribute.
+    expect(attributeProblem('formaction', 'javascript:x')).toEqual({
+      message: "javascript: URLs aren't allowed in formaction; views run no code",
+      drop: true,
+    })
+    expect(attributeProblem('formaction', 'https://evil.example/')).toEqual({
+      message: `'formaction' would submit a form in the host page; views send events with m-on:click="emit('name')"`,
+      drop: true,
+    })
   })
 })
 

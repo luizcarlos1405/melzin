@@ -782,10 +782,11 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
   const loops: Loop[] = []
   /**
    * Where an element sits: the nearest gate that decides whether it shows (its own, or an element's
-   * around it), the aliases of the rows around it, and whether an m-for repeats it. Inside an m-for that
+   * around it), the aliases of the rows around it, whether an m-for repeats it, and whether a kept
+   * <form> encloses it (a button's default type="submit" would submit it). Inside an m-for that
    * doesn't work, `lenient` has its alias, or `unknown` when the m-for didn't parse.
    */
-  type Context = { gate: Gate | undefined; scope: Scope | undefined; inRow: boolean; lenient: { aliases: ReadonlySet<string>; unknown: boolean } | undefined }
+  type Context = { gate: Gate | undefined; scope: Scope | undefined; inRow: boolean; inForm: boolean; lenient: { aliases: ReadonlySet<string>; unknown: boolean } | undefined }
 
   // Inside a broken m-for, a path that may read its item isn't checked: the m-for's error explains it,
   // and fixing the m-for brings the check back. Data fields, outer aliases and route.* still are.
@@ -1041,7 +1042,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
     const loop: Loop = { kind: 'loop', offset: attributeAt, alias: parsed.alias, segments: parsed.path, path, list, parent: context.gate }
     gates.push(loop)
     loops.push(loop)
-    return { gate: loop, scope: resolved.scope, inRow: true, lenient: context.lenient }
+    return { gate: loop, scope: resolved.scope, inRow: true, inForm: context.inForm, lenient: context.lenient }
   }
 
   // The m-if chain open among a run of siblings: its conditions so far (undefined: broken).
@@ -1173,7 +1174,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       }
       gates.push(conditional)
     }
-    walkNodes(node.childNodes, conditional === undefined ? row : { ...row, gate: conditional })
+    walkNodes(node.childNodes, node.tagName === 'form' ? { ...(conditional === undefined ? row : { ...row, gate: conditional }), inForm: true } : conditional === undefined ? row : { ...row, gate: conditional })
     return next
   }
 
@@ -1196,10 +1197,10 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       const offset = startOf(node) ?? 0
       const blockType = node.tagName === 'script' ? dataBlockType(getAttr(node, 'type')) : undefined
       const problem = blockType === undefined
-        ? elementProblem(node.tagName, node.namespaceURI, (name) => getAttr(node, name) ?? null)
+        ? elementProblem(node.tagName, node.namespaceURI, (name) => getAttr(node, name) ?? null, context.inForm)
         : { message: `the ${blockType} block belongs in <head>`, drop: true }
       if (problem !== undefined) {
-        error(offset, problem.message)
+        ;(problem.warning === true ? warning : error)(offset, problem.message)
         if (problem.drop) {
           // The runtime drops it, content included.
           const inside = droppedBindings(node)
@@ -1213,7 +1214,7 @@ function analyze(input: string, fileName: string | undefined, context?: ViewRout
       previous = node
     }
   }
-  walkNodes(bodyNodes, { gate: undefined, scope: undefined, inRow: false, lenient: undefined })
+  walkNodes(bodyNodes, { gate: undefined, scope: undefined, inRow: false, inForm: false, lenient: undefined })
 
   // --- contract warnings (only against a schema we fully understood)
   if (schemaState === 'valid' && schema !== null && schemaBlock !== undefined) {

@@ -225,6 +225,27 @@ describe('markup', () => {
   })
 })
 
+describe('security', () => {
+  test('Vue/Alpine and form attributes are rejected with the fix', () => {
+    const source = page(
+      `<p m-text="count"></p><button type="button" x-init="document.title='x'">x</button><button type="button" form="host-form" formaction="https://evil.example/">y</button><button m-on:click="emit('increment')">+</button>`,
+    )
+    expect(messages(checkSource(source))).toEqual([
+      "error: 'x-init': Vue/Alpine syntax isn't supported; Melzin has m-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href",
+      "error: 'form' would submit a form in the host page; views send events with m-on:click=\"emit('name')\"",
+      "error: 'formaction' would submit a form in the host page; views send events with m-on:click=\"emit('name')\"",
+    ])
+  })
+
+  test('a <button> without type inside a form is a warning, next to the form error', () => {
+    const source = page(`<form><button>Go</button><button type="button">OK</button></form><p m-text="count"></p><button m-on:click="emit('increment')">+</button>`)
+    expect(messages(checkSource(source))).toEqual([
+      "error: <form> isn't supported yet; use <button type=\"button\"> with m-on:click instead",
+      `warning: <button> needs type="button"; the default type="submit" would submit a form in the host page`,
+    ])
+  })
+})
+
 describe('review fixes', () => {
   test('a byte order mark does not shift columns', () => {
     const source = page('<p m-text="zz"></p>')

@@ -264,7 +264,7 @@ function sanitize(body: HTMLElement, warn: (message: string) => void): void {
     const tag = dom.localName(el)
     const blockType = tag === 'script' ? dataBlockType(dom.getAttribute(el, 'type')) : undefined
     const problem = blockType === undefined
-      ? elementProblem(tag, dom.namespaceURI(el), (name) => dom.getAttribute(el, name))
+      ? elementProblem(tag, dom.namespaceURI(el), (name) => dom.getAttribute(el, name), dom.closest(el, 'form') !== null)
       : { message: `the ${blockType} block belongs in <head>`, drop: true }
     if (problem !== undefined) {
       warn(problem.drop ? `${problem.message}; dropped` : problem.message)
@@ -756,6 +756,13 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
   renderBlock(view)
   dom.appendChild(element, fragment)
 
+  // A kept <form> (the checker reports it) must not submit: submitting reloads the host page. The
+  // submit event bubbles from the form to the container, so one listener cancels every form.
+  const cancelSubmit = (event: Event): void => {
+    event.preventDefault()
+  }
+  dom.addEventListener(element, 'submit', cancelSubmit)
+
   return {
     get data() {
       return data
@@ -784,6 +791,7 @@ function mountView<D, H>(element: Element, html: string, options: MountOptions<D
     destroy(): void {
       if (destroyed) return
       destroyed = true
+      dom.removeEventListener(element, 'submit', cancelSubmit)
       for (const list of topLevelLists) for (const row of list.rows) dom.remove(row.el)
       topLevelLists.length = 0
       unbind(view)

@@ -272,15 +272,15 @@ describe('directive warnings', () => {
     expect(warnings[1]).toContain("only emit('name') is supported for now")
   })
 
-  test('foreign and unsupported directives are warned and ignored', () => {
+  test('Vue/Alpine attributes are dropped; unsupported m-* directives are warned and ignored', () => {
     mountBody(`<p v-text="count"></p><button @click="go"></button><a m-bind:title="url"></a><p m-html="count"></p><p :title="x"></p>`)
     const supported = 'm-text, m-show, m-if, m-else-if, m-else, m-for, m-on:click and m-bind:href'
     expect(warnings).toEqual([
-      "<p>: 'v-text' is Vue/Alpine syntax; use m-text; ignored",
-      "<button>: '@click' is Vue/Alpine syntax; use m-on:click; ignored",
+      "<p>: 'v-text' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<button>: '@click' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
+      "<p>: ':title' is Vue/Alpine syntax; a host page running Vue or Alpine would run it; removed",
       `<a>: 'm-bind:title' is not supported yet; Melzin supports only ${supported}; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7); ignored`,
       `<p>: 'm-html' is not supported yet; Melzin supports only ${supported}; only plain text, through m-text (docs/authoring.md §7); ignored`,
-      `<p>: ':title' is Vue/Alpine syntax; attributes are static for now (m-bind:href is the only binding, for links); for an accessible name from data, put sr-only text with m-text inside the element (docs/authoring.md §7); ignored`,
     ])
   })
 
